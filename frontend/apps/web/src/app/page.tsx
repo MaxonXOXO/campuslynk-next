@@ -1,10 +1,9 @@
-import { fetchApiHealth, getApiBaseUrl } from '@/lib/api';
+import { fetchApiHealth } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   const health = await fetchApiHealth();
-  const apiUrl = getApiBaseUrl();
 
   return (
     <main className="min-h-screen flex flex-col items-center justify-center p-8 bg-slate-50 text-slate-900">
@@ -19,7 +18,6 @@ export default async function HomePage() {
           <div className="flex items-center justify-between p-4 rounded-lg bg-slate-50 border border-slate-200">
             <div>
               <p className="text-sm font-medium text-slate-700">API Health (`/api/v1/health`)</p>
-              <p className="text-xs text-slate-400 mt-0.5">Base URL: {apiUrl}</p>
             </div>
             <div className="flex items-center space-x-2">
               <span

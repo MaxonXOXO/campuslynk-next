@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Http\Controllers\MetaController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 
@@ -18,4 +19,6 @@ Route::prefix('v1')->group(function () {
             ],
         ]);
     })->name('api.v1.health');
+
+    Route::get('/meta', MetaController::class)->name('api.v1.meta');
 });

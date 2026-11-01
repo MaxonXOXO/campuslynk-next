@@ -12,45 +12,81 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'placeholder'),
+    'default' => env('DB_CONNECTION', 'unconfigured'),
 
     /*
     |--------------------------------------------------------------------------
     | Database Connections
     |--------------------------------------------------------------------------
     |
-    | Academic Suite uses PostgreSQL exclusively (ADR-0001).
-    | Two named connections are configured:
-    | - 'placeholder': Default application database connection (per-tenant placeholder)
-    | - 'landlord': Central landlord database containing tenants, domains, plans
+    | Academic Suite uses PostgreSQL exclusively (ADR-0001, ADR-0010).
+    | Explicit connections:
+    | - 'unconfigured': Default placeholder that throws if queried without context.
+    | - 'landlord': Central landlord database containing institutions and domains.
+    | - 'tenant': Dynamic runtime connection configured per-request from tenant_databases.
+    | - 'pgsql_admin': Privileged direct connection for provisioning DDL in app/Core/Tenancy.
     |
     */
 
     'connections' => [
 
-        'placeholder' => [
+        'unconfigured' => [
             'driver' => 'pgsql',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '6432'),
-            'database' => env('DB_DATABASE', 'academic_suite'),
-            'username' => env('DB_USERNAME', 'academic_suite'),
-            'password' => env('DB_PASSWORD', ''),
-            'charset' => env('DB_CHARSET', 'utf8'),
+            'host' => 'unconfigured_host',
+            'port' => 5432,
+            'database' => 'unconfigured_db',
+            'username' => 'unconfigured_user',
+            'password' => '',
+            'charset' => 'utf8',
             'prefix' => '',
             'prefix_indexes' => true,
             'search_path' => 'public',
-            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'sslmode' => 'prefer',
         ],
 
         'landlord' => [
             'driver' => 'pgsql',
             'url' => env('LANDLORD_DB_URL'),
             'host' => env('LANDLORD_DB_HOST', env('DB_HOST', '127.0.0.1')),
-            'port' => env('LANDLORD_DB_PORT', env('DB_PORT', '6432')),
+            'port' => (int) env('LANDLORD_DB_PORT', env('DB_PORT', '6432')),
             'database' => env('LANDLORD_DB_DATABASE', 'landlord'),
             'username' => env('LANDLORD_DB_USERNAME', env('DB_USERNAME', 'academic_suite')),
-            'password' => env('LANDLORD_DB_PASSWORD', env('DB_PASSWORD', '')),
+            'password' => env('LANDLORD_DB_PASSWORD', env('DB_PASSWORD', 'secret')),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => extension_loaded('pdo_pgsql') ? [
+                PDO::ATTR_EMULATE_PREPARES => true,
+            ] : [],
+        ],
+
+        'tenant' => [
+            'driver' => 'pgsql',
+            'host' => env('TENANT_DB_HOST', '127.0.0.1'),
+            'port' => (int) env('TENANT_DB_PORT', '6432'),
+            'database' => env('TENANT_DB_DATABASE', 'unconfigured_tenant'),
+            'username' => env('TENANT_DB_USERNAME', 'unconfigured_user'),
+            'password' => env('TENANT_DB_PASSWORD', ''),
+            'charset' => env('DB_CHARSET', 'utf8'),
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'search_path' => 'public',
+            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'options' => extension_loaded('pdo_pgsql') ? [
+                PDO::ATTR_EMULATE_PREPARES => true,
+            ] : [],
+        ],
+
+        'pgsql_admin' => [
+            'driver' => 'pgsql',
+            'url' => env('ADMIN_DB_URL'),
+            'host' => env('ADMIN_DB_HOST', env('DB_HOST', '127.0.0.1')),
+            'port' => (int) env('ADMIN_DB_PORT', 5432),
+            'database' => env('ADMIN_DB_DATABASE', 'landlord'),
+            'username' => env('ADMIN_DB_USERNAME', env('DB_USERNAME', 'academic_suite')),
+            'password' => env('ADMIN_DB_PASSWORD', env('DB_PASSWORD', 'secret')),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
             'prefix_indexes' => true,

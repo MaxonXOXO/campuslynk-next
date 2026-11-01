@@ -17,9 +17,15 @@
 3. In Laravel / PDO database configuration:
    - Disable persistent connections (`'persistent' => false`).
    - If using transaction pooling with drivers expecting session-level prepared statement persistence, configure PDO with `PDO::ATTR_EMULATE_PREPARES => true` or use PgBouncer's protocol-level prepared statement support.
-4. Tenant database routing:
+4. Tenant database routing & dynamic authentication:
    - Because PostgreSQL physical connections are strictly bound to a single database during the startup handshake, PgBouncer maintains separate connection pools per `(user, dbname)` pair.
-   - When Laravel connects to `tenant_<slug>`, it passes the target `dbname` in the connection string to PgBouncer. PgBouncer maps this to the corresponding PostgreSQL database pool.
+   - Dynamic per-tenant routing without editing configuration files is achieved via PgBouncer's wildcard database fallback:
+     ```ini
+     [databases]
+     * = host=postgres port=5432 auth_user=academic_suite
+     ```
+   - When Laravel connects to `tenant_<slug>` as user `tenant_<slug>_u`, PgBouncer intercepts the request, routes to the upstream PostgreSQL server on port 5432, and verifies credentials via `auth_user` / shadow lookups or dedicated user credentials.
+   - Administrative DDL operations (database creation, user creation, role granting via `TenantProvisioner`) bypass PgBouncer entirely and connect directly to PostgreSQL port 5432 using the `pgsql_admin` connection.
 5. **Container image pinning**:
    - The PgBouncer container image is pinned by immutable SHA-256 multi-arch manifest digest across all Docker Compose topologies (`onprem`, `cloud`, and `compose.dev.yml`):
      `edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711`

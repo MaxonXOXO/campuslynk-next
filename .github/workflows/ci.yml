@@ -71,9 +71,39 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 5
+      pgbouncer:
+        image: edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
+        env:
+          DB_HOST: postgres
+          DB_PORT: 5432
+          DB_USER: academic_suite
+          DB_PASSWORD: secret
+          LISTEN_PORT: 6432
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: 100
+          DEFAULT_POOL_SIZE: 20
+          MAX_PREPARED_STATEMENTS: 100
+          AUTH_TYPE: scram-sha-256
+          AUTH_USER: academic_suite
+          AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
+          AUTH_DBNAME: landlord
+          SERVER_LOGIN_RETRY: 0
+          ADMIN_USERS: academic_suite
+        ports:
+          - 6432:6432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -p 6432 -U academic_suite"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Initialize PostgreSQL Schema
+        env:
+          PGPASSWORD: secret
+        run: psql -h 127.0.0.1 -U academic_suite -d landlord -f ../deploy/docker/postgres-init.sql
 
       - name: Setup PHP 8.4
         uses: shivammathur/setup-php@v2
@@ -97,12 +127,19 @@ jobs:
         env:
           APP_ENV: testing
           DEPLOY_PROFILE: onprem
-          DB_CONNECTION: placeholder
-          DB_HOST: 127.0.0.1
-          DB_PORT: 5432
-          DB_DATABASE: landlord
-          DB_USERNAME: academic_suite
-          DB_PASSWORD: secret
+          DB_CONNECTION: unconfigured
+          LANDLORD_DB_HOST: 127.0.0.1
+          LANDLORD_DB_PORT: 6432
+          LANDLORD_DB_DATABASE: landlord
+          LANDLORD_DB_USERNAME: academic_suite
+          LANDLORD_DB_PASSWORD: secret
+          TENANT_DB_HOST: 127.0.0.1
+          TENANT_DB_PORT: 6432
+          ADMIN_DB_HOST: 127.0.0.1
+          ADMIN_DB_PORT: 5432
+          ADMIN_DB_DATABASE: landlord
+          ADMIN_DB_USERNAME: academic_suite
+          ADMIN_DB_PASSWORD: secret
         run: composer test
 
   frontend-checks:

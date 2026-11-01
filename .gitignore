@@ -48,6 +48,7 @@ frontend/**/.turbo/
 # Tests & coverage
 coverage/
 *.lcov
+*.tsbuildinfo
 
 # IDEs & editors
 .idea/

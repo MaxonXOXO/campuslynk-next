@@ -15,7 +15,7 @@ services:
       - postgres_dev_data:/var/lib/postgresql/data
       - ./deploy/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-academic_suite} -d landlord"]
       interval: 5s
@@ -38,9 +38,13 @@ services:
       DEFAULT_POOL_SIZE: 20
       MAX_PREPARED_STATEMENTS: 100
       AUTH_TYPE: scram-sha-256
+      AUTH_USER: ${DB_USERNAME:-academic_suite}
+      AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
+      AUTH_DBNAME: landlord
+      SERVER_LOGIN_RETRY: 0
       ADMIN_USERS: ${DB_USERNAME:-academic_suite}
     ports:
-      - "${PGBOUNCER_PORT:-6432}:6432"
+      - "127.0.0.1:${PGBOUNCER_PORT:-6432}:6432"
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,7 +61,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -81,21 +85,21 @@ services:
       APP_DEBUG: "true"
       APP_KEY: ${APP_KEY:-base64:c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==}
       APP_URL: ${API_URL:-http://localhost:8000}
-      DB_CONNECTION: placeholder
-      DB_HOST: pgbouncer
-      DB_PORT: 6432
-      DB_DATABASE: landlord
-      DB_USERNAME: ${DB_USERNAME:-academic_suite}
-      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      DB_CONNECTION: unconfigured
       LANDLORD_DB_HOST: pgbouncer
       LANDLORD_DB_PORT: 6432
       LANDLORD_DB_DATABASE: landlord
       LANDLORD_DB_USERNAME: ${DB_USERNAME:-academic_suite}
       LANDLORD_DB_PASSWORD: ${DB_PASSWORD:-secret}
+      ADMIN_DB_HOST: postgres
+      ADMIN_DB_PORT: 5432
+      ADMIN_DB_DATABASE: landlord
+      ADMIN_DB_USERNAME: ${DB_USERNAME:-academic_suite}
+      ADMIN_DB_PASSWORD: ${DB_PASSWORD:-secret}
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
-      - "${API_PORT:-8000}:8000"
+      - "127.0.0.1:${API_PORT:-8000}:8000"
     depends_on:
       pgbouncer:
         condition: service_healthy
@@ -125,7 +129,7 @@ services:
       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8000}
     command: sh -c "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install && pnpm --filter academic-suite-web dev"
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
     depends_on:
       api:
         condition: service_healthy
