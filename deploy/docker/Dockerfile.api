@@ -1,0 +1,67 @@
+# -----------------------------------------------------------------------------
+# Production Dockerfile for Academic Suite API
+# -----------------------------------------------------------------------------
+# Runtime: FrankenPHP on PHP 8.4 (Debian Bookworm)
+#
+# Decision & Rationale:
+# - FrankenPHP embeds PHP 8.4 directly into Caddy, eliminating the need for an
+#   external Nginx reverse proxy and Unix domain socket / TCP fastcgi bridging.
+# - It provides native support for worker mode (Octane), HTTP/2, HTTP/3, and automatic TLS.
+# - On Docker Desktop for Windows and Linux hosts alike, FrankenPHP provides a single,
+#   robust container boundary with standard environment variable configuration
+#   and zero host-dependent file socket bindings.
+# -----------------------------------------------------------------------------
+
+# Stage 1: Build & Composer dependencies
+FROM composer:2.8 AS vendor
+
+WORKDIR /app
+
+COPY composer.json composer.lock ./
+
+RUN composer install \
+    --no-dev \
+    --no-interaction \
+    --prefer-dist \
+    --optimize-autoloader \
+    --no-scripts \
+    --ignore-platform-reqs
+
+# Stage 2: Final Runtime Image
+FROM dunglas/frankenphp:1-php8.4-bookworm AS runner
+
+WORKDIR /app
+
+# Install required PostgreSQL and system extensions via official script
+RUN install-php-extensions \
+    pdo_pgsql \
+    pgsql \
+    redis \
+    bcmath \
+    intl \
+    zip \
+    opcache
+
+# Set environment defaults (production profile)
+ENV SERVER_NAME=":8000"
+ENV COMPOSER_ALLOW_SUPERUSER=1
+ENV APP_ENV=production
+ENV APP_DEBUG=false
+ENV DEPLOY_PROFILE=onprem
+
+# Copy application source and vendor dependencies
+COPY . /app
+COPY --from=vendor /app/vendor /app/vendor
+
+# Ensure proper permissions for storage and bootstrap cache
+RUN chown -R www-data:www-data /app/storage /app/bootstrap/cache \
+    && chmod -R 775 /app/storage /app/bootstrap/cache
+
+# Healthcheck targeting the Laravel /up endpoint
+HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
+    CMD curl -f http://localhost:8000/up || exit 1
+
+EXPOSE 8000
+
+CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+

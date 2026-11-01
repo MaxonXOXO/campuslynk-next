@@ -1,0 +1,66 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.backup
+.env.local
+.env.*.local
+!.env.example
+!backend/.env.example
+!frontend/apps/web/.env.example
+!deploy/compose/onprem/.env.example
+!deploy/compose/cloud/.env.example
+
+# Composer / PHP
+backend/vendor/
+backend/bootstrap/cache/*
+!backend/bootstrap/cache/.gitkeep
+backend/storage/app/*
+!backend/storage/app/.gitkeep
+backend/storage/app/public/*
+!backend/storage/app/public/.gitkeep
+backend/storage/framework/cache/*
+!backend/storage/framework/cache/.gitkeep
+backend/storage/framework/sessions/*
+!backend/storage/framework/sessions/.gitkeep
+backend/storage/framework/testing/*
+!backend/storage/framework/testing/.gitkeep
+backend/storage/framework/views/*
+!backend/storage/framework/views/.gitkeep
+backend/storage/logs/*
+!backend/storage/logs/.gitkeep
+.phpunit.result.cache
+phpstan.result.cache
+
+# Node / Frontend / Turborepo
+node_modules/
+.pnpm-store/
+frontend/**/node_modules/
+frontend/**/.next/
+frontend/**/out/
+frontend/**/dist/
+frontend/**/build/
+frontend/**/.turbo/
+.turbo/
+
+# Tests & coverage
+coverage/
+*.lcov
+*.tsbuildinfo
+
+# IDEs & editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Scratch & temporary development artifacts
+scratch/
+carmel-linx-legacy/
+*.tmp
+

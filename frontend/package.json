@@ -1,0 +1,20 @@
+{
+  "name": "academic-suite-monorepo",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
+  },
+  "devDependencies": {
+    "turbo": "2.11.9",
+    "typescript": "5.9.3"
+  }
+}

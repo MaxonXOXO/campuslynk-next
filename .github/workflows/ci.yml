@@ -1,0 +1,234 @@
+name: CI Quality Gates
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-lint-and-analyse:
+    name: 1. Backend Lint & Static Analysis
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DEPLOY_PROFILE: onprem
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, redis, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run Composer security audit
+        run: composer audit
+
+      - name: Run Laravel Pint (lint)
+        run: composer lint
+
+      - name: Run Larastan (level 8 static analysis)
+        run: composer analyse
+
+  backend-tests:
+    name: 2. Backend Feature & Architecture Tests
+    needs: backend-lint-and-analyse
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: landlord
+          POSTGRES_USER: academic_suite
+          POSTGRES_PASSWORD: secret
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U academic_suite -d landlord"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+      pgbouncer:
+        image: edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
+        env:
+          DB_HOST: postgres
+          DB_PORT: 5432
+          DB_USER: academic_suite
+          DB_PASSWORD: secret
+          LISTEN_PORT: 6432
+          POOL_MODE: transaction
+          MAX_CLIENT_CONN: 100
+          DEFAULT_POOL_SIZE: 20
+          MAX_PREPARED_STATEMENTS: 100
+          AUTH_TYPE: scram-sha-256
+          AUTH_USER: academic_suite
+          AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
+          AUTH_DBNAME: landlord
+          SERVER_LOGIN_RETRY: 0
+          ADMIN_USERS: academic_suite
+        ports:
+          - 6432:6432
+        options: >-
+          --health-cmd "pg_isready -h 127.0.0.1 -p 6432 -U academic_suite"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Initialize PostgreSQL Schema
+        env:
+          PGPASSWORD: secret
+        run: psql -h 127.0.0.1 -U academic_suite -d landlord -f ../deploy/docker/postgres-init.sql
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_pgsql, pgsql, redis, bcmath, intl, zip
+          coverage: none
+
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: ${{ runner.os }}-composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run Pest Tests (Feature & Architecture)
+        env:
+          APP_ENV: testing
+          DEPLOY_PROFILE: onprem
+          DB_CONNECTION: unconfigured
+          LANDLORD_DB_HOST: 127.0.0.1
+          LANDLORD_DB_PORT: 6432
+          LANDLORD_DB_DATABASE: landlord
+          LANDLORD_DB_USERNAME: academic_suite
+          LANDLORD_DB_PASSWORD: secret
+          TENANT_DB_HOST: 127.0.0.1
+          TENANT_DB_PORT: 6432
+          ADMIN_DB_HOST: 127.0.0.1
+          ADMIN_DB_PORT: 5432
+          ADMIN_DB_DATABASE: landlord
+          ADMIN_DB_USERNAME: academic_suite
+          ADMIN_DB_PASSWORD: secret
+        run: composer test
+
+  frontend-checks:
+    name: 3. Frontend Quality Checks & Build
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9.15.9'
+
+      - name: Setup Node 22 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run pnpm security audit
+        run: pnpm audit --audit-level=high
+
+      - name: Run ESLint
+        run: pnpm lint
+
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: Run Vitest unit tests
+        run: pnpm test
+
+      - name: Build Next.js application
+        run: pnpm build
+
+  compose-smoke:
+    name: 4. Docker Compose Smoke Test
+    needs: frontend-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and Start Compose Stack (On-Prem Profile)
+        run: |
+          docker compose -f deploy/compose/onprem/docker-compose.yml up -d --build --wait --wait-timeout 180
+
+      - name: Inspect running containers
+        run: |
+          docker compose -f deploy/compose/onprem/docker-compose.yml ps
+
+      - name: Verify API Health Endpoint
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:8000/api/v1/health | grep '"status":"ok"'; then
+              echo "API health check passed!"
+              exit 0
+            fi
+            echo "Waiting for API... ($i/30)"
+            sleep 2
+          done
+          echo "API health check timed out!"
+          docker compose -f deploy/compose/onprem/docker-compose.yml logs api
+          exit 1
+
+      - name: Verify Web Frontend Server Component Status Display
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:3000/ | grep -i 'Academic Suite'; then
+              echo "Web page health check passed!"
+              exit 0
+            fi
+            echo "Waiting for Web client... ($i/30)"
+            sleep 2
+          done
+          echo "Web client check timed out!"
+          docker compose -f deploy/compose/onprem/docker-compose.yml logs web
+          exit 1
+
+      - name: Tear down Compose Stack
+        if: always()
+        run: |
+          docker compose -f deploy/compose/onprem/docker-compose.yml down -v --remove-orphans
+

@@ -1,0 +1,184 @@
+openapi: 3.1.0
+info:
+  title: CampusLynk Academic Suite API
+  version: 1.0.0
+  description: >
+    Multi-tenant SaaS & On-Premises Academic Management API (ADR-0001 through ADR-0007).
+    All responses use the standard `{ data, meta, links }` envelope or `application/problem+json` (RFC 7807).
+servers:
+  - url: https://app.carmelpoly.in/api/v1
+    description: Carmel Polytechnic On-Premises Instance
+  - url: http://app.carmelpoly.localhost:8000/api/v1
+    description: Local Development
+paths:
+  /meta:
+    get:
+      operationId: getTenantMeta
+      summary: Resolve tenant branding, active regulations (REV2021/REV2026), and auth providers
+      parameters:
+        - name: X-Tenant-ID
+          in: header
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tenant metadata resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantMetaEnvelope'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+  /me:
+    get:
+      operationId: getCurrentUser
+      summary: Current user profile, active scoped role assignments, capabilities, and unread notification count
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Current user context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrentUserEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+  /notifications:
+    get:
+      operationId: listNotifications
+      summary: List in-app notifications for the authenticated user (Web Notification Center + React Native)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Paginated notifications
+  /notifications/push-tokens:
+    post:
+      operationId: registerFcmPushToken
+      summary: Register a Firebase Cloud Messaging (FCM) device token for web or React Native push notifications
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [platform, fcm_token]
+              properties:
+                platform:
+                  type: string
+                  enum: [web, android, ios]
+                fcm_token:
+                  type: string
+                device_name:
+                  type: string
+      responses:
+        '200':
+          description: Token registered
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  responses:
+    ProblemDetails:
+      description: RFC 7807 Problem Details error response
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, title, status, detail]
+            properties:
+              type:
+                type: string
+              title:
+                type: string
+              status:
+                type: integer
+              detail:
+                type: string
+              instance:
+                type: string
+  schemas:
+    TenantMetaEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, slug, name, academic_profile, regulations, auth_providers]
+          properties:
+            id:
+              type: string
+            slug:
+              type: string
+            name:
+              type: string
+            academic_profile:
+              type: string
+              enum: [polytechnic, engineering]
+            regulations:
+              type: array
+              items:
+                type: string
+              example: ["REV2021", "REV2026"]
+            auth_providers:
+              type: object
+              properties:
+                password:
+                  type: boolean
+                passkey_webauthn:
+                  type: boolean
+                firebase_phone_otp:
+                  type: boolean
+    CurrentUserEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, user_type, name, role_assignments, capabilities, unread_notifications_count]
+          properties:
+            id:
+              type: string
+            user_type:
+              type: string
+              enum: [staff, student, parent]
+            name:
+              type: string
+            impersonation:
+              type: object
+              nullable: true
+              properties:
+                is_impersonated:
+                  type: boolean
+                is_read_only:
+                  type: boolean
+                expires_at:
+                  type: string
+                  format: date-time
+            role_assignments:
+              type: array
+              items:
+                type: object
+                required: [role_slug, scope_type, scope_id]
+                properties:
+                  role_slug:
+                    type: string
+                  scope_type:
+                    type: string
+                    enum: [institution, stream, department, program, batch, sub_batch, course_offering, workshop_section, own]
+                  scope_id:
+                    type: string
+                  sub_role:
+                    type: string
+                    nullable: true
+            capabilities:
+              type: array
+              items:
+                type: string
+            unread_notifications_count:
+              type: integer
