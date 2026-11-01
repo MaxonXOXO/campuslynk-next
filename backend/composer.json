@@ -1,0 +1,59 @@
+{
+    "name": "academic-suite/backend",
+    "type": "project",
+    "description": "Headless API for Academic Suite (Carmel LINX / CampusLynk Next)",
+    "keywords": ["academic-suite", "laravel", "api"],
+    "license": "proprietary",
+    "require": {
+        "php": "^8.4",
+        "laravel/framework": "^12.0"
+    },
+    "require-dev": {
+        "larastan/larastan": "^3.1",
+        "laravel/pint": "^1.21",
+        "pestphp/pest": "^3.7",
+        "pestphp/pest-plugin-laravel": "^3.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "app/",
+            "Database\\Factories\\": "database/factories/",
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
+            "@php artisan package:discover --ansi"
+        ],
+        "lint": "pint --test",
+        "lint:fix": "pint",
+        "analyse": "phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
+        "test": "pest",
+        "check": [
+            "@lint",
+            "@analyse",
+            "@test"
+        ]
+    },
+    "extra": {
+        "laravel": {
+            "dont-discover": []
+        }
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}

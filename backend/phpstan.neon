@@ -1,0 +1,14 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - bootstrap/app.php
+        - config/
+        - routes/
+
+    # Level 8 is the highest level before full strictness (max/9)
+    level: 8
+
+    ignoreErrors: []
