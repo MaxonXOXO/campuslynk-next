@@ -51,8 +51,18 @@ trait TenancyTestHelper
         $dbs = $admin->select("SELECT datname FROM pg_database WHERE datname LIKE 'tenant_%'");
         foreach ($dbs as $db) {
             $name = $db->datname;
-            $admin->statement("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid()");
-            $admin->statement("DROP DATABASE IF EXISTS \"{$name}\"");
+            try {
+                $admin->statement(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid() AND usename NOT IN (SELECT rolname FROM pg_roles WHERE rolsuper = true)"
+                );
+            } catch (\Throwable) {
+                // Ignore if process cannot be signalled or already exited
+            }
+            try {
+                $admin->statement("DROP DATABASE IF EXISTS \"{$name}\"");
+            } catch (\Throwable) {
+                // Ignore
+            }
         }
 
         /** @var array<int, object{rolname: string}> $roles */

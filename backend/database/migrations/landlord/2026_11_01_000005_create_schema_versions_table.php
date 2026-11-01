@@ -18,6 +18,7 @@ return new class extends Migration
             $table->timestamp('migrated_at');
             $table->timestamps();
 
+            $table->unique(['tenant_id', 'version']);
             $table->index('tenant_id');
         });
     }

@@ -4,9 +4,13 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
+use App\Core\Auth\Models\User;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
+use App\Core\Tenancy\TenantContext;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Throwable;
 
 class TenantsCreateCommand extends Command
@@ -20,7 +24,9 @@ class TenantsCreateCommand extends Command
                             {name : Full name of the institution}
                             {slug : Unique alphanumeric slug (e.g. carmel)}
                             {domain : Primary institutional domain}
-                            {--plan=standard : Licensing plan}';
+                            {--plan=standard : Licensing plan}
+                            {--admin-name= : First Super Admin name}
+                            {--admin-email= : First Super Admin email}';
 
     /**
      * The console command description.
@@ -29,7 +35,7 @@ class TenantsCreateCommand extends Command
      */
     protected $description = 'Provision a new isolated tenant database and role';
 
-    public function handle(TenantProvisioner $provisioner): int
+    public function handle(TenantProvisioner $provisioner, TenantContext $tenantContext): int
     {
         $profile = config('app_profile.deploy_profile', 'onprem');
 
@@ -44,6 +50,13 @@ class TenantsCreateCommand extends Command
         $domain = (string) $this->argument('domain');
         $plan = (string) $this->option('plan');
 
+        // Validate hostname
+        if (! filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || str_contains($domain, '/')) {
+            $this->error(sprintf('Domain [%s] is not a valid hostname.', $domain));
+
+            return self::FAILURE;
+        }
+
         $this->info(sprintf('Provisioning tenant [%s] (%s)...', $slug, $name));
 
         try {
@@ -54,6 +67,44 @@ class TenantsCreateCommand extends Command
                 deployProfile: $profile,
                 plan: $plan
             );
+
+            // First Super Admin bootstrap (B5)
+            $adminEmailOption = $this->option('admin-email');
+            if (is_string($adminEmailOption) && trim($adminEmailOption) !== '') {
+                $adminEmail = trim($adminEmailOption);
+                $adminName = is_string($this->option('admin-name')) && trim((string) $this->option('admin-name')) !== ''
+                    ? trim((string) $this->option('admin-name'))
+                    : "{$name} Administrator";
+
+                $tenantContext->setTenant($tenant);
+                try {
+                    if (User::where('type', 'staff')->count() === 0) {
+                        $oneTimePassword = Str::password(16);
+                        User::create([
+                            'type' => 'staff',
+                            'name' => $adminName,
+                            'email' => strtolower($adminEmail),
+                            'password' => Hash::make($oneTimePassword),
+                            'must_change_password' => true,
+                            'status' => 'active',
+                        ]);
+
+                        $this->newLine();
+                        $this->warn('================================================================');
+                        $this->warn('   FIRST SUPER ADMIN INITIAL CREDENTIALS (SAVE IMMEDIATELY)');
+                        $this->warn('================================================================');
+                        $this->line(" Name:               {$adminName}");
+                        $this->line(" Email:              {$adminEmail}");
+                        $this->line(" One-time Password:  {$oneTimePassword}");
+                        $this->warn(' This password is printed ONCE. It is never logged or stored in plain text.');
+                        $this->warn(' The user is required to change password upon first login.');
+                        $this->warn('================================================================');
+                        $this->newLine();
+                    }
+                } finally {
+                    $tenantContext->forget();
+                }
+            }
 
             $this->info(sprintf('Tenant [%s] provisioned successfully with ID: %s', $slug, $tenant->id));
 

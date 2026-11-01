@@ -10,11 +10,16 @@ use App\Core\Tenancy\Bootstrappers\FilesystemBootstrapper;
 use App\Core\Tenancy\Bootstrappers\LoggingBootstrapper;
 use App\Core\Tenancy\Commands\AppInstallCommand;
 use App\Core\Tenancy\Commands\TenantsCreateCommand;
+use App\Core\Tenancy\Commands\TenantsLicenseRenewCommand;
 use App\Core\Tenancy\Commands\TenantsMigrateCommand;
+use App\Core\Tenancy\Exceptions\UnconfiguredDefaultConnectionException;
 use App\Core\Tenancy\Listeners\QueueTenantScopeListener;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use Illuminate\Contracts\Events\Dispatcher;
+use Illuminate\Database\DatabaseManager;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Octane\Events\RequestTerminated;
 
 class TenancyServiceProvider extends ServiceProvider
 {
@@ -35,6 +40,13 @@ class TenancyServiceProvider extends ServiceProvider
         $this->app->singleton(TenantProvisioner::class, function ($app): TenantProvisioner {
             return new TenantProvisioner($app->make(TenantContext::class));
         });
+
+        // Fail-closed default connection: any query without tenant context throws
+        $this->app->resolving('db', function (DatabaseManager $db): void {
+            $db->extend('unconfigured', function (): never {
+                throw new UnconfiguredDefaultConnectionException;
+            });
+        });
     }
 
     /**
@@ -48,17 +60,32 @@ class TenancyServiceProvider extends ServiceProvider
                 AppInstallCommand::class,
                 TenantsCreateCommand::class,
                 TenantsMigrateCommand::class,
+                TenantsLicenseRenewCommand::class,
             ]);
         }
 
         // Subscribe to Queue events for fail-closed tenant scoping
-        $listener = new QueueTenantScopeListener($this->app->make(TenantContext::class));
+        /** @var TenantContext $context */
+        $context = $this->app->make(TenantContext::class);
+        $listener = new QueueTenantScopeListener($context);
         $listener->subscribe($events);
 
-        // Application termination hook for Octane / FrankenPHP worker cleanup
-        $this->app->terminating(function (): void {
-            /** @var TenantContext $context */
-            $context = $this->app->make(TenantContext::class);
+        // Inject active tenant_id into all queued payloads automatically
+        Queue::createPayloadUsing(function () use ($context): array {
+            if ($context->hasTenant()) {
+                return ['tenant_id' => $context->tenant()->id];
+            }
+
+            return [];
+        });
+
+        // Octane RequestTerminated event hook for persistent worker cleanup
+        $events->listen(RequestTerminated::class, function () use ($context): void {
+            $context->forget();
+        });
+
+        // Application termination hook for worker cleanup
+        $this->app->terminating(function () use ($context): void {
             $context->forget();
         });
     }

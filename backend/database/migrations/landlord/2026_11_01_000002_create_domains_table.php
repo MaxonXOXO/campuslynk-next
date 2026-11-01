@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -20,6 +21,10 @@ return new class extends Migration
 
             $table->index('tenant_id');
         });
+
+        DB::connection('landlord')->statement(
+            'CREATE UNIQUE INDEX unique_tenant_primary_domain ON domains (tenant_id) WHERE is_primary = true'
+        );
     }
 
     /**

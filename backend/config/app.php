@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost:8000'),
 
+    'trusted_proxies' => env('TRUSTED_PROXIES')
+        ? (env('TRUSTED_PROXIES') === '*' ? '*' : array_map('trim', explode(',', (string) env('TRUSTED_PROXIES'))))
+        : null,
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

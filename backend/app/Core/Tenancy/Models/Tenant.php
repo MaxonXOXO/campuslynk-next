@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * @property string $id
@@ -44,7 +45,7 @@ class Tenant extends LandlordModel
      */
     public function primaryDomain(): HasOne
     {
-        return $this->hasOne(Domain::class)->where('is_primary', true);
+        return $this->hasOne(Domain::class)->whereRaw('is_primary = true');
     }
 
     /**
@@ -101,6 +102,26 @@ class Tenant extends LandlordModel
     public function hasFailed(): bool
     {
         return $this->status === 'failed';
+    }
+
+    /**
+     * The "booted" method of the model.
+     */
+    protected static function booted(): void
+    {
+        static::saved(function (Tenant $tenant): void {
+            Cache::forget('tenant:entity:'.$tenant->id);
+            foreach ($tenant->domains as $domain) {
+                Cache::forget('tenant:domain:'.$domain->domain);
+            }
+        });
+
+        static::deleted(function (Tenant $tenant): void {
+            Cache::forget('tenant:entity:'.$tenant->id);
+            foreach ($tenant->domains as $domain) {
+                Cache::forget('tenant:domain:'.$domain->domain);
+            }
+        });
     }
 
     /**

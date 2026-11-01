@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -19,6 +20,13 @@ return new class extends Migration
             $table->string('deploy_profile', 20)->default('onprem'); // onprem, cloud
             $table->timestamps();
         });
+
+        DB::connection('landlord')->statement(
+            "ALTER TABLE tenants ADD CONSTRAINT tenants_status_check CHECK (status IN ('provisioning', 'active', 'suspended', 'failed'))"
+        );
+        DB::connection('landlord')->statement(
+            "ALTER TABLE tenants ADD CONSTRAINT tenants_deploy_profile_check CHECK (deploy_profile IN ('onprem', 'cloud'))"
+        );
     }
 
     /**

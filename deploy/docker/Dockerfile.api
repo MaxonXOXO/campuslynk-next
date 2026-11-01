@@ -63,5 +63,6 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
 
 EXPOSE 8000
 
-CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+# Worker mode: Laravel Octane powered by FrankenPHP (ADR-0010, A2)
+CMD ["php", "artisan", "octane:start", "--server=frankenphp", "--host=0.0.0.0", "--port=8000"]
 

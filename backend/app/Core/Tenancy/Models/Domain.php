@@ -50,10 +50,15 @@ class Domain extends LandlordModel
     {
         static::saved(function (Domain $domain): void {
             Cache::forget('tenant:domain:'.$domain->domain);
+            if ($domain->isDirty('domain') && is_string($domain->getOriginal('domain'))) {
+                Cache::forget('tenant:domain:'.$domain->getOriginal('domain'));
+            }
+            Cache::forget('tenant:entity:'.$domain->tenant_id);
         });
 
         static::deleted(function (Domain $domain): void {
             Cache::forget('tenant:domain:'.$domain->domain);
+            Cache::forget('tenant:entity:'.$domain->tenant_id);
         });
     }
 }

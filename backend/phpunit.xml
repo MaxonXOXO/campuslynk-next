@@ -30,12 +30,12 @@
         <env name="LANDLORD_DB_HOST" value="127.0.0.1"/>
         <env name="LANDLORD_DB_PORT" value="5432"/>
         <env name="LANDLORD_DB_DATABASE" value="landlord"/>
-        <env name="LANDLORD_DB_USERNAME" value="academic_suite"/>
+        <env name="LANDLORD_DB_USERNAME" value="landlord_app"/>
         <env name="LANDLORD_DB_PASSWORD" value="secret"/>
         <env name="ADMIN_DB_HOST" value="127.0.0.1"/>
         <env name="ADMIN_DB_PORT" value="5432"/>
         <env name="ADMIN_DB_DATABASE" value="landlord"/>
-        <env name="ADMIN_DB_USERNAME" value="academic_suite"/>
+        <env name="ADMIN_DB_USERNAME" value="provisioner"/>
         <env name="ADMIN_DB_PASSWORD" value="secret"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

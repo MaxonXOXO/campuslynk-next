@@ -16,13 +16,13 @@ afterEach(function () {
 it('strictly accepts only registered domains of the single tenant in onprem profile', function () {
     config(['app_profile.deploy_profile' => 'onprem']);
 
-    $tenant = $this->provisioner->provision('carmel', 'Carmel Polytechnic College', 'carmelpoly.in', 'onprem');
+    $tenant = $this->provisioner->provision('carmel', 'Carmel Polytechnic College', 'app.carmelpoly.in', 'onprem');
 
     // 1. Registered domain succeeds
-    $response = $this->getJson('http://carmelpoly.in/api/v1/meta');
+    $response = $this->getJson('http://app.carmelpoly.in/api/v1/meta');
 
     $response->assertStatus(200)
-        ->assertJsonPath('meta.tenant', 'carmel');
+        ->assertJsonPath('meta.tenant.slug', 'carmel');
 
     // 2. Unregistered host returns 404 even if X-Tenant header is passed
     $unregisteredResponse = $this->withHeaders(['X-Tenant' => 'carmel'])

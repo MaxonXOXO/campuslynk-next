@@ -14,6 +14,8 @@ class MetaController
     {
         $tenant = $context->tenant();
 
+        $licenseStatus = $tenant->license?->status() ?? 'expired';
+
         return response()->json([
             'data' => [
                 'server_version' => '1.0.0',
@@ -21,10 +23,24 @@ class MetaController
                 'min_client_version' => '1.0.0',
                 'capabilities' => [],
                 'deprecations' => [],
+                'license' => [
+                    'status' => $licenseStatus,
+                ],
+                'licence' => [
+                    'status' => $licenseStatus,
+                ],
             ],
             'meta' => [
-                'tenant' => $tenant->slug,
-                'tenant_name' => $tenant->name,
+                'tenant' => [
+                    'slug' => $tenant->slug,
+                    'name' => $tenant->name,
+                ],
+                'license' => [
+                    'status' => $licenseStatus,
+                ],
+                'licence' => [
+                    'status' => $licenseStatus,
+                ],
                 'timestamp' => now()->toIso8601String(),
             ],
             'links' => [

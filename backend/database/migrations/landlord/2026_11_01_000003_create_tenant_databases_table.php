@@ -13,15 +13,13 @@ return new class extends Migration
     {
         Schema::connection('landlord')->create('tenant_databases', function (Blueprint $table): void {
             $table->ulid('id')->primary();
-            $table->foreignUlid('tenant_id')->constrained('tenants')->cascadeOnDelete();
+            $table->foreignUlid('tenant_id')->unique()->constrained('tenants')->cascadeOnDelete();
             $table->string('host', 255);
             $table->integer('port');
             $table->string('database', 63);
             $table->string('username', 63);
             $table->text('password');
             $table->timestamps();
-
-            $table->index('tenant_id');
         });
     }
 

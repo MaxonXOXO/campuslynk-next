@@ -2,7 +2,10 @@
 
 namespace App\Providers;
 
+use App\Core\Auth\Models\PersonalAccessToken;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Sanctum;
 use RuntimeException;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,6 +24,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->validateDeployProfile();
+
+        Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        $proxies = config('app.trusted_proxies');
+        if (! empty($proxies)) {
+            /** @var array<int, string>|string $proxies */
+            TrustProxies::at($proxies);
+        }
     }
 
     /**

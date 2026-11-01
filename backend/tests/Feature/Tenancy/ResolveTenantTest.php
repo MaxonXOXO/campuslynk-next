@@ -45,13 +45,13 @@ it('returns 403 when tenant is suspended', function () {
         ->assertJsonPath('status', 403);
 });
 
-it('returns 403 when tenant license is expired', function () {
+it('returns 403 when tenant license and grace period are expired', function () {
     config(['app_profile.deploy_profile' => 'cloud']);
 
     $tenant = $this->provisioner->provision('tenant_lic', 'Expired License College', 'lic.test', 'cloud');
     /** @var License $license */
     $license = $tenant->license;
-    $license->update(['valid_until' => now()->subDay()]);
+    $license->update(['valid_until' => now()->subDays(35)]);
 
     $response = $this->getJson('http://lic.test/api/v1/meta');
 
@@ -86,6 +86,6 @@ it('resolves valid tenant and serves /api/v1/meta probe in standard envelope', f
     $response->assertStatus(200)
         ->assertJsonPath('data.server_version', '1.0.0')
         ->assertJsonPath('data.api_version', 'v1')
-        ->assertJsonPath('meta.tenant', 'tenant_meta')
-        ->assertJsonPath('meta.tenant_name', 'Meta College');
+        ->assertJsonPath('meta.tenant.slug', 'tenant_meta')
+        ->assertJsonPath('meta.tenant.name', 'Meta College');
 });

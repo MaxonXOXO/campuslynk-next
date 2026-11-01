@@ -3,7 +3,7 @@ info:
   title: CampusLynk Academic Suite API
   version: 1.0.0
   description: >
-    Multi-tenant SaaS & On-Premises Academic Management API (ADR-0001 through ADR-0007).
+    Multi-tenant SaaS & On-Premises Academic Management API (ADR-0001 through ADR-0012).
     All responses use the standard `{ data, meta, links }` envelope or `application/problem+json` (RFC 7807).
 servers:
   - url: https://app.carmelpoly.in/api/v1
@@ -11,12 +11,32 @@ servers:
   - url: http://app.carmelpoly.localhost:8000/api/v1
     description: Local Development
 paths:
+  /health:
+    get:
+      operationId: getHealthStatus
+      summary: Health check probe
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        example: ok
+
   /meta:
     get:
       operationId: getTenantMeta
       summary: Resolve tenant branding, active regulations (REV2021/REV2026), and auth providers
       parameters:
-        - name: X-Tenant-ID
+        - name: X-Tenant
           in: header
           required: false
           schema:
@@ -28,12 +48,113 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TenantMetaEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
         '404':
           $ref: '#/components/responses/ProblemDetails'
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Authenticate tenant user by email, mobile, or registration number
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password, device_name, client]
+              properties:
+                identifier:
+                  type: string
+                  description: Email address, E.164 mobile number, or registration number
+                  example: admin@app.carmelpoly.in
+                password:
+                  type: string
+                  format: password
+                  maxLength: 128
+                  example: StrongPassword123!
+                device_name:
+                  type: string
+                  example: Chrome Web
+                client:
+                  type: string
+                  enum: [web, mobile]
+                  example: web
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginSuccessEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Revoke the current personal access token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Successfully logged out
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /auth/password/change:
+    post:
+      operationId: changePassword
+      summary: Change user password and revoke all other sessions
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password, new_password_confirmation]
+              properties:
+                current_password:
+                  type: string
+                  format: password
+                new_password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  maxLength: 128
+                new_password_confirmation:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
   /me:
     get:
       operationId: getCurrentUser
-      summary: Current user profile, active scoped role assignments, capabilities, and unread notification count
+      summary: Current user profile, active scoped role assignments, capabilities, and tenant meta
       security:
         - bearerAuth: []
       responses:
@@ -45,6 +166,9 @@ paths:
                 $ref: '#/components/schemas/CurrentUserEnvelope'
         '401':
           $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
   /notifications:
     get:
       operationId: listNotifications
@@ -54,6 +178,7 @@ paths:
       responses:
         '200':
           description: Paginated notifications
+
   /notifications/push-tokens:
     post:
       operationId: registerFcmPushToken
@@ -78,11 +203,14 @@ paths:
       responses:
         '200':
           description: Token registered
+
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
+      bearerFormat: Sanctum
+
   responses:
     ProblemDetails:
       description: RFC 7807 Problem Details error response
@@ -94,18 +222,24 @@ components:
             properties:
               type:
                 type: string
+                example: about:blank
               title:
                 type: string
+                example: Unauthorized
               status:
                 type: integer
+                example: 401
               detail:
                 type: string
+                example: Invalid credentials provided.
               instance:
                 type: string
+                nullable: true
+
   schemas:
     TenantMetaEnvelope:
       type: object
-      required: [data]
+      required: [data, meta, links]
       properties:
         data:
           type: object
@@ -134,51 +268,168 @@ components:
                   type: boolean
                 firebase_phone_otp:
                   type: boolean
-    CurrentUserEnvelope:
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+            tenant:
+              type: object
+              properties:
+                slug:
+                  type: string
+                name:
+                  type: string
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    UserSchema:
       type: object
-      required: [data]
+      required: [id, type, name, status, must_change_password]
+      properties:
+        id:
+          type: string
+          description: ULID identifier
+          example: 01HZX876543210ABCDEFGHJKMN
+        type:
+          type: string
+          enum: [staff, student, parent]
+        name:
+          type: string
+          example: John Doe
+        email:
+          type: string
+          format: email
+          nullable: true
+          example: john.doe@carmelpoly.in
+        mobile:
+          type: string
+          nullable: true
+          example: "+919876543210"
+        registration_number:
+          type: string
+          nullable: true
+          example: REG-2026-001
+        status:
+          type: string
+          enum: [active, suspended, pending]
+        must_change_password:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    LoginSuccessEnvelope:
+      type: object
+      required: [data, meta, links]
       properties:
         data:
           type: object
-          required: [id, user_type, name, role_assignments, capabilities, unread_notifications_count]
+          required: [token, token_type, expires_at, must_change_password, user]
+          properties:
+            token:
+              type: string
+              description: Plaintext personal access token (id|hash)
+            token_type:
+              type: string
+              example: Bearer
+            expires_at:
+              type: string
+              format: date-time
+            must_change_password:
+              type: boolean
+            user:
+              $ref: '#/components/schemas/UserSchema'
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    CurrentUserEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [id, type, name, status, must_change_password, assignments, capabilities]
           properties:
             id:
               type: string
-            user_type:
+            type:
               type: string
               enum: [staff, student, parent]
             name:
               type: string
-            impersonation:
-              type: object
+            email:
+              type: string
               nullable: true
-              properties:
-                is_impersonated:
-                  type: boolean
-                is_read_only:
-                  type: boolean
-                expires_at:
-                  type: string
-                  format: date-time
-            role_assignments:
+            mobile:
+              type: string
+              nullable: true
+            registration_number:
+              type: string
+              nullable: true
+            status:
+              type: string
+              enum: [active, suspended, pending]
+            must_change_password:
+              type: boolean
+            last_login_at:
+              type: string
+              format: date-time
+              nullable: true
+            assignments:
               type: array
+              description: Placeholder for Step 4 Scoped RBAC
               items:
                 type: object
-                required: [role_slug, scope_type, scope_id]
-                properties:
-                  role_slug:
-                    type: string
-                  scope_type:
-                    type: string
-                    enum: [institution, stream, department, program, batch, sub_batch, course_offering, workshop_section, own]
-                  scope_id:
-                    type: string
-                  sub_role:
-                    type: string
-                    nullable: true
             capabilities:
               type: array
+              description: Placeholder for Step 4 Scoped RBAC
               items:
                 type: string
-            unread_notifications_count:
-              type: integer
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    MessageEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [message]
+          properties:
+            message:
+              type: string
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string

@@ -104,8 +104,15 @@ class TenantProvisioner
             $quotedRole = '"'.$roleName.'"';
             $quotedPassword = $adminConnection->getPdo()->quote($plainPassword);
 
-            // Create Role with LOGIN
-            $adminConnection->statement("CREATE ROLE {$quotedRole} WITH LOGIN PASSWORD {$quotedPassword}");
+            $adminUsername = (string) $adminConnection->getConfig('username');
+            $adminRole = '"'.$adminUsername.'"';
+
+            // Create Role with LOGIN and explicit least-privilege hygiene flags (ADR-0010, A9)
+            // Adding ROLE {$adminRole} grants the provisioner membership in the newly created role,
+            // which is required in PostgreSQL 16+ CREATEROLE semantics to assign OWNER to {$quotedRole}.
+            $adminConnection->statement(
+                "CREATE ROLE {$quotedRole} WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD {$quotedPassword} ROLE {$adminRole}"
+            );
             $roleCreated = true;
 
             // Create Database with Role as Owner
@@ -133,11 +140,16 @@ class TenantProvisioner
             ]);
 
             // 5. Create default License
+            $defaultPlan = (string) config('tenancy.defaults.license.plan', 'standard');
+            $validDays = (int) config('tenancy.defaults.license.valid_for_days', 365);
+            /** @var array<string> $defaultModules */
+            $defaultModules = config('tenancy.defaults.license.modules', ['identity', 'attendance', 'assessment', 'office']);
+
             License::create([
                 'tenant_id' => $tenant->id,
-                'plan' => $plan ?? 'standard',
-                'modules' => $modules ?? ['identity', 'attendance', 'assessment', 'office'],
-                'valid_until' => now()->addYear(),
+                'plan' => $plan ?? $defaultPlan,
+                'modules' => $modules ?? $defaultModules,
+                'valid_until' => now()->addDays($validDays),
             ]);
 
             // Reload relationships
@@ -177,11 +189,15 @@ class TenantProvisioner
                 throw new RuntimeException(sprintf('Tenant migration failed with exit code %d: %s', $exitCode, $output));
             }
 
-            SchemaVersion::create([
-                'tenant_id' => $tenant->id,
-                'version' => '1.0.0',
-                'migrated_at' => now(),
-            ]);
+            SchemaVersion::updateOrCreate(
+                [
+                    'tenant_id' => $tenant->id,
+                    'version' => '1.0.0',
+                ],
+                [
+                    'migrated_at' => now(),
+                ]
+            );
         } finally {
             $this->tenantContext->forget();
         }
@@ -202,7 +218,7 @@ class TenantProvisioner
             try {
                 // Terminate active connections
                 $adminConnection->statement(
-                    'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ? AND pid <> pg_backend_pid()',
+                    'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ? AND pid <> pg_backend_pid() AND usename NOT IN (SELECT rolname FROM pg_roles WHERE rolsuper = true)',
                     [$dbName]
                 );
                 $adminConnection->statement('DROP DATABASE IF EXISTS "'.$dbName.'"');
@@ -240,7 +256,7 @@ class TenantProvisioner
 
         try {
             $adminConnection->statement(
-                'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ? AND pid <> pg_backend_pid()',
+                'SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = ? AND pid <> pg_backend_pid() AND usename NOT IN (SELECT rolname FROM pg_roles WHERE rolsuper = true)',
                 [$dbName]
             );
             $adminConnection->statement('DROP DATABASE IF EXISTS "'.$dbName.'"');

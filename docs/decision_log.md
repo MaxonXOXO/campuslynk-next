@@ -47,3 +47,7 @@
 - **Exam-cell confirmation** of the R26 theory CIA floor, R21 theory ESE maximum and R26 Health & PE logbook mark (ADR-0006 defaults: 16/40, 75, logbook included).
 - **Leave chains** for the Principal, `admin`, `sf_office` and `super_admin` as applicants (ADR-0007).
 - **stancl/tenancy v4** PostgreSQL per-role isolation to verify in Sprint 0 (ADR-0001).
+- **Staff member who is also a parent/guardian (Sprint 0, Step 4):** A lecturer can also be a parent of a student at the same college, but `users.type` has a single value (`staff | student | parent`). How does a staff member who is also a guardian get a `guardian_link`?
+  - *Option A (Recommended):* `guardian_links` can reference any user regardless of `type` (e.g., a user with `type = staff` can be targeted by a `guardian_link` and granted student-guardian portal access without account duplication).
+  - *Option B:* Dual accounts (separate staff account and parent account with distinct mobile/email identifiers).
+  - *Decision timing:* To be decided in Step 4 (Scoped RBAC and Relationships).
