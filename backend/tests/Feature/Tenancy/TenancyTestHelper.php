@@ -12,15 +12,19 @@ use Illuminate\Support\Facades\DB;
 trait TenancyTestHelper
 {
     /**
-     * Ensure landlord schema is migrated.
+     * Ensure landlord schema is migrated via ops/provisioner connection.
      */
     protected function migrateLandlord(): void
     {
         Artisan::call('migrate', [
-            '--database' => 'landlord',
+            '--database' => 'pgsql_admin',
             '--path' => 'database/migrations/landlord',
             '--force' => true,
         ]);
+
+        $admin = DB::connection('pgsql_admin');
+        $admin->statement('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO landlord_app');
+        $admin->statement('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO landlord_app');
     }
 
     /**
