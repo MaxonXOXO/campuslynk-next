@@ -57,9 +57,13 @@ academic-suite/
 ├─ AGENTS.md                  # rules every AI agent must follow (see §7)
 ├─ docs/
 │  ├─ adr/                    # architecture decision records (0001-0008 and growing)
-│  ├─ decision_log.md
+│  ├─ legacy/                 # legacy codebase analysis (ROLE_AND_FEATURE_INVENTORY.md)
 │  ├─ modules/<name>.md       # each module's purpose, entities, permissions
-│  └─ glossary.md             # Batch, Sub-batch, Regulation, Tutor... exact meanings
+│  ├─ architecture_blueprint.md
+│  ├─ decision_log.md
+│  ├─ foundation_spec.md
+│  ├─ glossary.md             # Batch, Sub-batch, Regulation, Tutor... exact meanings
+│  └─ role_and_permission_spec.md
 ├─ backend/                   # Laravel 12
 │  ├─ app/Core/               # foundation (tenancy, access, organisation, http, audit, notify, workflow)
 │  ├─ app/Modules/<Module>/   # feature modules, generated, uniform

@@ -12,3 +12,4 @@ describe('core package', () => {
     expect(typeof status.timestamp).toBe('string');
   });
 });
+

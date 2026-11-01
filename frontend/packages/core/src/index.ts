@@ -9,3 +9,4 @@ export function getCoreStatus(): { ready: boolean; timestamp: string } {
     timestamp: new Date().toISOString()
   };
 }
+

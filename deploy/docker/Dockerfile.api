@@ -64,3 +64,4 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
 EXPOSE 8000
 
 CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
+

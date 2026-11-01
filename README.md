@@ -7,27 +7,33 @@
 
 ## 1. Pinned Component Versions
 
-All dependencies are verified and pinned:
+All dependencies are verified against official registries (`npm view`, `composer show`, Docker Hub) as stable releases at least two weeks old with zero known high/critical security advisories:
 
-| Component | Pinned Version | Status / Notes |
+| Component | Pinned Version | Verification / Notes |
 |---|---|---|
-| **PHP** | `8.4.27` | CLI + FrankenPHP runner |
-| **Laravel** | `12.70.2` | Headless API only |
-| **Pest** | `3.8.7` | `pest-plugin-laravel: 3.2.0` |
-| **Larastan** | `3.13.2` | Level 8 strict static analysis |
-| **Laravel Pint** | `1.32.1` | Laravel code style preset |
-| **PostgreSQL** | `17-alpine` | Official image; database-per-tenant architecture |
-| **PgBouncer** | `v1.23.0` | `edoburu/pgbouncer`, transaction pooling mode (ADR-0009) |
+| **PHP** | `8.4.27` | CLI + `dunglas/frankenphp:1-php8.4-bookworm` runner |
+| **Laravel** | `12.70.2` | Headless API only (`composer show laravel/framework`) |
+| **Pest** | `3.8.7` | `pest-plugin-laravel: 3.2.0` (`composer show pestphp/pest`) |
+| **Larastan** | `3.13.2` | Level 8 strict static analysis (`composer show larastan/larastan`) |
+| **Laravel Pint** | `1.32.1` | Laravel code style preset (`composer show laravel/pint`) |
+| **PostgreSQL** | `17-alpine` | Official image; database-per-tenant architecture (ADR-0001) |
+| **PgBouncer** | `v1.26.0-p0` | Pinned by digest `edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711` (ADR-0009) |
 | **Redis** | `7-alpine` | Cache, queues & session storage |
-| **Node.js** | `22.18.0 LTS` | Runtime environment |
-| **pnpm** | `9.15.9` | Monorepo package manager |
-| **Turborepo** | `2.11.10` | High-performance monorepo build orchestrator |
-| **Next.js** | `15.2.1` | App Router standalone output |
-| **React / React DOM** | `19.0.0` | Server Components first |
-| **Tailwind CSS** | `4.0.9` | v4 `@import "tailwindcss";` pipeline |
-| **TypeScript** | `5.8.2` | Strict mode across all packages |
-| **Vitest** | `3.0.7` | Unit testing in `packages/core` |
-| **ESLint** | `9.21.0` | Flat config across workspace packages |
+| **Node.js** | `22.18.0 LTS` | Runtime environment (`node:22-alpine` in Docker) |
+| **pnpm** | `9.15.9` | Monorepo package manager (`packageManager` field) |
+| **Turborepo** | `2.11.9` | Monorepo build orchestrator (`npm view turbo`) |
+| **Next.js** | `16.4.2` | Patched 16.x stable release (resolves CVE-2025-29927 & PostCSS advisories); standalone output |
+| **React / React DOM** | `19.3.1` | Server Components first (`@types/react: 19.3.0`) |
+| **Tailwind CSS** | `4.3.3` | v4 `@import "tailwindcss";` + `@tailwindcss/postcss: 4.3.3` |
+| **PostCSS** | `8.5.30` | CSS pipeline processor |
+| **TypeScript** | `5.9.3` | Unified strict mode version across all workspace packages |
+| **Vitest** | `4.1.12` | Unit testing in `packages/core` (resolves tinypool / @vitest/mocker advisories) |
+| **ESLint** | `9.39.5` | Flat config across workspace packages + `typescript-eslint: 8.71.2` |
+
+### Note on `frontend/.npmrc` (`node-linker=hoisted`)
+For Windows host compatibility (avoiding `EPERM` symlink privilege errors and MAX_PATH limits when running Next.js and Turborepo on Windows without Developer Mode / elevated administrator privileges), `frontend/.npmrc` configures `node-linker=hoisted`.
+- **Trade-off**: Unlike pnpm's default isolated symlinked `node_modules` layout, `node-linker=hoisted` flattens dependencies into the workspace root `node_modules` (similar to npm/Yarn classic). This means a workspace package could accidentally import a transitive ("phantom") dependency not explicitly listed in its own `package.json`.
+- **Mitigation**: Keep each package's `package.json` explicit and minimal, enforce TypeScript module resolution checks (`pnpm typecheck`), and verify that the Linux container build (`deploy/docker/Dockerfile.web`) installs and builds cleanly with `--frozen-lockfile`.
 
 ---
 
@@ -135,3 +141,4 @@ pnpm check
   - `0001`: PostgreSQL database-per-tenant.
   - `0002`: API versioning, envelopes & compatibility.
   - `0009`: PgBouncer transaction pooling mode.
+

@@ -35,4 +35,4 @@ These stay with Principal, HOD, Tutor, Coordinators. A Super Admin who is also a
 
 ## Open
 - Impersonating `student` or `parent` accounts: proposed read-only as well; confirm.
-- The delegation table in `role_and_permission_spec.md` §4 is the implementation reference; `admin` cannot assign HOD or coordinators.
+- The delegation table in `docs/role_and_permission_spec.md` §4 is the implementation reference; `admin` cannot assign HOD or coordinators.

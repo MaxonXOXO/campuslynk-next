@@ -51,3 +51,4 @@ export async function fetchApiHealth(): Promise<{ ok: boolean; status: string; t
     };
   }
 }
+

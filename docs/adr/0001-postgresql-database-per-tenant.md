@@ -1,6 +1,6 @@
 # ADR-0001: PostgreSQL with one database per college
 
-**Status:** Decided · **Supersedes:** the MySQL assumptions in the first versions of `architecture_blueprint.md` and `foundation_spec.md` (both rewritten for v3)
+**Status:** Decided · **Supersedes:** the MySQL assumptions in the first versions of `docs/architecture_blueprint.md` and `docs/foundation_spec.md` (both rewritten for v3)
 
 ## Context
 - The platform must run as cloud SaaS (AWS) and as an on-prem install on a college's own server, from one codebase, **both from day one**.

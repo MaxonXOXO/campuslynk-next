@@ -14,7 +14,7 @@
     "check": "pnpm run lint && pnpm run typecheck && pnpm run test"
   },
   "devDependencies": {
-    "turbo": "^2.4.4",
-    "typescript": "^5.8.2"
+    "turbo": "2.11.9",
+    "typescript": "5.9.3"
   }
 }

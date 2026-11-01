@@ -24,7 +24,7 @@ services:
       start_period: 5s
 
   pgbouncer:
-    image: edoburu/pgbouncer:v1.23.0
+    image: edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
     container_name: academic_dev_pgbouncer
     restart: unless-stopped
     environment:
@@ -32,9 +32,11 @@ services:
       DB_PORT: 5432
       DB_USER: ${DB_USERNAME:-academic_suite}
       DB_PASSWORD: ${DB_PASSWORD:-secret}
+      LISTEN_PORT: 6432
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
       DEFAULT_POOL_SIZE: 20
+      MAX_PREPARED_STATEMENTS: 100
       AUTH_TYPE: scram-sha-256
       ADMIN_USERS: ${DB_USERNAME:-academic_suite}
     ports:
@@ -72,6 +74,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/vendor
+      - /app/bootstrap/cache
     environment:
       DEPLOY_PROFILE: onprem
       APP_ENV: local
@@ -112,8 +115,12 @@ services:
     working_dir: /app
     volumes:
       - ./frontend:/app
+      - /app/node_modules
+      - /app/apps/web/.next
     environment:
       NODE_ENV: development
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
       INTERNAL_API_URL: http://api:8000
       NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8000}
     command: sh -c "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install && pnpm --filter academic-suite-web dev"
@@ -127,8 +134,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 20s
+      start_period: 45s
 
 volumes:
   postgres_dev_data:
     name: academic_dev_postgres_data
+

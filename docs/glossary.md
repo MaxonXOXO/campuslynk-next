@@ -52,7 +52,7 @@
 | **Capability** | The computed list of what the current user may do, returned by `/me`. Used for UI only; the server enforces. |
 | **Singleton role** | A role with at most one active holder per scope (Principal, HOD per department, Tutor per batch). |
 
-### Roles (see `role_and_permission_spec.md` for the full catalogue)
+### Roles (see `docs/role_and_permission_spec.md` for the full catalogue)
 
 | Role | Meaning |
 |---|---|
@@ -115,5 +115,5 @@
 1. **Decided:** Typed `sub_batches` (`lab | mentoring | workshop`) replaces `sections` (§2, ADR-0005).
 2. **Decided:** Super Admin (College IT Head) sits above Principal for system administration, holds no unilateral academic approval permissions, and impersonates academic roles in read-only mode (ADR-0004).
 3. **Decided:** Parent accounts are real `users` linked via `guardian_links`, supporting offline-capable temporary password / email login plus optional Firebase Phone Auth OTP (ADR-0003).
-4. **Decided:** Canonical role catalogue has **21 tenant roles** + **1 landlord role (`platform_owner`)** (reconciled across `role_and_permission_spec.md` and seeders).
+4. **Decided:** Canonical role catalogue has **21 tenant roles** + **1 landlord role (`platform_owner`)** (reconciled across `docs/role_and_permission_spec.md` and seeders).
 5. **Decided:** Regulation & Assessment Engine (ADR-0006) and Stream Approval Chains, Web Notification Center + FCM, and External RAG AI Assistant Boundary (ADR-0007).

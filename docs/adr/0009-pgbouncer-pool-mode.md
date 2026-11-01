@@ -20,7 +20,10 @@
 4. Tenant database routing:
    - Because PostgreSQL physical connections are strictly bound to a single database during the startup handshake, PgBouncer maintains separate connection pools per `(user, dbname)` pair.
    - When Laravel connects to `tenant_<slug>`, it passes the target `dbname` in the connection string to PgBouncer. PgBouncer maps this to the corresponding PostgreSQL database pool.
-5. **Testing requirement**: In Sprint 0 Step 2, per-request tenant database switching must be explicitly tested under PgBouncer transaction pooling to verify:
+5. **Container image pinning**:
+   - The PgBouncer container image is pinned by immutable SHA-256 multi-arch manifest digest across all Docker Compose topologies (`onprem`, `cloud`, and `compose.dev.yml`):
+     `edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711`
+6. **Testing requirement**: In Sprint 0 Step 2, per-request tenant database switching must be explicitly tested under PgBouncer transaction pooling to verify:
    - Clean connection release after request completion.
    - No cross-tenant connection or transaction leakage.
    - Proper handling of transactional domain events and audit logging.
@@ -30,3 +33,4 @@
 - ✅ **ACID compliance**: Full multi-statement transaction support (`DB::transaction(...)`) is preserved, unlike statement pooling.
 - ⚠ **Session-state restrictions**: Session-level PostgreSQL features (such as `SET search_path`, temporary tables, advisory locks spanning across transactions, and `LISTEN`/`NOTIFY`) cannot be held across transactions. Reverb / WebSockets and asynchronous notifications use Redis pub/sub rather than PostgreSQL `LISTEN`/`NOTIFY`.
 - ⚠ Verification required in Step 2: Ensure tenant database connection cycling does not retain stale session variables.
+

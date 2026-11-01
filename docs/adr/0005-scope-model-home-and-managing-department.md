@@ -32,4 +32,4 @@ Additionally, inside a single batch, students are simultaneously partitioned alo
   2. `CE` HOD **can** view student profiles and analytics for `CE S2` (via `home_department_id`), **cannot** lock CIA or unlock attendance for `CE S2`, and **can** perform all HOD governance actions on `CE S4`.
 - A semester promotion action (`PromoteBatchSemesterAction`) advances `batches.current_semester`, re-resolves `managing_department_id`, archives S1/S2 tutor assignments when crossing S2 → S3, and notifies the home department HOD to assign S3 tutors.
 
-Permission names follow the catalogue in `role_and_permission_spec.md` §5 (`<module>.<resource>.<action>`, spelling `organisation`).
+Permission names follow the catalogue in `docs/role_and_permission_spec.md` §5 (`<module>.<resource>.<action>`, spelling `organisation`).

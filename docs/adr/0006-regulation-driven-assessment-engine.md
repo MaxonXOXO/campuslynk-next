@@ -22,7 +22,7 @@ Because `REV2021` (senior batches) and `REV2026` (new batches from 2026 onwards)
    - `assessment_scores`: `(assessment_item_id, student_id, marks_obtained, rubric_breakdown_json, is_absent, entered_by, locked_at)`.
    - `cia_summaries`: materialized, auditable per-student per-course-offering rollup (`component_totals_json`, `attendance_pct`, `attendance_marks`, `total_cia`, `ese_marks`, `total_marks`, `is_cia_eligible`, `pass_status`, `status`).
 
-2. **All 13 Course Archetypes Seeded as Data (`assessment_schemes`)**, the keys discovered in the legacy inventory (components in `role_and_permission_spec.md` §6.1):
+2. **All 13 Course Archetypes Seeded as Data (`assessment_schemes`)**, the keys discovered in the legacy inventory (components in `docs/role_and_permission_spec.md` §6.1):
    - **REV2021 (6):** `r21_theory`, `r21_practical`, `r21_drawing`, `r21_workshop`, `r21_major_project`, `r21_seminar`.
    - **REV2026 (7):** `r26_theory`, `r26_practical`, `r26_practicum_basic`, `r26_practicum_core`, `r26_drawing`, `r26_english_1001`, `r26_health_1009`.
    - Every `course_offering` links to an explicit `assessment_scheme_id`. AU `3055` and CT `5002` simply point to `r21_theory`: zero subject-ID branching in code.

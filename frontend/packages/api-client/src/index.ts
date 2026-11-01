@@ -13,3 +13,4 @@ export interface ApiResponseEnvelope<T, M = Record<string, unknown>> {
 export interface HealthStatus {
   status: 'ok' | 'degraded' | 'error';
 }
+
