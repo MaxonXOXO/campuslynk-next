@@ -1,0 +1,134 @@
+# -----------------------------------------------------------------------------
+# Academic Suite - Local Development Stack (Live Reload & Mounted Source)
+# -----------------------------------------------------------------------------
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: academic_dev_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: landlord
+      POSTGRES_USER: ${DB_USERNAME:-academic_suite}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-secret}
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./deploy/docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USERNAME:-academic_suite} -d landlord"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.0
+    container_name: academic_dev_pgbouncer
+    restart: unless-stopped
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${DB_USERNAME:-academic_suite}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 100
+      DEFAULT_POOL_SIZE: 20
+      AUTH_TYPE: scram-sha-256
+      ADMIN_USERS: ${DB_USERNAME:-academic_suite}
+    ports:
+      - "${PGBOUNCER_PORT:-6432}:6432"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 6432 -U ${DB_USERNAME:-academic_suite}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  redis:
+    image: redis:7-alpine
+    container_name: academic_dev_redis
+    restart: unless-stopped
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 3s
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: ../deploy/docker/Dockerfile.api
+    container_name: academic_dev_api
+    restart: unless-stopped
+    volumes:
+      - ./backend:/app
+      - /app/vendor
+    environment:
+      DEPLOY_PROFILE: onprem
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_KEY: ${APP_KEY:-base64:c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==}
+      APP_URL: ${API_URL:-http://localhost:8000}
+      DB_CONNECTION: placeholder
+      DB_HOST: pgbouncer
+      DB_PORT: 6432
+      DB_DATABASE: landlord
+      DB_USERNAME: ${DB_USERNAME:-academic_suite}
+      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      LANDLORD_DB_HOST: pgbouncer
+      LANDLORD_DB_PORT: 6432
+      LANDLORD_DB_DATABASE: landlord
+      LANDLORD_DB_USERNAME: ${DB_USERNAME:-academic_suite}
+      LANDLORD_DB_PASSWORD: ${DB_PASSWORD:-secret}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      pgbouncer:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  web:
+    image: node:22-alpine
+    container_name: academic_dev_web
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    environment:
+      NODE_ENV: development
+      INTERNAL_API_URL: http://api:8000
+      NEXT_PUBLIC_API_URL: ${API_URL:-http://localhost:8000}
+    command: sh -c "corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install && pnpm --filter academic-suite-web dev"
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  postgres_dev_data:
+    name: academic_dev_postgres_data
