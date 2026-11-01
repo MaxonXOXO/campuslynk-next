@@ -138,6 +138,7 @@ import {
   PageHeader,
   StatusBadge,
   applyTenantBranding,
+  resetTenantBranding,
   useTheme,
   cn,
 } from "@academic-suite/ui";
@@ -248,7 +249,13 @@ const SAMPLE_STUDENTS: StudentRecord[] = [
 export function DesignSystemShowcase() {
   const { resolvedTheme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
-  const [activeTab, setActiveTab] = React.useState("overview");
+  const [activeTab, setActiveTab] = React.useState(() => {
+    if (typeof window !== "undefined") {
+      const param = new URLSearchParams(window.location.search).get("tab");
+      if (param) return param;
+    }
+    return "overview";
+  });
   const [selectedDate, setSelectedDate] = React.useState<Date | undefined>(new Date());
   const [activeNav, setActiveNav] = React.useState("dashboard");
 
@@ -264,6 +271,33 @@ export function DesignSystemShowcase() {
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Dev Showcase-Only 'd' Hotkey Toggle (WCAG 2.1.4 compliant with typing & modifier guards)
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.repeat) return;
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (event.key.toLowerCase() !== "d") return;
+
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        if (
+          target.isContentEditable ||
+          target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.closest("input, textarea, select, [contenteditable='true']")
+        ) {
+          return;
+        }
+      }
+
+      setTheme(resolvedTheme === "dark" ? "light" : "dark");
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [resolvedTheme, setTheme]);
 
   // Form handling
   const {
@@ -299,18 +333,18 @@ export function DesignSystemShowcase() {
     });
 
     if (result.success) {
+      const primaryVsFg = result.checks?.["light_primary_vs_foreground"]?.ratio ?? 4.5;
       setBrandingFeedback({
         success: true,
-        ratio: result.contrastRatio,
-        message: `Tenant branding applied! Contrast ratio: ${result.contrastRatio}:1 (WCAG AA Compliant)`,
+        ratio: primaryVsFg,
+        message: `Tenant branding applied across Light & Dark themes! Primary vs text contrast: ${primaryVsFg}:1 (WCAG AA Compliant).`,
       });
       toast.success("Tenant Branding Applied", {
-        description: `Colors updated on :root with contrast ratio ${result.contrastRatio}:1.`,
+        description: `Theme overrides injected into stylesheet cascade with contrast ratio ${primaryVsFg}:1.`,
       });
     } else {
       setBrandingFeedback({
         success: false,
-        ratio: result.contrastRatio,
         message: result.reason,
       });
       toast.error("Branding Rejected", {
@@ -320,11 +354,7 @@ export function DesignSystemShowcase() {
   };
 
   const handleResetBranding = () => {
-    if (typeof document !== "undefined") {
-      document.documentElement.style.removeProperty("--primary");
-      document.documentElement.style.removeProperty("--primary-foreground");
-      document.documentElement.style.removeProperty("--ring");
-    }
+    resetTenantBranding();
     setCustomPrimary("#0b6e4f");
     setCustomPrimaryFg("#ffffff");
     setBrandingFeedback(null);

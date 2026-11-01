@@ -2,24 +2,57 @@
 
 ## 1. Overview & Preset Configuration
 
-The **Academic Suite** (CampusLynk / Carmel LINX) frontend utilizes a design system built on **shadcn** with **Base UI** primitives (`base-vega` style) and modern **OKLCH** color tokens.
+The **Academic Suite** (CampusLynk / Carmel LINX) frontend utilizes a unified design system built on **shadcn** with **Base UI** primitives (`base-vega` style) and modern **OKLCH** color tokens.
 
 ### Preset Metadata
 - **Preset Code**: `b2BnwmRcY`
 - **shadcn CLI Version**: `4.23.0`
-- **Component Style**: `base-vega` (utilizing `@base-ui/react` primitives rather than Radix UI)
+- **Component Style**: `base-vega` (utilizing `@base-ui/react` v1.9.0 primitives rather than Radix UI)
 - **Icon Library**: `@remixicon/react` (v4.9.0)
 - **Base Color Space**: `neutral` in **OKLCH**
 - **Border Radius**: `0.45rem`
 - **Tailwind Version**: Tailwind CSS v4 (`@tailwindcss/postcss` 4.3.3)
 
+### Preset Token Diff & Scratch Inspection Comparison
+During Step 1, the preset was initialized into an isolated scratch project outside the repository. Comparing the raw scratch output of `globals.css` against `packages/ui/src/styles/globals.css`:
+
+| Token Category | Scratch Preset Inspection | `packages/ui/src/styles/globals.css` | Diff / Explanation |
+| :--- | :--- | :--- | :--- |
+| **Imports & Variant** | `@import "tailwindcss";`<br>`@import "tw-animate-css";`<br>`@import "shadcn/tailwind.css";`<br>`@custom-variant dark (&:is(.dark *));` | Identical | **Zero diff**. Exact 1:1 match. |
+| **Theme Inline Tokens** | 22 color mappings (`--color-*`), 7 radius mappings (`--radius-*`), `--font-sans`, `--font-heading` | Identical | **Zero diff**. Exact 1:1 match. |
+| **`:root` Variables** | 26 tokens (Neutral OKLCH: `--background: oklch(1 0 0)`, `--primary: oklch(0.508 0.118 165.612)`, `--radius: 0.45rem`, etc.) | Identical | **Zero diff**. Exact 1:1 match. |
+| **`.dark` Variables** | 26 tokens (Dark OKLCH: `--background: oklch(0.145 0 0)`, `--primary: oklch(0.432 0.095 166.913)`, etc.) | Identical | **Zero diff**. Exact 1:1 match. |
+| **Base Layer** | `@layer base { * { @apply border-border outline-ring/50; } ... }` | Identical | **Zero diff**. Normalized whitespace. |
+| **Accessibility Override** | None | `@media (prefers-reduced-motion: reduce) { ... }` | **Added**: Disables transitions and animations for users requesting reduced motion (Sprint 0 acceptance criterion 4). |
+
 ---
 
-## 2. Component Inventory
+## 2. Fonts & Typography Specification
+
+### Preset Font Setting
+The preset `b2BnwmRcY` explicitly specifies:
+- **Latin Font**: `Inter` (`subsets: ["latin"]`, CSS variable `--font-sans`)
+- **Monospace Font**: `Geist_Mono` (`subsets: ["latin"]`, CSS variable `--font-mono`)
+
+### Malayalam Localization Font
+To support official bilingual operations in Kerala Polytechnic institutions (administrative circulars, Malayalam student names, marks entry), Google's **`Noto Sans Malayalam`** was added as the designated script fallback.
+
+### Final CSS Font Stack
+```css
+font-family: var(--font-sans), var(--font-malayalam), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+```
+- **Rationale**: `Inter` provides high-density, legible Latin glyphs for course codes, dates, and English prose. When the browser encounters Malayalam Unicode code points (U+0D00 to U+0D7F), it seamlessly falls back to `Noto Sans Malayalam`.
+- **Glyph Integrity**: `Noto Sans Malayalam` includes complete OpenType ligature and conjunct support (കൂട്ടക്ഷരങ്ങൾ: യ്ക്ക, ങ്ങ, ണ്ഡ, ത്ഥ, ഷ്ട) without glyph clipping or vertical baseline misalignment.
+- **Unbroken Words**: All headings, body cards, and table cells enforce `break-words` (and avoid `break-all`) to prevent splitting syllables mid-character.
+- **Line Heights**: Minimum line-height of `1.5` (`leading-normal` / `leading-relaxed`) is enforced to give adequate clearance for Malayalam ascenders and descenders (മാത്രകൾ).
+
+---
+
+## 3. Component Inventory
 
 All base UI components live exclusively in `frontend/packages/ui` (`@academic-suite/ui`). Applications (such as `frontend/apps/web`) consume them as workspace dependencies and must not declare local component files under `src/components/ui/`.
 
-### 2.1 The 31 shadcn Primitive Components
+### 3.1 The 31 shadcn Primitive Components
 | Component | Primitive / Engine | Path | Purpose |
 | :--- | :--- | :--- | :--- |
 | `Button` | `@base-ui/react/button` | `packages/ui/src/components/ui/button.tsx` | Standard, outline, secondary, ghost, destructive, link buttons |
@@ -54,111 +87,69 @@ All base UI components live exclusively in `frontend/packages/ui` (`@academic-su
 | `Calendar` | `react-day-picker` | `packages/ui/src/components/ui/calendar.tsx` | Date picker calendar grid |
 | `Progress` | `@base-ui/react/progress` | `packages/ui/src/components/ui/progress.tsx` | Visual progress bar indicators |
 
-### 2.2 Composed Components
+### 3.2 Composed Components
 1. **`PageHeader`** (`packages/ui/src/composed/page-header.tsx`):
-   - Combines breadcrumbs, title (`h1`), description text, and customizable action button slots.
-   - Automatically handles mobile wrapping and spacing.
+   Standardized page heading banner combining optional breadcrumb slots, title (`h1`), description text, and responsive action button containers.
 2. **`StatusBadge`** (`packages/ui/src/composed/status-badge.tsx`):
-   - Semantic indicator badge supporting variants: `success`, `warning`, `danger`, `info`, `neutral`, `draft`.
-   - Renders a colored indicator dot, accessible labels, and follows the unified design tokens.
+   Semantic indicator badge supporting variants: `success`, `warning`, `danger`, `info`, `neutral`, `draft` with pulsing/static dot indicators.
 
 ---
 
-## 3. CSS Variable & Token Reference
+## 4. Hardened Tenant Branding Contract
 
-The design system uses CSS custom properties defined in `packages/ui/src/styles/globals.css`. Color tokens are defined in the modern **OKLCH** color space for perceptual uniformity.
+Multi-tenant polytechnic institutions may configure custom branding. Because tenant branding parameters come from tenant configuration (eventually via API), all inputs are treated as untrusted.
 
-### Light & Dark Token Map
-| CSS Variable | Light Theme Value (OKLCH / Rem) | Dark Theme Value (OKLCH / Rem) | Purpose |
-| :--- | :--- | :--- | :--- |
-| `--background` | `oklch(1 0 0)` | `oklch(0.145 0 0)` | Page background |
-| `--foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` | Primary text |
-| `--card` | `oklch(1 0 0)` | `oklch(0.145 0 0)` | Card/surface background |
-| `--card-foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` | Card text |
-| `--popover` | `oklch(1 0 0)` | `oklch(0.145 0 0)` | Flyout/popover surface |
-| `--popover-foreground` | `oklch(0.145 0 0)` | `oklch(0.985 0 0)` | Popover text |
-| `--primary` | `oklch(0.508 0.118 165.612)` | `oklch(0.508 0.118 165.612)` | Brand primary color (Forest Green) |
-| `--primary-foreground`| `oklch(0.979 0.021 166.113)` | `oklch(0.979 0.021 166.113)` | Text on primary color |
-| `--secondary` | `oklch(0.967 0.001 286.375)` | `oklch(0.269 0 0)` | Secondary surface |
-| `--secondary-foreground`| `oklch(0.205 0 0)` | `oklch(0.985 0 0)` | Text on secondary surface |
-| `--muted` | `oklch(0.967 0.001 286.375)` | `oklch(0.269 0 0)` | Subtle/inactive background |
-| `--muted-foreground` | `oklch(0.556 0 0)` | `oklch(0.708 0 0)` | Low-emphasis text |
-| `--accent` | `oklch(0.967 0.001 286.375)` | `oklch(0.269 0 0)` | Hover/highlight background |
-| `--accent-foreground` | `oklch(0.205 0 0)` | `oklch(0.985 0 0)` | Hover/highlight text |
-| `--destructive` | `oklch(0.577 0.245 27.325)` | `oklch(0.396 0.141 25.723)` | Critical actions / errors |
-| `--destructive-foreground`| `oklch(0.577 0.245 27.325)` | `oklch(0.637 0.237 25.331)` | Text on destructive elements |
-| `--border` | `oklch(0.922 0 0)` | `oklch(0.269 0 0)` | Border lines |
-| `--input` | `oklch(0.922 0 0)` | `oklch(0.269 0 0)` | Input field borders |
-| `--ring` | `oklch(0.508 0.118 165.612)` | `oklch(0.508 0.118 165.612)` | Focus rings |
-| `--radius` | `0.45rem` | `0.45rem` | Border radius baseline |
+### 4.1 Strict Input Allow-List Validation
+All incoming color values are validated by `isValidColorValue(input)` before evaluation:
+- **Allowed Formats**:
+  - Hex: `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa` (`^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$`)
+  - OKLCH: Numeric components with optional percentage (`^oklch\(\s*([0-9.]+)?%?\s+([0-9.]+)\s+([0-9.]+)(?:\s*\/\s*([0-9.]+)?%?)?\s*\)$`)
+- **Explicit Rejections**:
+  Any input containing `;`, `{`, `}`, `url(`, `expression`, quotes (`"`, `'`, `` ` ``), comments (`/*`, `*/`, `//`), or control characters is rejected immediately.
+- **Logo URLs**:
+  **Logo URLs are intentionally NOT handled by this CSS branding layer.** They will be managed via the storage and asset pipeline in a subsequent Sprint.
 
----
+### 4.2 Light & Dark Theme Separation
+- **Cascade Isolation**: Rather than setting inline styles on `:root` (which would override `.dark` classes due to inline style specificity), `applyTenantBranding` manages a dedicated `<style id="academic-tenant-branding">` sheet with explicit `:root` and `.dark` blocks.
+- **Deterministic Dark Derivation**: If a tenant only provides light tokens, the system deterministically evaluates whether the light primary meets contrast in dark mode. If not, it derives a legible dark-mode variant by adjusting lightness ($L$) and chroma ($C$) in OKLCH while keeping the brand hue ($H$) constant.
 
-## 4. Tenant Branding Contract
+### 4.3 Contrast Rules & Thresholds
+Before applying overrides, `applyTenantBranding` validates 6 mandatory contrast checks against the theme backgrounds:
+1. **Light Primary vs Primary-Foreground**: $\ge 4.5:1$ (WCAG AA normal text)
+2. **Light Primary vs Light Background**: $\ge 3.0:1$ (Used for interactive buttons and links)
+3. **Light Ring vs Light Background**: $\ge 3.0:1$ (Used for focus outlines)
+4. **Dark Primary vs Primary-Foreground**: $\ge 4.5:1$
+5. **Dark Primary vs Dark Background**: $\ge 3.0:1$
+6. **Dark Ring vs Dark Background**: $\ge 3.0:1$
 
-Multi-tenant polytechnic institutions may configure custom branding. To preserve accessibility and system cohesion, branding customization is strictly governed:
-
-### 4.1 Customization Scope
-- **Permitted Overrides**:
-  - `--primary` (Tenant brand color)
-  - `--primary-foreground` (Text on brand color)
-  - `--ring` (Focus outline color, typically matching primary)
-- **Forbidden Overrides**:
-  - `--background`, `--foreground`, `--card`, `--card-foreground` (Must preserve dark/light theme integrity)
-  - `--destructive`, `--destructive-foreground` (Must remain universally recognizable for safety/danger)
-  - Spacing, layout metrics, and radii.
-
-### 4.2 WCAG AA Contrast Validation
-Before any tenant branding is applied to `:root`, `applyTenantBranding(tokens)` validates contrast:
-1. Colors provided in Hex (`#rrggbb`), RGB (`rgb(...)`), or OKLCH are parsed into linear relative luminance.
-2. The contrast ratio is calculated:
-   $$\text{Ratio} = \frac{L_1 + 0.05}{L_2 + 0.05}$$
-3. **Threshold**: The ratio between `--primary` and `--primary-foreground` must be $\ge 4.5:1$ (WCAG 2.1 AA requirement for normal text).
-4. If the check fails, `applyTenantBranding` rejects the tokens, leaves current CSS variables intact, and returns a descriptive error reason.
+**Fallback Guarantee**: If ANY check fails, the system reverts immediately to preset defaults (`PRESET_DEFAULTS`), clears any active overrides, and returns a structured object detailing the failed metric.
 
 ---
 
-## 5. Malayalam Typography & Kerala Polytechnic Localization
+## 5. Keyboard Navigation & Accessibility Walkthrough
 
-Polytechnic operations in Kerala (administrative notifications, official course titles, mark entry lists) require bilingual English and Malayalam typography.
+Every interactive component was systematically evaluated for keyboard accessibility:
 
-### 5.1 Font Selection: Noto Sans Malayalam
-- **Selected Font**: `Noto_Sans_Malayalam` via `next/font/google`.
-- **Primary Latin Font**: `Inter` (supplemented by `Geist_Mono` for codes and roll numbers).
-- **CSS Font Family Chain**:
-  ```css
-  font-family: var(--font-inter), var(--font-noto-sans-malayalam), system-ui, -apple-system, sans-serif;
-  ```
+| Component | Focus Trap | Escape Key | Focus Return | Arrow-Key Behaviour | Defects Found & Fixes Applied |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Dialog** | Yes (contained inside modal) | Dismisses dialog | Returns focus to trigger button | Traverses interactive elements via <kbd>Tab</kbd> | Base UI does not support Radix `asChild`; replaced with `render={<Button ... />}` across all modal triggers. |
+| **Alert Dialog** | Yes (trapped inside alert dialog) | Dismisses dialog | Returns focus to trigger button | <kbd>Tab</kbd> cycles between Cancel and Confirm actions | Clean pass. Verified cancel and confirm focus. |
+| **Sheet / Drawer** | Yes (trapped within sheet panel) | Slides out and dismisses | Returns focus to trigger button | Traverses sheet contents; <kbd>Tab</kbd> cycles interactive elements | Clean pass. Animations respect `prefers-reduced-motion`. |
+| **Dropdown Menu** | Contained in popup | Closes menu immediately | Returns focus to dropdown trigger | <kbd>Up</kbd> / <kbd>Down</kbd> navigates items with wrap-around; <kbd>Right</kbd> opens submenus; <kbd>Left</kbd> closes | Clean pass. Items activate on <kbd>Enter</kbd> / <kbd>Space</kbd>. |
+| **Popover** | Contained in popover content | Closes popover | Returns focus to popover trigger | Standard form navigation within flyout | Clean pass. |
+| **Command** | Contained in command palette | Dismisses command palette | Returns focus to search launcher | <kbd>Down</kbd> / <kbd>Up</kbd> navigates results without blurring search field; <kbd>Enter</kbd> activates | Clean pass. Keyboard filtering responds immediately. |
+| **Select** | Contained in option list | Dismisses option list | Returns focus to select trigger | <kbd>Down</kbd> / <kbd>Up</kbd> moves selection; typeahead jump supported; <kbd>Enter</kbd> selects | Clean pass. Form validation state integrates cleanly. |
+| **Calendar** | Contained in calendar grid | Handled by wrapper | Handled by wrapper | <kbd>Left</kbd>/<kbd>Right</kbd> changes day; <kbd>Up</kbd>/<kbd>Down</kbd> changes week; <kbd>PgUp</kbd>/<kbd>PgDn</kbd> changes month | Clean pass using `react-day-picker`. |
+| **Sidebar** | Trapped when open on mobile | Closes mobile sheet | Returns to `SidebarTrigger` | Menu buttons traverse via <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> | Fixed `onClick` event typing in `sidebar.tsx` which previously failed TypeScript strict checking with `preventBaseUIHandler`. |
+| **Tabs** | N/A (standard tablist) | N/A | Focus advances to active panel | <kbd>Left</kbd> / <kbd>Right</kbd> navigates between tabs in `TabsList` | Clean pass adhering to WAI-ARIA tab pattern. |
 
-### 5.2 Rationale & Rendering Safeguards
-1. **Complex Conjuncts (കൂട്ടക്ഷരങ്ങൾ)**: Noto Sans Malayalam provides OpenType glyph shaping for complex ligatures (e.g., യ്ക്ക, ങ്ങ, ണ്ഡ, ത്ഥ, ഷ്ട) without clipping or improper vertical misalignment.
-2. **Unbroken Words**: Malayalam words have long compound structures. Components apply `break-words` (and avoid `break-all`) to prevent splitting syllables mid-character.
-3. **Line Height**: Malayalam scripts feature ascenders and descenders (മാത്രകൾ). The design system enforces a minimum line-height of `1.5` (`leading-normal` or `leading-relaxed`) to prevent vertical overlap in tables and cards.
+### Note on Theme Toggle Hotkey
+The single-character shortcut (<kbd>d</kbd>) was removed from the production `ThemeProvider` to eliminate WCAG 2.1.4 single-key shortcut conflicts. It is restricted exclusively to the dev-only showcase route (`/design-system`), where it explicitly ignores inputs, textareas, selects, `contenteditable` elements, and modifier keys.
 
 ---
 
-## 6. Developer Guide
+## 6. Monorepo Discipline & Automated CI Guard
 
-### 6.1 Installing a New Component
-To add a new shadcn component:
-1. Navigate to the UI package:
-   ```bash
-   cd frontend/packages/ui
-   ```
-2. Run the shadcn CLI:
-   ```bash
-   pnpm dlx shadcn@latest add <component-name>
-   ```
-3. Ensure all internal cross-imports within `packages/ui` use relative paths (e.g., `./button` instead of `@/components/ui/button`).
-4. Re-export the component in `packages/ui/src/index.ts`.
-
-### 6.2 Consuming in Applications
-In `frontend/apps/web` (or any future app/package):
-```tsx
-import { Button, Card, PageHeader, StatusBadge } from "@academic-suite/ui";
-```
-
-### 6.3 Monorepo Discipline & Automated CI Guard
 To prevent architectural drift:
 - **No Local UI Components**: No component files are permitted under `apps/web/src/components/ui/`.
 - **No Raw Colors**: No raw hex (`#...`) or `rgb(...)` color literals are permitted in styling classes or inline styles within `apps/web/src/`. All styles must use design tokens (`bg-primary`, `text-muted-foreground`, etc.).
