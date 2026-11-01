@@ -17,7 +17,7 @@ use App\Core\Tenancy\Listeners\QueueTenantScopeListener;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Database\DatabaseManager;
-use Illuminate\Support\Facades\Queue;
+use Illuminate\Queue\Queue;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Octane\Events\RequestTerminated;
 
