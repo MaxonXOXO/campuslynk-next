@@ -64,4 +64,3 @@ return [
     'prefix' => env('CACHE_PREFIX', 'academic_suite_cache_'),
 
 ];
-
