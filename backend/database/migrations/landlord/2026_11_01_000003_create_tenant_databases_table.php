@@ -11,7 +11,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('landlord')->create('tenant_databases', function (Blueprint $table): void {
+        $conn = $this->getConnection() ?? 'landlord';
+
+        Schema::connection($conn)->create('tenant_databases', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('tenant_id')->unique()->constrained('tenants')->cascadeOnDelete();
             $table->string('host', 255);
@@ -28,6 +30,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('landlord')->dropIfExists('tenant_databases');
+        $conn = $this->getConnection() ?? 'landlord';
+        Schema::connection($conn)->dropIfExists('tenant_databases');
     }
 };

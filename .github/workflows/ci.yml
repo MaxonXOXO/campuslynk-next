@@ -129,6 +129,18 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
+      - name: Run Landlord Migrations as Ops Provisioner
+        env:
+          APP_ENV: testing
+          DEPLOY_PROFILE: onprem
+          DB_CONNECTION: unconfigured
+          LANDLORD_DB_HOST: 127.0.0.1
+          LANDLORD_DB_PORT: 5432
+          LANDLORD_DB_DATABASE: landlord
+          LANDLORD_DB_USERNAME: provisioner
+          LANDLORD_DB_PASSWORD: secret
+        run: php artisan migrate --database=landlord --path=database/migrations/landlord --force
+
       - name: Run Pest Tests (Feature & Architecture)
         env:
           APP_ENV: testing
