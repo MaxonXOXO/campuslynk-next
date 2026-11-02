@@ -44,4 +44,3 @@ class CreateUserAction
         return $user;
     }
 }
-

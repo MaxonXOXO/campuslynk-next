@@ -21,4 +21,3 @@ class ReactivateUserAction
         return $user;
     }
 }
-

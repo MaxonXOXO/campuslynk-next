@@ -23,4 +23,3 @@ class UpdateDepartmentAction
         return $department;
     }
 }
-

@@ -38,4 +38,3 @@ class CreateDepartmentAction
         return $department;
     }
 }
-

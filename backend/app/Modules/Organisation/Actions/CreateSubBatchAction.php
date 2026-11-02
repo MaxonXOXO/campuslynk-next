@@ -39,4 +39,3 @@ class CreateSubBatchAction
         return $subBatch;
     }
 }
-

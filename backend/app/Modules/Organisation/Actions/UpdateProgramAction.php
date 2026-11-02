@@ -22,4 +22,3 @@ class UpdateProgramAction
         return $program;
     }
 }
-

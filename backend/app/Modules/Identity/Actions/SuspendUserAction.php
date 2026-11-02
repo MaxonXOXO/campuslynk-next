@@ -24,4 +24,3 @@ class SuspendUserAction
         return $user;
     }
 }
-

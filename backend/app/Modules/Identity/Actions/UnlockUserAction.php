@@ -32,4 +32,3 @@ class UnlockUserAction
             ->log("Administratively unlocked user account [{$targetUser->name}].");
     }
 }
-
