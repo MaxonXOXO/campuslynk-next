@@ -351,56 +351,6 @@ paths:
         '200':
           description: List of roles
 
-  /roles/assign:
-    post:
-      operationId: assignRole
-      summary: Assign a scoped role to a user subject to delegation matrix and singleton constraints
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AssignRoleInput'
-      responses:
-        '201':
-          description: Role assigned
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoleAssignmentEnvelope'
-        '409':
-          $ref: '#/components/responses/ProblemDetails'
-        '422':
-          $ref: '#/components/responses/ProblemDetails'
-
-  /roles/revoke:
-    post:
-      operationId: revokeRole
-      summary: Revoke an active role assignment
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [role_assignment_id]
-              properties:
-                role_assignment_id:
-                  type: string
-                reason:
-                  type: string
-      responses:
-        '200':
-          description: Role assignment revoked
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MessageEnvelope'
-
   /departments:
     get:
       operationId: listDepartments
@@ -410,6 +360,91 @@ paths:
       responses:
         '200':
           description: List of departments
+    post:
+      operationId: createDepartment
+      summary: Create a new institution department
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, stream, kind]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                stream:
+                  type: string
+                  enum: [engineering, general_academics, administrative]
+                kind:
+                  type: string
+                  enum: [academic, administrative]
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Department created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /departments/{id}:
+    get:
+      operationId: getDepartment
+      summary: Get department details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Department details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateDepartment
+      summary: Update department details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                stream:
+                  type: string
+                kind:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Department updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
 
   /batches:
     get:
@@ -462,6 +497,40 @@ paths:
           $ref: '#/components/responses/ProblemDetails'
         '404':
           $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateBatch
+      summary: Update batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [active, graduated, archived]
+      responses:
+        '200':
+          description: Batch updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
 
   /batches/{id}/promote:
     post:
@@ -488,7 +557,7 @@ paths:
   /users/{id}/unlock:
     post:
       operationId: unlockUserAccount
-      summary: Administratively unlock a locked-out user account
+      summary: Administratively clear login lockouts across all rate limiting tiers (requires identity.user.unlock, restricted to Super Admin)
       security:
         - bearerAuth: []
       parameters:
@@ -550,13 +619,27 @@ paths:
           description: Role assignments list
     post:
       operationId: createRoleAssignment
-      summary: Assign a role to a user within a specific scope
+      summary: Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints
       security:
         - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleInput'
       responses:
         '201':
           description: Role assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignmentEnvelope'
         '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
           $ref: '#/components/responses/ProblemDetails'
 
   /role-assignments/{id}:
@@ -574,7 +657,13 @@ paths:
       responses:
         '200':
           description: Role assignment revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
         '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
           $ref: '#/components/responses/ProblemDetails'
 
   /programs:
@@ -586,6 +675,89 @@ paths:
       responses:
         '200':
           description: Programs list
+    post:
+      operationId: createProgram
+      summary: Create an academic program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, department_id, duration_semesters]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                department_id:
+                  type: string
+                duration_semesters:
+                  type: integer
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Program created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /programs/{id}:
+    get:
+      operationId: getProgram
+      summary: Get program details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Program details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateProgram
+      summary: Update program details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                department_id:
+                  type: string
+                duration_semesters:
+                  type: integer
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Program updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
 
   /academic-years:
     get:
@@ -596,6 +768,89 @@ paths:
       responses:
         '200':
           description: Academic years list
+    post:
+      operationId: createAcademicYear
+      summary: Create an academic year
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, start_date, end_date]
+              properties:
+                label:
+                  type: string
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                is_current:
+                  type: boolean
+      responses:
+        '201':
+          description: Academic year created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /academic-years/{id}:
+    get:
+      operationId: getAcademicYear
+      summary: Get academic year details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Academic year details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateAcademicYear
+      summary: Update academic year details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                is_current:
+                  type: boolean
+      responses:
+        '200':
+          description: Academic year updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
 
   /regulations:
     get:

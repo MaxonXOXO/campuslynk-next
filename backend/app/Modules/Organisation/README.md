@@ -45,7 +45,39 @@ Declared in `OrganisationModule::permissions()`:
 - `BatchSemesterPromoted`: Dispatched when a batch advances to the next semester. Triggers governance re-resolution and listener updates (e.g. invalidating temporary S1/S2 mentoring/tutor assignments).
 - `GovernanceRuleUpdated`: Dispatched when department semester governance rules are modified.
 
-## 6. Architecture Boundary
+## 6. HTTP API Endpoints (`/api/v1`)
+All endpoints require `auth:sanctum` and permission middleware:
+
+| Method | URI | Permission | Description |
+|---|---|---|---|
+| `GET` | `/departments` | `organisation.batch.view` | List all departments |
+| `POST` | `/departments` | `organisation.department.manage` | Create department |
+| `GET` | `/departments/{id}` | `organisation.batch.view` | Get department details |
+| `PUT` | `/departments/{id}` | `organisation.department.manage` | Update department details / active status |
+| `GET` | `/programs` | `organisation.batch.view` | List academic programs |
+| `POST` | `/programs` | `organisation.department.manage` | Create program |
+| `GET` | `/programs/{id}` | `organisation.batch.view` | Get program details |
+| `PUT` | `/programs/{id}` | `organisation.department.manage` | Update program |
+| `GET` | `/academic-years` | `organisation.batch.view` | List academic years |
+| `POST` | `/academic-years` | `organisation.academic_calendar.manage` | Create academic year |
+| `GET` | `/academic-years/{id}` | `organisation.batch.view` | Get academic year details |
+| `PUT` | `/academic-years/{id}` | `organisation.academic_calendar.manage` | Update academic year |
+| `GET` | `/regulations` | `organisation.batch.view` | List regulations (REV2021, REV2026) |
+| `GET` | `/workshop-sections` | `organisation.batch.view` | List workshop trade sections |
+| `GET` | `/governance-rules` | `organisation.department.manage` | List semester governance rules |
+| `PUT` | `/governance-rules/{id}` | `organisation.department.manage` | Update governance rule |
+| `GET` | `/batches` | `organisation.batch.view` | List visible batches (`visibleTo` query scope) |
+| `POST` | `/batches` | `organisation.batch.create` | Create batch |
+| `GET` | `/batches/{id}` | `organisation.batch.view` | Get batch details |
+| `PUT` | `/batches/{id}` | `organisation.batch.create` | Update batch name / status |
+| `POST` | `/batches/{id}/promote` | `organisation.batch.promote_semester` | Advance semester & update managing department |
+| `GET` | `/batches/{batchId}/sub-batches` | `organisation.batch.view` | List sub-batches |
+| `POST` | `/batches/{batchId}/sub-batches` | `organisation.batch.create` | Create sub-batch |
+| `GET` | `/sub-batches/{id}` | `organisation.batch.view` | Get sub-batch details |
+| `PUT` | `/sub-batches/{id}` | `organisation.batch.create` | Update sub-batch |
+| `DELETE` | `/sub-batches/{id}` | `organisation.batch.create` | Delete sub-batch |
+
+## 7. Architecture Boundary
 Per `AGENTS.md` and `docs/foundation_spec.md` §4:
 - Other modules must **never** import `App\Modules\Organisation\Models\*`.
 - External modules interact with the organisation structure exclusively through `Contracts/`, domain `Events/`, or public `Http/Resources/`.

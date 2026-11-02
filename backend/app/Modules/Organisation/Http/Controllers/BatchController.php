@@ -7,6 +7,7 @@ namespace App\Modules\Organisation\Http\Controllers;
 use App\Modules\Identity\Services\ScopeAuthorizer;
 use App\Modules\Organisation\Actions\CreateBatchAction;
 use App\Modules\Organisation\Actions\PromoteBatchSemesterAction;
+use App\Modules\Organisation\Actions\UpdateBatchAction;
 use App\Modules\Organisation\Http\Requests\CreateBatchRequest;
 use App\Modules\Organisation\Http\Resources\BatchResource;
 use App\Modules\Organisation\Models\Batch;
@@ -91,6 +92,42 @@ class BatchController
             ],
             'links' => [
                 'self' => url("/api/v1/batches/{$batch->id}"),
+            ],
+        ]);
+    }
+
+    public function update(Request $request, string $id, UpdateBatchAction $action): JsonResponse
+    {
+        /** @var Authenticatable $user */
+        $user = $request->user();
+
+        /** @var Batch $batch */
+        $batch = Batch::findOrFail($id);
+
+        if (! $this->authorizer->can($user, 'organisation.batch.create', $batch)) {
+            return response()->json([
+                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => 'You do not have permission to update this batch.',
+            ], 403, ['Content-Type' => 'application/problem+json']);
+        }
+
+        $validated = $request->validate([
+            'name' => ['sometimes', 'string', 'max:100'],
+            'entry_type' => ['sometimes', 'string', 'in:regular,lateral'],
+            'status' => ['sometimes', 'string', 'in:active,archived,graduated'],
+        ]);
+
+        $updated = $action->execute($batch, $validated);
+
+        return response()->json([
+            'data' => new BatchResource($updated),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url("/api/v1/batches/{$updated->id}"),
             ],
         ]);
     }

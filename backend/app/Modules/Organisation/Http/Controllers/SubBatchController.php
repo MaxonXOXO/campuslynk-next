@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Modules\Organisation\Http\Controllers;
 
 use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Modules\Organisation\Actions\CreateSubBatchAction;
+use App\Modules\Organisation\Actions\DeleteSubBatchAction;
+use App\Modules\Organisation\Actions\UpdateSubBatchAction;
 use App\Modules\Organisation\Models\Batch;
 use App\Modules\Organisation\Models\SubBatch;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class SubBatchController
@@ -60,7 +62,7 @@ class SubBatchController
         ]);
     }
 
-    public function store(Request $request, string $batchId): JsonResponse
+    public function store(Request $request, string $batchId, CreateSubBatchAction $action): JsonResponse
     {
         /** @var Authenticatable $user */
         $user = $request->user();
@@ -83,24 +85,12 @@ class SubBatchController
             'course_offering_id' => ['nullable', 'string', 'max:36'],
         ]);
 
-        $randomSuffix = strtolower(Str::random(6));
-        $cleanName = (string) preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower((string) $validated['name']));
-        $scopeLabel = 'sb_'.substr($cleanName, 0, 20).'_'.$randomSuffix;
-        ScopeAuthorizer::validateScopeLabel($scopeLabel);
-
-        $homePath = "{$batch->home_path}.{$scopeLabel}";
-        $managingPath = "{$batch->managing_path}.{$scopeLabel}";
-
-        /** @var SubBatch $subBatch */
-        $subBatch = SubBatch::create([
-            'batch_id' => $batch->id,
-            'kind' => (string) $validated['kind'],
-            'name' => (string) $validated['name'],
-            'course_offering_id' => isset($validated['course_offering_id']) ? (string) $validated['course_offering_id'] : null,
-            'scope_label' => $scopeLabel,
-            'home_path' => $homePath,
-            'managing_path' => $managingPath,
-        ]);
+        $subBatch = $action->execute(
+            batch: $batch,
+            kind: (string) $validated['kind'],
+            name: (string) $validated['name'],
+            courseOfferingId: isset($validated['course_offering_id']) ? (string) $validated['course_offering_id'] : null
+        );
 
         activity('organisation')
             ->performedOn($subBatch)
@@ -164,7 +154,7 @@ class SubBatchController
         ]);
     }
 
-    public function update(Request $request, string $id): JsonResponse
+    public function update(Request $request, string $id, UpdateSubBatchAction $action): JsonResponse
     {
         /** @var Authenticatable $user */
         $user = $request->user();
@@ -187,35 +177,34 @@ class SubBatchController
             'course_offering_id' => ['nullable', 'string', 'max:36'],
         ]);
 
-        $subBatch->fill($validated);
-        $subBatch->save();
+        $updated = $action->execute($subBatch, $validated);
 
         activity('organisation')
-            ->performedOn($subBatch)
+            ->performedOn($updated)
             ->causedBy((string) $user->getAuthIdentifier())
-            ->log("Updated sub-batch [{$subBatch->name}].");
+            ->log("Updated sub-batch [{$updated->name}].");
 
         return response()->json([
             'data' => [
-                'id' => $subBatch->id,
-                'batch_id' => $subBatch->batch_id,
-                'kind' => $subBatch->kind,
-                'name' => $subBatch->name,
-                'course_offering_id' => $subBatch->course_offering_id,
-                'scope_label' => $subBatch->scope_label,
-                'home_path' => $subBatch->home_path,
-                'managing_path' => $subBatch->managing_path,
+                'id' => $updated->id,
+                'batch_id' => $updated->batch_id,
+                'kind' => $updated->kind,
+                'name' => $updated->name,
+                'course_offering_id' => $updated->course_offering_id,
+                'scope_label' => $updated->scope_label,
+                'home_path' => $updated->home_path,
+                'managing_path' => $updated->managing_path,
             ],
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
             ],
             'links' => [
-                'self' => url("/api/v1/sub-batches/{$subBatch->id}"),
+                'self' => url("/api/v1/sub-batches/{$updated->id}"),
             ],
         ]);
     }
 
-    public function destroy(Request $request, string $id): JsonResponse
+    public function destroy(Request $request, string $id, DeleteSubBatchAction $action): JsonResponse
     {
         /** @var Authenticatable $user */
         $user = $request->user();
@@ -237,7 +226,7 @@ class SubBatchController
             ->causedBy((string) $user->getAuthIdentifier())
             ->log("Deleted sub-batch [{$subBatch->name}].");
 
-        $subBatch->delete();
+        $action->execute($subBatch);
 
         return response()->json([
             'data' => [

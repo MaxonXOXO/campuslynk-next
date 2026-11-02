@@ -4,26 +4,24 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
-use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Actions\CreateUserAction;
+use App\Modules\Identity\Actions\ReactivateUserAction;
+use App\Modules\Identity\Actions\SuspendUserAction;
+use App\Modules\Identity\Actions\UnlockUserAction;
+use App\Modules\Identity\Actions\UpdateUserAction;
 use App\Modules\Identity\Http\Requests\CreateUserRequest;
 use App\Modules\Identity\Http\Requests\UpdateUserRequest;
 use App\Modules\Identity\Http\Resources\UserResource;
-use App\Modules\Identity\Models\Role;
-use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
-use App\Modules\Identity\Models\UserIdentifier;
-use App\Modules\Identity\Services\LoginRateLimiter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
 class UserController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = User::query();
+        $query = User::query()->with('roleAssignments.role');
 
         if ($request->has('type')) {
             $query->where('type', (string) $request->query('type'));
@@ -31,6 +29,15 @@ class UserController
 
         if ($request->has('status')) {
             $query->where('status', (string) $request->query('status'));
+        }
+
+        if ($request->has('search')) {
+            $search = (string) $request->query('search');
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'ilike', "%{$search}%")
+                    ->orWhere('email', 'ilike', "%{$search}%")
+                    ->orWhere('registration_number', 'ilike', "%{$search}%");
+            });
         }
 
         $users = $query->orderBy('name')->paginate(25);
@@ -52,39 +59,25 @@ class UserController
     public function show(string $id): JsonResponse
     {
         /** @var User $user */
-        $user = User::findOrFail($id);
+        $user = User::with('roleAssignments.role')->findOrFail($id);
 
         return response()->json([
             'data' => new UserResource($user),
-            'meta' => [
-                'timestamp' => now()->toIso8601String(),
-            ],
             'links' => [
                 'self' => url("/api/v1/users/{$user->id}"),
             ],
         ]);
     }
 
-    public function store(CreateUserRequest $request): JsonResponse
+    public function store(CreateUserRequest $request, CreateUserAction $action): JsonResponse
     {
-        $password = (string) ($request->validated('password') ?? Str::password(16));
+        /** @var User $caller */
+        $caller = $request->user();
 
-        /** @var User $user */
-        $user = User::create([
-            'type' => (string) $request->validated('type'),
-            'name' => (string) $request->validated('name'),
-            'email' => $request->validated('email') ? strtolower((string) $request->validated('email')) : null,
-            'mobile' => $request->validated('mobile') ? (string) $request->validated('mobile') : null,
-            'registration_number' => $request->validated('registration_number') ? (string) $request->validated('registration_number') : null,
-            'password' => Hash::make($password),
-            'must_change_password' => true,
-            'status' => 'active',
-        ]);
+        /** @var array{type: string, name: string, email?: string|null, mobile?: string|null, registration_number?: string|null, password?: string|null} $validated */
+        $validated = $request->validated();
 
-        activity('identity')
-            ->performedOn($user)
-            ->causedBy($request->user())
-            ->log("Created user [{$user->name}] ({$user->type}).");
+        $user = $action->execute($caller, $validated);
 
         return response()->json([
             'data' => new UserResource($user),
@@ -97,21 +90,18 @@ class UserController
         ], Response::HTTP_CREATED);
     }
 
-    public function update(UpdateUserRequest $request, string $id): JsonResponse
+    public function update(UpdateUserRequest $request, string $id, UpdateUserAction $action): JsonResponse
     {
+        /** @var User $caller */
+        $caller = $request->user();
+
         /** @var User $user */
         $user = User::findOrFail($id);
 
-        $user->fill($request->validated());
-        $user->save();
-
-        activity('identity')
-            ->performedOn($user)
-            ->causedBy($request->user())
-            ->log("Updated user [{$user->name}].");
+        $updated = $action->execute($caller, $user, $request->validated());
 
         return response()->json([
-            'data' => new UserResource($user),
+            'data' => new UserResource($updated),
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
             ],
@@ -121,7 +111,7 @@ class UserController
         ]);
     }
 
-    public function unlock(Request $request, string $id, LoginRateLimiter $rateLimiter, TenantContext $tenantContext): JsonResponse
+    public function unlock(Request $request, string $id, UnlockUserAction $action): JsonResponse
     {
         /** @var User $caller */
         $caller = $request->user();
@@ -129,42 +119,7 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
-        // Authorization check: Super Admin, Principal, Admin, or Tutor (for student)
-        $callerRoleKeys = Role::whereIn(
-            'id',
-            RoleAssignment::where('user_id', $caller->id)->whereRaw('is_active is true')->pluck('role_id')
-        )->pluck('key')->all();
-
-        $allowedRoles = ['super_admin', 'principal', 'admin'];
-        $canUnlock = ! empty(array_intersect($allowedRoles, $callerRoleKeys));
-
-        if (! $canUnlock) {
-            if (in_array('tutor', $callerRoleKeys, true) && $targetUser->type === 'student') {
-                $canUnlock = true;
-            }
-        }
-
-        if (! $canUnlock) {
-            return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
-                'title' => 'Forbidden',
-                'status' => 403,
-                'detail' => 'You do not have authority to unlock this user account.',
-            ], 403, ['Content-Type' => 'application/problem+json']);
-        }
-
-        $tenant = $tenantContext->getTenant() ?? abort(404, 'Tenant context not resolved.');
-        $identifiers = array_filter([$targetUser->email, $targetUser->mobile, $targetUser->registration_number]);
-
-        foreach ($identifiers as $val) {
-            $normalised = UserIdentifier::normalise((string) $val);
-            $rateLimiter->unlock($tenant->id, $normalised, (string) $request->ip());
-        }
-
-        activity('security')
-            ->performedOn($targetUser)
-            ->causedBy($caller)
-            ->log("Administratively unlocked user account [{$targetUser->name}].");
+        $action->execute($caller, $targetUser, (string) $request->ip());
 
         return response()->json([
             'data' => [
@@ -179,7 +134,7 @@ class UserController
         ]);
     }
 
-    public function suspend(Request $request, string $id): JsonResponse
+    public function suspend(Request $request, string $id, SuspendUserAction $action): JsonResponse
     {
         /** @var User $caller */
         $caller = $request->user();
@@ -187,16 +142,7 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
-        $targetUser->status = 'suspended';
-        $targetUser->save();
-
-        // Revoke all existing access tokens immediately
-        $targetUser->tokens()->delete();
-
-        activity('security')
-            ->performedOn($targetUser)
-            ->causedBy($caller)
-            ->log("Suspended user account [{$targetUser->name}].");
+        $action->execute($caller, $targetUser);
 
         return response()->json([
             'data' => new UserResource($targetUser),
@@ -210,7 +156,7 @@ class UserController
         ]);
     }
 
-    public function reactivate(Request $request, string $id): JsonResponse
+    public function reactivate(Request $request, string $id, ReactivateUserAction $action): JsonResponse
     {
         /** @var User $caller */
         $caller = $request->user();
@@ -218,13 +164,7 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
-        $targetUser->status = 'active';
-        $targetUser->save();
-
-        activity('security')
-            ->performedOn($targetUser)
-            ->causedBy($caller)
-            ->log("Reactivated user account [{$targetUser->name}].");
+        $action->execute($caller, $targetUser);
 
         return response()->json([
             'data' => new UserResource($targetUser),

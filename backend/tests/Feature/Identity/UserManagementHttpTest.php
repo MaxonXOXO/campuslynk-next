@@ -144,7 +144,7 @@ it('allows authorized user to assign and revoke scoped roles via API', function 
         // Assign HOD role to Helen for Civil Engineering
         $assignResponse = $this->withHeaders([
             'Authorization' => "Bearer {$principalToken}",
-        ])->postJson('http://roleapi.test/api/v1/roles/assign', [
+        ])->postJson('http://roleapi.test/api/v1/role-assignments', [
             'user_id' => $staffUser->id,
             'role_key' => 'hod',
             'scope_type' => 'department',
@@ -158,9 +158,7 @@ it('allows authorized user to assign and revoke scoped roles via API', function 
         // Revoke the role assignment
         $revokeResponse = $this->withHeaders([
             'Authorization' => "Bearer {$principalToken}",
-        ])->postJson('http://roleapi.test/api/v1/roles/revoke', [
-            'assignment_id' => $assignmentId,
-        ]);
+        ])->deleteJson("http://roleapi.test/api/v1/role-assignments/{$assignmentId}");
 
         $revokeResponse->assertStatus(200);
 
@@ -215,7 +213,7 @@ it('rejects unauthorised users from managing users and assigning roles', functio
         // Student attempts to assign role -> 403 Forbidden
         $roleResponse = $this->withHeaders([
             'Authorization' => "Bearer {$studentToken}",
-        ])->postJson('http://unauthuser.test/api/v1/roles/assign', [
+        ])->postJson('http://unauthuser.test/api/v1/role-assignments', [
             'user_id' => $student->id,
             'role_key' => 'super_admin',
             'scope_type' => 'institution',
@@ -321,6 +319,45 @@ it('administratively unlocks a locked-out user account and verifies immediate lo
 
         $adminToken = $admin->createToken('admin_token')->plainTextToken;
 
+        // Create Principal and Office Admin (both hold identity.user.update, but neither holds identity.user.unlock)
+        $principal = User::create([
+            'type' => 'staff',
+            'name' => 'Principal Patrick',
+            'email' => 'principal@unlock.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $principal->id,
+            'role_id' => $principalRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+        $principalToken = $principal->createToken('principal_token')->plainTextToken;
+
+        $officeAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'Office Admin Arthur',
+            'email' => 'office@unlock.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $adminRole = Role::where('key', 'admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $officeAdmin->id,
+            'role_id' => $adminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+        $officeToken = $officeAdmin->createToken('office_token')->plainTextToken;
+
         // Trigger account lockout with 5 failed login attempts
         for ($i = 0; $i < 5; $i++) {
             $this->postJson('http://unlock.test/api/v1/auth/login', [
@@ -340,9 +377,22 @@ it('administratively unlocks a locked-out user account and verifies immediate lo
         ]);
         expect(in_array($lockResponse->status(), [423, 429], true))->toBeTrue();
 
+        // Principal attempts unlock -> 403 Forbidden (identity.user.unlock required)
         $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$principalToken}",
+        ])->postJson("http://unlock.test/api/v1/users/{$student->id}/unlock")
+            ->assertStatus(403);
 
-        // Admin unlocks student account
+        // Office Admin attempts unlock -> 403 Forbidden
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$officeToken}",
+        ])->postJson("http://unlock.test/api/v1/users/{$student->id}/unlock")
+            ->assertStatus(403);
+
+        // Super Admin (holding identity.user.unlock) unlocks student account -> 200 OK
+        $this->app['auth']->forgetGuards();
         $unlockResponse = $this->withHeaders([
             'Authorization' => "Bearer {$adminToken}",
         ])->postJson("http://unlock.test/api/v1/users/{$student->id}/unlock");
@@ -535,10 +585,115 @@ it('supports role-assignments list, assign, and delete endpoints', function () {
     }
 });
 
-it('verifies full delegation matrix and scope constraints via HTTP', function () {
+dataset('delegation_matrix_cases', [
+    'Case 1: Principal assigns HOD in department' => [
+        'assigner' => 'principal',
+        'assignee' => 'candidate1',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_me',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 201,
+    ],
+    'Case 2: HOD assigns Tutor in own department batch' => [
+        'assigner' => 'ce_hod',
+        'assignee' => 'candidate2',
+        'role_key' => 'tutor',
+        'scope_type' => 'batch',
+        'scope_label' => 'b_ce_2026',
+        'scope_id_target' => 'batchCE',
+        'order_record' => null,
+        'expected_status' => 201,
+    ],
+    'Case 3: HOD assigns Tutor in another department batch' => [
+        'assigner' => 'ce_hod',
+        'assignee' => 'candidate2',
+        'role_key' => 'tutor',
+        'scope_type' => 'batch',
+        'scope_label' => 'b_me_2026',
+        'scope_id_target' => 'batchME',
+        'order_record' => null,
+        'expected_status' => 403,
+    ],
+    'Case 4: Office Admin assigns HOD' => [
+        'assigner' => 'office_admin',
+        'assignee' => 'candidate2',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_eee',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 403,
+    ],
+    'Case 5: Super Admin assigns HOD without order reference' => [
+        'assigner' => 'super_admin',
+        'assignee' => 'candidate2',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_eee',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 422,
+    ],
+    'Case 6: Super Admin assigns HOD with order reference' => [
+        'assigner' => 'super_admin',
+        'assignee' => 'candidate2',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_eee',
+        'scope_id_target' => null,
+        'order_record' => 'G.O.(Rt) No. 402/2026/HEDN',
+        'expected_status' => 201,
+    ],
+    'Case 7: HOD assigns HOD peer level' => [
+        'assigner' => 'ce_hod',
+        'assignee' => 'candidate1',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_ce',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 403,
+    ],
+    'Case 8: HOD assigns Principal higher level' => [
+        'assigner' => 'ce_hod',
+        'assignee' => 'candidate1',
+        'role_key' => 'principal',
+        'scope_type' => 'institution',
+        'scope_label' => 'i_carmel',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 403,
+    ],
+    'Case 9: General Dept Coordinator assigns S1/S2 Tutor in aided stream' => [
+        'assigner' => 'gen_dept_coordinator',
+        'assignee' => 'candidate2',
+        'role_key' => 'tutor',
+        'scope_type' => 'batch',
+        'scope_label' => 'b_ce_s1_2026',
+        'scope_id_target' => 'batchCES1',
+        'order_record' => null,
+        'expected_status' => 201,
+    ],
+]);
+
+it('verifies full delegation matrix and scope constraints via HTTP', function (
+    string $assigner,
+    string $assignee,
+    string $role_key,
+    string $scope_type,
+    string $scope_label,
+    ?string $scope_id_target,
+    ?string $order_record,
+    int $expected_status
+) {
     config(['app_profile.deploy_profile' => 'cloud']);
 
-    $tenant = $this->provisioner->provision('tenant_deleg_http', 'Deleg HTTP Poly', 'deleghtpp.test', 'cloud');
+    $tenantSlug = 'tenant_del_'.substr(md5($scope_label.$role_key.$assigner), 0, 10);
+    $tenantDomain = $tenantSlug.'.test';
+
+    $tenant = $this->provisioner->provision($tenantSlug, 'Deleg HTTP Poly', $tenantDomain, 'cloud');
     $this->tenantContext->setTenant($tenant);
 
     try {
@@ -548,7 +703,7 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
         $principal = User::create([
             'type' => 'staff',
             'name' => 'Principal P',
-            'email' => 'principal@deleghtpp.test',
+            'email' => "principal@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
@@ -567,7 +722,7 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
         $superAdmin = User::create([
             'type' => 'staff',
             'name' => 'IT Head',
-            'email' => 'superadmin@deleghtpp.test',
+            'email' => "superadmin@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
@@ -586,7 +741,7 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
         $officeAdmin = User::create([
             'type' => 'staff',
             'name' => 'Office Admin O',
-            'email' => 'officeadmin@deleghtpp.test',
+            'email' => "officeadmin@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
@@ -605,7 +760,7 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
         $ceHod = User::create([
             'type' => 'staff',
             'name' => 'CE HOD H',
-            'email' => 'cehod@deleghtpp.test',
+            'email' => "cehod@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
@@ -620,25 +775,44 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
             'is_active' => true,
         ]);
 
-        // 5. Staff users
-        $staffUser1 = User::create([
+        // 5. Gen Dept Coordinator
+        $genCoord = User::create([
             'type' => 'staff',
-            'name' => 'Candidate 1',
-            'email' => 'c1@deleghtpp.test',
+            'name' => 'Gen Coord G',
+            'email' => "gencoord@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $staffUser2 = User::create([
+        $genRole = Role::where('key', 'gen_dept_coordinator')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $genCoord->id,
+            'role_id' => $genRole->id,
+            'scope_type' => 'department',
+            'scope_label' => 'd_gen_aided',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+
+        // 6. Candidates
+        $candidate1 = User::create([
+            'type' => 'staff',
+            'name' => 'Candidate 1',
+            'email' => "c1@{$tenantDomain}",
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $candidate2 = User::create([
             'type' => 'staff',
             'name' => 'Candidate 2',
-            'email' => 'c2@deleghtpp.test',
+            'email' => "c2@{$tenantDomain}",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
         ]);
 
-        // Batch in CE and Batch in ME
+        // Batches: CE S3, ME S3, CE S1
         $batchCE = Batch::create([
             'program_id' => Program::first()->id,
             'home_department_id' => Department::where('code', 'CE')->first()->id,
@@ -665,113 +839,65 @@ it('verifies full delegation matrix and scope constraints via HTTP', function ()
             'managing_path' => 'i_carmel.s_aided.d_me.p_dme.b_me_2026',
         ]);
 
-        $principalToken = $principal->createToken('principal_token')->plainTextToken;
-        $superAdminToken = $superAdmin->createToken('sa_token')->plainTextToken;
-        $adminToken = $officeAdmin->createToken('admin_token')->plainTextToken;
-        $ceHodToken = $ceHod->createToken('cehod_token')->plainTextToken;
-
-        // (1) Principal assigns HOD -> 201 Created
-        $this->app['auth']->forgetGuards();
-        $resPrincAssignHod = $this->withHeaders([
-            'Authorization' => "Bearer {$principalToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser1->id,
-            'role_key' => 'hod',
-            'scope_type' => 'department',
-            'scope_label' => 'd_me',
+        $batchCES1 = Batch::create([
+            'program_id' => Program::first()->id,
+            'home_department_id' => Department::where('code', 'CE')->first()->id,
+            'managing_department_id' => Department::where('code', 'GEN_AIDED')->first()->id,
+            'academic_year_id' => AcademicYear::first()->id,
+            'regulation_id' => Regulation::first()->id,
+            'name' => 'CE Batch S1 2026',
+            'current_semester' => 1,
+            'scope_label' => 'b_ce_s1_2026',
+            'home_path' => 'i_carmel.s_aided.d_ce.p_dce.b_ce_s1_2026',
+            'managing_path' => 'i_carmel.s_aided.d_gen_aided.p_dce.b_ce_s1_2026',
         ]);
-        $resPrincAssignHod->assertStatus(201);
 
-        // (2) HOD assigns Tutor in own department batch -> 201 Created
-        $this->app['auth']->forgetGuards();
-        $resHodOwnDept = $this->withHeaders([
-            'Authorization' => "Bearer {$ceHodToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser2->id,
-            'role_key' => 'tutor',
-            'scope_type' => 'batch',
-            'scope_id' => $batchCE->id,
-            'scope_label' => $batchCE->scope_label,
-        ]);
-        $resHodOwnDept->assertStatus(201);
+        $tokens = [
+            'principal' => $principal->createToken('p_tok')->plainTextToken,
+            'super_admin' => $superAdmin->createToken('sa_tok')->plainTextToken,
+            'office_admin' => $officeAdmin->createToken('oa_tok')->plainTextToken,
+            'ce_hod' => $ceHod->createToken('hod_tok')->plainTextToken,
+            'gen_dept_coordinator' => $genCoord->createToken('gen_tok')->plainTextToken,
+        ];
 
-        // (3) HOD assigns Tutor in another department batch -> 403 Forbidden
-        $this->app['auth']->forgetGuards();
-        $resHodOtherDept = $this->withHeaders([
-            'Authorization' => "Bearer {$ceHodToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser2->id,
-            'role_key' => 'tutor',
-            'scope_type' => 'batch',
-            'scope_id' => $batchME->id,
-            'scope_label' => $batchME->scope_label,
-        ]);
-        $resHodOtherDept->assertStatus(403);
+        $candidates = [
+            'candidate1' => $candidate1,
+            'candidate2' => $candidate2,
+        ];
 
-        // (4) Office Admin assigns HOD -> 403 Forbidden
-        $this->app['auth']->forgetGuards();
-        $resAdminAssignHod = $this->withHeaders([
-            'Authorization' => "Bearer {$adminToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser2->id,
-            'role_key' => 'hod',
-            'scope_type' => 'department',
-            'scope_label' => 'd_eee',
-        ]);
-        $resAdminAssignHod->assertStatus(403);
+        $batches = [
+            'batchCE' => $batchCE,
+            'batchME' => $batchME,
+            'batchCES1' => $batchCES1,
+        ];
 
-        // (5) Super Admin assigns HOD without order reference -> 422 Unprocessable
-        $this->app['auth']->forgetGuards();
-        $resSaWithoutOrder = $this->withHeaders([
-            'Authorization' => "Bearer {$superAdminToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser2->id,
-            'role_key' => 'hod',
-            'scope_type' => 'department',
-            'scope_label' => 'd_eee',
-        ]);
-        $resSaWithoutOrder->assertStatus(422);
+        $targetUser = $candidates[$assignee];
+        $targetScopeId = $scope_id_target !== null ? $batches[$scope_id_target]->id : null;
 
-        // (6) Super Admin assigns HOD with order reference -> 201 Created
-        $this->app['auth']->forgetGuards();
-        $resSaWithOrder = $this->withHeaders([
-            'Authorization' => "Bearer {$superAdminToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser2->id,
-            'role_key' => 'hod',
-            'scope_type' => 'department',
-            'scope_label' => 'd_eee',
-            'order_record' => 'G.O.(Rt) No. 402/2026/HEDN',
-        ]);
-        $resSaWithOrder->assertStatus(201);
+        $payload = [
+            'user_id' => $targetUser->id,
+            'role_key' => $role_key,
+            'scope_type' => $scope_type,
+            'scope_label' => $scope_label,
+        ];
+        if ($targetScopeId !== null) {
+            $payload['scope_id'] = $targetScopeId;
+        }
+        if ($order_record !== null) {
+            $payload['order_record'] = $order_record;
+        }
 
-        // (7) HOD assigns HOD -> 403 Forbidden
         $this->app['auth']->forgetGuards();
-        $resHodAssignHod = $this->withHeaders([
-            'Authorization' => "Bearer {$ceHodToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser1->id,
-            'role_key' => 'hod',
-            'scope_type' => 'department',
-            'scope_label' => 'd_ce',
-        ]);
-        $resHodAssignHod->assertStatus(403);
 
-        // (8) HOD assigns Principal (role at or above assigner level) -> 403 Forbidden
-        $this->app['auth']->forgetGuards();
-        $resHodAssignPrinc = $this->withHeaders([
-            'Authorization' => "Bearer {$ceHodToken}",
-        ])->postJson('http://deleghtpp.test/api/v1/roles/assign', [
-            'user_id' => $staffUser1->id,
-            'role_key' => 'principal',
-            'scope_type' => 'institution',
-            'scope_label' => 'i_carmel',
-        ]);
-        $resHodAssignPrinc->assertStatus(403);
+        $response = $this->withHeaders([
+            'Authorization' => "Bearer {$tokens[$assigner]}",
+        ])->postJson("http://{$tenantDomain}/api/v1/role-assignments", $payload);
+
+        $response->assertStatus($expected_status);
     } finally {
         $this->tenantContext->forget();
     }
-});
+})->with('delegation_matrix_cases');
 
 it('returns real assignments and capabilities for authenticated user via /me', function () {
     config(['app_profile.deploy_profile' => 'cloud']);

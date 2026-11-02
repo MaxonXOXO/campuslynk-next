@@ -88,12 +88,10 @@ All endpoints are prefixed with `/api/v1` and protected by `auth:sanctum` and pe
 | `POST` | `/users` | `identity.user.create` | Create a new user account |
 | `GET` | `/users/{id}` | `identity.user.view` | Retrieve user details and role assignments |
 | `PUT` | `/users/{id}` | `identity.user.update` | Update user details or status |
-| `POST` | `/users/{id}/unlock` | `identity.user.update` | Administratively clear login lockouts across all rate limiting tiers |
+| `POST` | `/users/{id}/unlock` | `identity.user.unlock` | Administratively clear login lockouts across all rate limiting tiers (Super Admin) |
 | `POST` | `/users/{id}/suspend` | `identity.user.suspend` | Suspend user account and revoke active tokens |
 | `POST` | `/users/{id}/reactivate` | `identity.user.suspend` | Reactivate suspended user account |
 | `GET` | `/roles` | `identity.role.assign` | List catalogue roles and assigned permissions |
-| `POST` | `/roles/assign` | `identity.role.assign` | Assign scoped role to user |
-| `POST` | `/roles/revoke` | `identity.role.assign` | Revoke active role assignment |
 | `GET` | `/role-assignments` | `identity.role.assign` | List role assignments with user, role, and scope filtering |
 | `POST` | `/role-assignments` | `identity.role.assign` | Create role assignment |
 | `DELETE` | `/role-assignments/{id}` | `identity.role.assign` | Revoke role assignment by ID |

@@ -17,6 +17,7 @@ Declared in `IdentityModule::permissions()`:
 - `identity.user.view`: View user records and directory listings.
 - `identity.user.create`: Create staff and student accounts.
 - `identity.user.update`: Update account profile and credentials.
+- `identity.user.unlock`: Clear multi-tier rate limiting and administrative lockouts (restricted to Super Admin).
 - `identity.user.approve`: Approve pending student/staff registrations.
 - `identity.user.suspend`: Suspend active user accounts.
 - `identity.user.delete`: Soft/hard delete user accounts.

@@ -28,6 +28,7 @@ use App\Modules\Organisation\Models\Regulation;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use InvalidArgumentException;
 use Tests\Feature\Tenancy\TenancyTestHelper;
 
@@ -814,6 +815,140 @@ it('verifies that Super Admin permission set contains no academic or leave appro
         // Super Admin NEVER holds office.staff_leave.approve_* permissions
         $leaveApprovalPerms = array_filter($permissions, fn ($p) => str_starts_with((string) $p, 'office.staff_leave.approve_'));
         expect($leaveApprovalPerms)->toBeEmpty();
+
+        // Super Admin NEVER holds marks permissions
+        $marksPerms = array_filter($permissions, fn ($p) => str_contains((string) $p, 'marks'));
+        expect($marksPerms)->toBeEmpty();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('enforces singleton exclusion constraint under real concurrency across two database connections', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_singleton_conc', 'Singleton Conc Poly', 'singletonconc.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $principal = User::create([
+            'type' => 'staff',
+            'name' => 'Principal Patrick',
+            'email' => 'principal@singletonconc.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $principal->id,
+            'role_id' => $principalRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+
+        $candidateA = User::create([
+            'type' => 'staff',
+            'name' => 'Candidate A HOD',
+            'email' => 'candidateA@singletonconc.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $candidateB = User::create([
+            'type' => 'staff',
+            'name' => 'Candidate B HOD',
+            'email' => 'candidateB@singletonconc.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $hodRole = Role::where('key', 'hod')->firstOrFail();
+
+        // Establish two distinct PDO connections to the tenant database
+        $dbConfig = config('database.connections.tenant');
+        $dsn = sprintf('pgsql:host=%s;port=%d;dbname=%s', $dbConfig['host'], $dbConfig['port'], $dbConfig['database']);
+        $pdoA = new \PDO($dsn, (string) $dbConfig['username'], (string) $dbConfig['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        $pdoB = new \PDO($dsn, (string) $dbConfig['username'], (string) $dbConfig['password'], [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+
+        $assignmentUlidA = (string) Str::ulid();
+        $assignmentUlidB = (string) Str::ulid();
+
+        // Connection A inserts singleton assignment for Civil HOD (d_ce)
+        $pdoA->beginTransaction();
+        $stmtA = $pdoA->prepare("
+            INSERT INTO role_assignments (id, user_id, role_id, scope_type, scope_label, is_singleton, valid_from, is_active, created_at, updated_at)
+            VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW(), true, NOW(), NOW())
+        ");
+        $stmtA->execute([
+            'id' => $assignmentUlidA,
+            'user_id' => $candidateA->id,
+            'role_id' => $hodRole->id,
+        ]);
+        $pdoA->commit();
+
+        // Connection B attempts to insert conflicting singleton assignment concurrently
+        $pdoB->beginTransaction();
+        $exceptionCaught = null;
+        try {
+            $stmtB = $pdoB->prepare("
+                INSERT INTO role_assignments (id, user_id, role_id, scope_type, scope_label, is_singleton, valid_from, is_active, created_at, updated_at)
+                VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW(), true, NOW(), NOW())
+            ");
+            $stmtB->execute([
+                'id' => $assignmentUlidB,
+                'user_id' => $candidateB->id,
+                'role_id' => $hodRole->id,
+            ]);
+            $pdoB->commit();
+        } catch (\PDOException $e) {
+            $exceptionCaught = $e;
+            $pdoB->rollBack();
+        }
+
+        // Exactly one succeeds, the other fails with exclusion constraint violation (SQLSTATE 23P01)
+        expect($exceptionCaught)->not->toBeNull();
+        expect($exceptionCaught->getCode())->toBe('23P01'); // exclusion_violation
+        expect($exceptionCaught->getMessage())->toContain('role_assignments_singleton_no_overlap');
+
+        // Verify Candidate A is active HOD and has access
+        /** @var ScopeAuthorizer $authorizer */
+        $authorizer = app(ScopeAuthorizer::class);
+        expect($authorizer->canAtScope($candidateA, 'organisation.batch.create', 'd_ce'))->toBeTrue();
+        expect($authorizer->canAtScope($candidateB, 'organisation.batch.create', 'd_ce'))->toBeFalse();
+
+        // Revoke Candidate A's assignment via RevokeRoleAction
+        /** @var RevokeRoleAction $revokeAction */
+        $revokeAction = app(RevokeRoleAction::class);
+        $assignmentA = RoleAssignment::findOrFail($assignmentUlidA);
+        $revokeAction->execute(revoker: $principal, assignment: $assignmentA);
+
+        $assignmentA->refresh();
+        expect($assignmentA->is_active)->toBeFalse()
+            ->and($assignmentA->valid_to)->not->toBeNull();
+
+        // Candidate A's access is now immediately denied
+        expect($authorizer->canAtScope($candidateA, 'organisation.batch.create', 'd_ce'))->toBeFalse();
+
+        // Now Candidate B can be assigned the singleton role successfully without conflict!
+        /** @var AssignRoleAction $assignAction */
+        $assignAction = app(AssignRoleAction::class);
+        $assignmentB = $assignAction->execute(
+            assigner: $principal,
+            targetUser: $candidateB,
+            targetRole: $hodRole,
+            scopeType: 'department',
+            scopeLabel: 'd_ce'
+        );
+
+        expect($assignmentB->is_active)->toBeTrue();
+        expect($authorizer->canAtScope($candidateB, 'organisation.batch.create', 'd_ce'))->toBeTrue();
     } finally {
         $this->tenantContext->forget();
     }
