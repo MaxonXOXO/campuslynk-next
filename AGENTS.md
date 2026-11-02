@@ -13,6 +13,7 @@
 - Migrations must be backward compatible (expand → migrate → contract) and work on a fresh tenant DB.
 - Do not edit app/Core without an ADR in docs/adr/.
 - Definition of done: `composer check && pnpm check` passes.
+- UI components come only from @academic-suite/ui; add new ones with the shadcn CLI inside packages/ui; never hard-code colours, use tokens.
 
 ## How to run checks
 
