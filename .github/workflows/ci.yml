@@ -18,6 +18,7 @@ jobs:
       run:
         working-directory: backend
     env:
+      APP_ENV: testing
       DEPLOY_PROFILE: onprem
       CACHE_STORE: array
       QUEUE_CONNECTION: sync
