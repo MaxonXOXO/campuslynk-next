@@ -257,10 +257,16 @@ jobs:
           echo "Tenant meta verified."
 
           # Authenticate as the bootstrapped Super Admin through the running API container
+          LOGIN_PAYLOAD=$(jq -n \
+            --arg id "admin@app.carmelpoly.in" \
+            --arg pw "$ADMIN_PW" \
+            '{identifier: $id, password: $pw, device_name: "SmokeVerifier", client: "web"}')
+
           LOGIN_JSON=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
             -H "Host: app.carmelpoly.in" \
             -H "Content-Type: application/json" \
-            -d "{\"identifier\":\"admin@app.carmelpoly.in\",\"password\":\"$ADMIN_PW\",\"device_name\":\"SmokeVerifier\",\"client\":\"web\"}")
+            -H "Accept: application/json" \
+            -d "$LOGIN_PAYLOAD")
           echo "Login response: $LOGIN_JSON"
 
           TOKEN=$(echo "$LOGIN_JSON" | jq -r '.data.token')
@@ -270,17 +276,24 @@ jobs:
           fi
 
           # Change temporary password to satisfy mandatory password change policy
+          CHANGE_PAYLOAD=$(jq -n \
+            --arg cur "$ADMIN_PW" \
+            --arg new "PermanentStrongPass123!" \
+            '{current_password: $cur, new_password: $new, new_password_confirmation: $new}')
+
           curl -sf -X POST http://localhost:8000/api/v1/auth/password/change \
             -H "Host: app.carmelpoly.in" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
-            -d "{\"current_password\":\"$ADMIN_PW\",\"new_password\":\"PermanentStrongPass123!\",\"new_password_confirmation\":\"PermanentStrongPass123!\"}" | grep '"message":"Password changed successfully."'
+            -H "Accept: application/json" \
+            -d "$CHANGE_PAYLOAD" | grep '"message":"Password changed successfully."'
           echo "Mandatory password change executed successfully."
 
           # Call /api/v1/me through the API container and verify authenticated profile
           ME_JSON=$(curl -sf http://localhost:8000/api/v1/me \
             -H "Host: app.carmelpoly.in" \
-            -H "Authorization: Bearer $TOKEN")
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/json")
           echo "Me response: $ME_JSON"
           echo "$ME_JSON" | grep '"email":"admin@app.carmelpoly.in"'
           echo "Full clean-install and login flow verified end-to-end!"

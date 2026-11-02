@@ -135,7 +135,7 @@ class AppInstallCommand extends Command
                 }
 
                 if (User::where('type', 'staff')->count() === 0) {
-                    $oneTimePassword = Str::password(16);
+                    $oneTimePassword = Str::password(16, symbols: false);
                     User::create([
                         'type' => 'staff',
                         'name' => $adminName,
