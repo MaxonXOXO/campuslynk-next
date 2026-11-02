@@ -269,6 +269,14 @@ jobs:
             exit 1
           fi
 
+          # Change temporary password to satisfy mandatory password change policy
+          curl -sf -X POST http://localhost:8000/api/v1/auth/password/change \
+            -H "Host: app.carmelpoly.in" \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/json" \
+            -d "{\"current_password\":\"$ADMIN_PW\",\"new_password\":\"PermanentStrongPass123!\",\"new_password_confirmation\":\"PermanentStrongPass123!\"}" | grep '"message":"Password changed successfully."'
+          echo "Mandatory password change executed successfully."
+
           # Call /api/v1/me through the API container and verify authenticated profile
           ME_JSON=$(curl -sf http://localhost:8000/api/v1/me \
             -H "Host: app.carmelpoly.in" \
