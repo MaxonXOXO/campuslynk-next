@@ -42,12 +42,11 @@
 6. **Regulation & Assessment Engine ([ADR-0006](./adr/0006-regulation-driven-assessment-engine.md)):** 8-table data-driven schema seeding all 13 `REV2021` & `REV2026` course archetypes, eliminating all hard-coded subject IDs and resolving the 3 legacy rule conflicts in `pass_rules_json`.
 7. **Workflows, Notifications & AI Boundary ([ADR-0007](./adr/0007-configurable-approval-chains-and-notifications.md)):** Stream-aware approval chains (`AIDED` vs `SF` leave, CIA consolidation, single-step Tutor/Mentor student leave), built-in Web Notification Center (Reverb + polling) with `FcmPushChannel` ready for React Native, external RAG AI Assistant via `/api/v1/ai-bridge/*`, and WebRTC support desk dropped.
 
-## Open (as of 2026-11-01)
+8. **Secrets Flow & Role Isolation ([ADR-0012](./adr/0012-owner-vs-runtime-role.md)):** Strict separation between `landlord_app` (DML only, no tenant DB connect), `provisioner` (ops only, `CREATEDB`), and superuser. Pre-boot generation via `init-secrets.ps1`/`init-secrets.sh` guarantees unified `APP_KEY` and credentials across container boundaries.
+9. **Dual Scope Tree & LTree Scope Labels ([ADR-0013](./adr/0013-scope-labels-in-ltree-hierarchy.md)):** Every node in the institutional hierarchy carries a deterministic `scope_label` formatted as `{prefix}_{slug_fragment}`. Batches maintain dual `ltree` paths (`home_path` vs `managing_path`) indexed with GiST, evaluated by `ScopeAuthorizer` with `visibleTo` query scope pushing hierarchy checks to PostgreSQL without N+1 queries.
+10. **Staff Member Who Is Also a Parent/Guardian (Resolved):** Option A confirmed. `guardian_links` references `guardian_user_id` regardless of `users.type`. A staff member retains a single account (`type = staff`) with their departmental assignments, while their `guardian_link` grants ward visibility in parent portals.
+
+## Open (as of 2026-11-02)
 - **ADR-0008:** on-prem public reachability and TLS (proposed: outbound-only tunnel).
 - **Exam-cell confirmation** of the R26 theory CIA floor, R21 theory ESE maximum and R26 Health & PE logbook mark (ADR-0006 defaults: 16/40, 75, logbook included).
 - **Leave chains** for the Principal, `admin`, `sf_office` and `super_admin` as applicants (ADR-0007).
-- **stancl/tenancy v4** PostgreSQL per-role isolation to verify in Sprint 0 (ADR-0001).
-- **Staff member who is also a parent/guardian (Sprint 0, Step 4):** A lecturer can also be a parent of a student at the same college, but `users.type` has a single value (`staff | student | parent`). How does a staff member who is also a guardian get a `guardian_link`?
-  - *Option A (Recommended):* `guardian_links` can reference any user regardless of `type` (e.g., a user with `type = staff` can be targeted by a `guardian_link` and granted student-guardian portal access without account duplication).
-  - *Option B:* Dual accounts (separate staff account and parent account with distinct mobile/email identifiers).
-  - *Decision timing:* To be decided in Step 4 (Scoped RBAC and Relationships).

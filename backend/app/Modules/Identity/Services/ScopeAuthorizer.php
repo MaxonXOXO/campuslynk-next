@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Services;
 
 use App\Modules\Identity\Contracts\ScopedResource;
-use App\Modules\Identity\Models\User;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -16,7 +16,7 @@ class ScopeAuthorizer
     /**
      * Determine whether the given user has the specified permission for the given resource.
      */
-    public function can(User $user, string $permission, ?ScopedResource $resource = null): bool
+    public function can(Authenticatable $user, string $permission, ?ScopedResource $resource = null): bool
     {
         $scopeLabels = $this->getActiveScopeLabelsForPermission($user, $permission);
 
@@ -54,7 +54,7 @@ class ScopeAuthorizer
     /**
      * Determine whether the user has the permission directly at or above the given scope label.
      */
-    public function canAtScope(User $user, string $permission, string $scopeLabel): bool
+    public function canAtScope(Authenticatable $user, string $permission, string $scopeLabel): bool
     {
         $scopeLabels = $this->getActiveScopeLabelsForPermission($user, $permission);
 
@@ -80,7 +80,7 @@ class ScopeAuthorizer
      */
     public function scopeQuery(
         Builder $query,
-        User $user,
+        Authenticatable $user,
         string $permission,
         string $managingPathCol = 'managing_path',
         string $homePathCol = 'home_path'
@@ -118,7 +118,7 @@ class ScopeAuthorizer
      *
      * @return list<string>
      */
-    public function getActiveScopeLabelsForPermission(User $user, string $permission): array
+    public function getActiveScopeLabelsForPermission(Authenticatable $user, string $permission): array
     {
         $now = Carbon::now();
 
@@ -127,7 +127,7 @@ class ScopeAuthorizer
             ->table('role_assignments')
             ->join('role_permission', 'role_permission.role_id', '=', 'role_assignments.role_id')
             ->join('permissions', 'permissions.id', '=', 'role_permission.permission_id')
-            ->where('role_assignments.user_id', $user->id)
+            ->where('role_assignments.user_id', (string) $user->getAuthIdentifier())
             ->whereRaw('role_assignments.is_active is true')
             ->where('role_assignments.valid_from', '<=', $now)
             ->where(function ($query) use ($now) {

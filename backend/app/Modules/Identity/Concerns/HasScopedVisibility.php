@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Concerns;
 
-use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ScopeAuthorizer;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 
 trait HasScopedVisibility
@@ -16,7 +16,7 @@ trait HasScopedVisibility
      * @param  Builder<static>  $query
      * @return Builder<static>
      */
-    public function scopeVisibleTo(Builder $query, User $user, string $permission): Builder
+    public function scopeVisibleTo(Builder $query, Authenticatable $user, string $permission): Builder
     {
         /** @var ScopeAuthorizer $authorizer */
         $authorizer = app(ScopeAuthorizer::class);

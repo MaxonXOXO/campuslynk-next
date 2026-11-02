@@ -17,4 +17,3 @@ class RoleRevoked
         public RoleAssignment $assignment
     ) {}
 }
-

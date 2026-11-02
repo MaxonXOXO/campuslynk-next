@@ -16,4 +16,3 @@ interface ScopedResource
      */
     public function getHomeScopePath(): string;
 }
-
