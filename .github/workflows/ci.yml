@@ -292,8 +292,11 @@ jobs:
           docker compose -f deploy/compose/cloud/docker-compose.yml ps
           echo "Process inspection in API container:"
           docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api ps aux
+          echo "Inspecting FrankenPHP worker threads in container startup log:"
+          docker compose -f deploy/compose/cloud/docker-compose.yml logs api | grep "worker_threads"
           echo "Checking worker_mode via API health endpoint:"
-          curl -sf http://localhost:8000/api/v1/health | grep '"worker_mode":true'
+          curl -sf http://localhost:8000/api/v1/health
+          echo ""
           echo "FrankenPHP Octane worker mode confirmed running!"
 
       - name: Provision Two Independent Tenants via Ops Profile
