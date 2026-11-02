@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
-use App\Core\Auth\Models\User;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Models\User;
+use App\Modules\Organisation\Database\Seeders\KeralaPolytechnicProfileSeeder;
+use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -27,6 +29,7 @@ class TenantsCreateCommand extends Command
                             {domain : Primary institutional domain}
                             {--profile= : Deployment profile override (cloud or onprem)}
                             {--plan=standard : Licensing plan}
+                            {--seed-profile= : Seed profile to populate on tenant creation (kerala-polytechnic, baseline, or none)}
                             {--admin-name= : First Super Admin name}
                             {--admin-email= : First Super Admin email}';
 
@@ -94,6 +97,42 @@ class TenantsCreateCommand extends Command
                 deployProfile: $profile,
                 plan: $plan
             );
+
+            // Optional Tenant Seeding (Part 1 / Step 4)
+            $seedProfileOption = $this->option('seed-profile');
+            if (is_string($seedProfileOption) && trim($seedProfileOption) !== '') {
+                $seedProfile = trim($seedProfileOption);
+                $tenantContext->setTenant($tenant);
+                try {
+                    if ($seedProfile === 'kerala-polytechnic') {
+                        $this->info('Seeding Kerala Polytechnic profile...');
+                        app(KeralaPolytechnicProfileSeeder::class)->run();
+                    } elseif ($seedProfile === 'baseline') {
+                        $this->info('Seeding tenant baseline profile...');
+                        app(TenantBaselineSeeder::class)->run();
+                    }
+                } finally {
+                    $tenantContext->forget();
+                }
+            }
+
+            // Optional Tenant Seeding (Part 1 / Step 4)
+            $seedProfileOption = $this->option('seed-profile');
+            if (is_string($seedProfileOption) && trim($seedProfileOption) !== '') {
+                $seedProfile = trim($seedProfileOption);
+                $tenantContext->setTenant($tenant);
+                try {
+                    if ($seedProfile === 'kerala-polytechnic') {
+                        $this->info('Seeding Kerala Polytechnic profile...');
+                        app(KeralaPolytechnicProfileSeeder::class)->run();
+                    } elseif ($seedProfile === 'baseline') {
+                        $this->info('Seeding tenant baseline profile...');
+                        app(TenantBaselineSeeder::class)->run();
+                    }
+                } finally {
+                    $tenantContext->forget();
+                }
+            }
 
             // First Super Admin bootstrap (B5)
             $adminEmailOption = $this->option('admin-email');

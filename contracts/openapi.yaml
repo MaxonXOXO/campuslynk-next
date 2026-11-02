@@ -204,6 +204,774 @@ paths:
         '200':
           description: Token registered
 
+  /impersonation:
+    post:
+      operationId: startImpersonation
+      summary: Start an audited impersonation session (max 30 mins; read-only for academic roles)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [target_user_id, reason]
+              properties:
+                target_user_id:
+                  type: string
+                reason:
+                  type: string
+                  minLength: 10
+      responses:
+        '200':
+          description: Impersonation token issued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpersonationTokenEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /impersonation/stop:
+    post:
+      operationId: stopImpersonation
+      summary: Stop an active impersonation session and revoke token
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Impersonation session ended
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+
+  /users:
+    get:
+      operationId: listUsers
+      summary: List users with pagination and filtering
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [active, suspended, pending]
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [staff, student, parent]
+      responses:
+        '200':
+          description: Paginated users list
+    post:
+      operationId: createUser
+      summary: Create a new user in the active tenant
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserInput'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}:
+    get:
+      operationId: getUser
+      summary: Get user details and assigned roles
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateUser
+      summary: Update user attributes and status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserInput'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+
+  /roles:
+    get:
+      operationId: listRoles
+      summary: List assignable roles with singleton and stream metadata
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of roles
+
+  /departments:
+    get:
+      operationId: listDepartments
+      summary: List institution departments with stream and academic/administrative kind
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of departments
+    post:
+      operationId: createDepartment
+      summary: Create a new institution department
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, stream, kind]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                stream:
+                  type: string
+                  enum: [engineering, general_academics, administrative]
+                kind:
+                  type: string
+                  enum: [academic, administrative]
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Department created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /departments/{id}:
+    get:
+      operationId: getDepartment
+      summary: Get department details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Department details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateDepartment
+      summary: Update department details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                stream:
+                  type: string
+                kind:
+                  type: string
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Department updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /batches:
+    get:
+      operationId: listBatches
+      summary: List batches visible to current user based on ltree scope hierarchy
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Paginated batches
+    post:
+      operationId: createBatch
+      summary: Create a new academic batch
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBatchInput'
+      responses:
+        '201':
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchEnvelope'
+
+  /batches/{id}:
+    get:
+      operationId: getBatch
+      summary: Get batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Batch details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateBatch
+      summary: Update batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                status:
+                  type: string
+                  enum: [active, graduated, archived]
+      responses:
+        '200':
+          description: Batch updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /batches/{id}/promote:
+    post:
+      operationId: promoteBatchSemester
+      summary: Promote batch to next semester and transition managing department per ADR-0005
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Batch promoted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/unlock:
+    post:
+      operationId: unlockUserAccount
+      summary: Administratively clear login lockouts across all rate limiting tiers (requires identity.user.unlock, restricted to Super Admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User unlocked successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/suspend:
+    post:
+      operationId: suspendUserAccount
+      summary: Suspend a user account and revoke all access tokens immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User suspended successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/reactivate:
+    post:
+      operationId: reactivateUserAccount
+      summary: Reactivate a previously suspended user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User reactivated successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /role-assignments:
+    get:
+      operationId: listRoleAssignments
+      summary: List role assignments with optional filtering by user, role, or scope
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Role assignments list
+    post:
+      operationId: createRoleAssignment
+      summary: Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRoleInput'
+      responses:
+        '201':
+          description: Role assigned successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignmentEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /role-assignments/{id}:
+    delete:
+      operationId: deleteRoleAssignment
+      summary: Revoke an existing role assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role assignment revoked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /programs:
+    get:
+      operationId: listPrograms
+      summary: List academic programs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Programs list
+    post:
+      operationId: createProgram
+      summary: Create an academic program
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code, department_id, duration_semesters]
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                department_id:
+                  type: string
+                duration_semesters:
+                  type: integer
+                is_active:
+                  type: boolean
+      responses:
+        '201':
+          description: Program created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /programs/{id}:
+    get:
+      operationId: getProgram
+      summary: Get program details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Program details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateProgram
+      summary: Update program details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                code:
+                  type: string
+                department_id:
+                  type: string
+                duration_semesters:
+                  type: integer
+                is_active:
+                  type: boolean
+      responses:
+        '200':
+          description: Program updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /academic-years:
+    get:
+      operationId: listAcademicYears
+      summary: List academic years
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Academic years list
+    post:
+      operationId: createAcademicYear
+      summary: Create an academic year
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, start_date, end_date]
+              properties:
+                label:
+                  type: string
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                is_current:
+                  type: boolean
+      responses:
+        '201':
+          description: Academic year created
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /academic-years/{id}:
+    get:
+      operationId: getAcademicYear
+      summary: Get academic year details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Academic year details
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+    put:
+      operationId: updateAcademicYear
+      summary: Update academic year details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:
+                  type: string
+                start_date:
+                  type: string
+                  format: date
+                end_date:
+                  type: string
+                  format: date
+                is_current:
+                  type: boolean
+      responses:
+        '200':
+          description: Academic year updated
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /regulations:
+    get:
+      operationId: listRegulations
+      summary: List academic regulations (REV2021, REV2026)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Regulations list
+
+  /workshop-sections:
+    get:
+      operationId: listWorkshopSections
+      summary: List central workshop trade sections
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Workshop sections list
+
+  /governance-rules:
+    get:
+      operationId: listGovernanceRules
+      summary: List department semester governance rules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Governance rules list
+
+  /governance-rules/{id}:
+    put:
+      operationId: updateGovernanceRule
+      summary: Update department semester governance rule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Governance rule updated
+
+  /batches/{batchId}/sub-batches:
+    get:
+      operationId: listBatchSubBatches
+      summary: List sub-batches for a batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batches list
+    post:
+      operationId: createBatchSubBatch
+      summary: Create a typed sub-batch (lab, mentoring, workshop) for a batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Sub-batch created
+
+  /sub-batches/{id}:
+    get:
+      operationId: getSubBatch
+      summary: View sub-batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch details
+    put:
+      operationId: updateSubBatch
+      summary: Update sub-batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch updated
+    delete:
+      operationId: deleteSubBatch
+      summary: Delete sub-batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch deleted
+
 components:
   securitySchemes:
     bearerAuth:
@@ -421,6 +1189,236 @@ components:
           required: [message]
           properties:
             message:
+              type: string
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    ImpersonationTokenEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [token, expires_at, impersonator_id, target_user, is_read_only]
+          properties:
+            token:
+              type: string
+            expires_at:
+              type: string
+              format: date-time
+            impersonator_id:
+              type: string
+            target_user:
+              $ref: '#/components/schemas/UserSchema'
+            is_read_only:
+              type: boolean
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    CreateUserInput:
+      type: object
+      required: [type, name, password]
+      properties:
+        type:
+          type: string
+          enum: [staff, student, parent]
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+        registration_number:
+          type: string
+          nullable: true
+        password:
+          type: string
+          format: password
+        must_change_password:
+          type: boolean
+
+    UpdateUserInput:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+        registration_number:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, suspended, pending]
+        must_change_password:
+          type: boolean
+
+    UserEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          $ref: '#/components/schemas/UserSchema'
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    AssignRoleInput:
+      type: object
+      required: [user_id, role_key, scope_type, scope_label]
+      properties:
+        user_id:
+          type: string
+        role_key:
+          type: string
+        scope_type:
+          type: string
+          enum: [institution, stream, department, managing_department, batch, own]
+        scope_label:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+          nullable: true
+        order_record:
+          type: string
+          nullable: true
+
+    RoleAssignmentEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [id, user_id, role_id, role_key, scope_type, scope_label, is_singleton, is_active]
+          properties:
+            id:
+              type: string
+            user_id:
+              type: string
+            role_id:
+              type: string
+            role_key:
+              type: string
+            scope_type:
+              type: string
+            scope_label:
+              type: string
+            is_singleton:
+              type: boolean
+            is_active:
+              type: boolean
+            valid_from:
+              type: string
+              format: date-time
+            valid_to:
+              type: string
+              format: date-time
+              nullable: true
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    CreateBatchInput:
+      type: object
+      required: [program_id, home_department_id, academic_year_id, regulation_id, name]
+      properties:
+        program_id:
+          type: string
+        home_department_id:
+          type: string
+        academic_year_id:
+          type: string
+        regulation_id:
+          type: string
+        name:
+          type: string
+        entry_type:
+          type: string
+          enum: [regular, lateral]
+        current_semester:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    BatchEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [id, name, program_id, home_department_id, managing_department_id, academic_year_id, regulation_id, entry_type, current_semester, status, scope_label, home_path, managing_path]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            program_id:
+              type: string
+            home_department_id:
+              type: string
+            managing_department_id:
+              type: string
+            academic_year_id:
+              type: string
+            regulation_id:
+              type: string
+            entry_type:
+              type: string
+            current_semester:
+              type: integer
+            status:
+              type: string
+            scope_label:
+              type: string
+            home_path:
+              type: string
+            managing_path:
               type: string
         meta:
           type: object

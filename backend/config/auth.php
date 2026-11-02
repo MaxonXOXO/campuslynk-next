@@ -1,7 +1,7 @@
 <?php
 
 declare(strict_types=1);
-use App\Core\Auth\Models\User;
+use App\Modules\Identity\Models\User;
 
 return [
 

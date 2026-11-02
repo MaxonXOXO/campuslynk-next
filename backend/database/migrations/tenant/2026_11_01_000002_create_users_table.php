@@ -29,6 +29,7 @@ return new class extends Migration
         });
 
         // PostgreSQL CHECK constraints on users
+        // Note: Students and parents user profiles and guardian_links are introduced in Step 6 (Students/Portal work)
         DB::connection('tenant')->statement(
             "ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type IN ('staff', 'student', 'parent'))"
         );

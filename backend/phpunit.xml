@@ -21,7 +21,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
-        <env name="APP_KEY" value="base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU="/>
+        <env name="APP_KEY" value="base64:YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4eXoxMjM0NTY="/>
         <env name="DEPLOY_PROFILE" value="onprem"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

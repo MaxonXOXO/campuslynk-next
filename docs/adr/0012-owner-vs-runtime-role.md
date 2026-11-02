@@ -89,4 +89,29 @@ The Laravel `APP_KEY` encrypts and decrypts every tenant's database password sto
 3. **Key Decommissioning:**
    - Once all rows in `tenant_databases` and encrypted tenant settings are verified to decrypt under the new key, the old key is purged from `previous_keys` across all application container configurations.
 
+---
+
+## Appendix B: Cross-Container Secrets Initialization Architecture (Prompt 05, Decided)
+
+### Context & Problem
+In multi-container setups (`api`, `ops`, `postgres`, `pgbouncer`, `redis`), secrets cannot be generated inside one application container during `app:install`. PostgreSQL role passwords (`academic_admin`, `provisioner`, `landlord_app`, `pgbouncer_auth`) must exist at the exact moment the PostgreSQL engine initializes its data directory (`docker-entrypoint-initdb.d`), well before `ops` or `api` runs `app:install`. Furthermore, both `api` and `ops` must share the exact same `APP_KEY` from boot time so that credentials encrypted by `ops` can be decrypted by `api`.
+
+### Solution: Pre-Boot Secrets Generation
+1. **Dedicated Host Initializer Scripts:**
+   - `deploy/compose/onprem/init-secrets.ps1` (PowerShell)
+   - `deploy/compose/onprem/init-secrets.sh` (POSIX shell)
+   Executed on the host machine on a clean checkout **before the first `docker compose up`**.
+2. **Generated Environment Artifact (`.env`):**
+   - Unique 32-byte AES-256 `APP_KEY`.
+   - Distinct, cryptographically random 32-character passwords for every role: `POSTGRES_ADMIN_PASSWORD` (superuser), `PROVISIONER_PASSWORD` (`ops`), `LANDLORD_APP_PASSWORD` (`api`/workers), `PGBOUNCER_AUTH_PASSWORD` (PgBouncer lookup), and `REDIS_PASSWORD`.
+   - Restrictive file permissions (`chmod 600` on POSIX, ACL restriction on Windows).
+   - Refuses to overwrite an existing `.env` unless `--force` / `-Force` is provided.
+3. **Dynamic Database Role Provisioning (`deploy/docker/postgres-init.sh`):**
+   - Mounted into `/docker-entrypoint-initdb.d/01-init.sh`.
+   - Reads `POSTGRES_USER`, `POSTGRES_PASSWORD`, `PROVISIONER_PASSWORD`, `LANDLORD_APP_PASSWORD`, and `PGBOUNCER_AUTH_PASSWORD` from container environment variables.
+   - Idempotently creates or alters roles with their respective environment-supplied secrets.
+4. **Appliance Install Validation (`app:install`):**
+   - Does **not** attempt to generate keys within ephemeral containers.
+   - Verifies that a valid, non-placeholder, 32-byte `APP_KEY` exists in configuration and halts with actionable operator guidance if unconfigured.
+
 
