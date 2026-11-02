@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
-use App\Core\Auth\Models\User;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -45,8 +45,14 @@ class AppInstallCommand extends Command
             return self::FAILURE;
         }
 
-        // 0. Ensure unique APP_KEY and role secrets exist in .env
-        $this->ensureSecretsConfigured();
+        // 0. Verify secrets are configured before running install
+        try {
+            $this->verifySecretsConfigured();
+        } catch (Throwable $e) {
+            $this->error($e->getMessage());
+
+            return self::FAILURE;
+        }
 
         // 1. Run Landlord Migrations
         $this->info('Running landlord migrations...');
@@ -154,33 +160,31 @@ class AppInstallCommand extends Command
     }
 
     /**
-     * Ensure unique APP_KEY and role credentials exist on first install.
+     * Verify that unique APP_KEY and credentials exist before installation.
+     *
+     * @throws \RuntimeException
      */
-    protected function ensureSecretsConfigured(): void
+    protected function verifySecretsConfigured(): void
     {
-        $envPath = base_path('.env');
-        if (! file_exists($envPath) || ! is_writable($envPath)) {
-            return;
-        }
-
-        $envContent = (string) file_get_contents($envPath);
-        $modified = false;
-
         $key = config('app.key');
-        if (empty($key) || ! is_string($key) || str_contains($key, 'EXAMPLE') || str_contains($key, 'c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==')) {
-            $generatedKey = 'base64:'.base64_encode(random_bytes(32));
-            config(['app.key' => $generatedKey]);
 
-            if (preg_match('/^APP_KEY=.*$/m', $envContent)) {
-                $envContent = (string) preg_replace('/^APP_KEY=.*$/m', "APP_KEY={$generatedKey}", $envContent);
-            } else {
-                $envContent .= "\nAPP_KEY={$generatedKey}\n";
-            }
-            $modified = true;
+        if (! is_string($key) || trim($key) === '') {
+            throw new \RuntimeException('Application key (APP_KEY) is not set. Run the init-secrets script before starting the appliance.');
         }
 
-        if ($modified) {
-            file_put_contents($envPath, $envContent);
+        $prohibitedKeys = [
+            'base64:c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==',
+            'base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+            'base64:EXAMPLE_INSECURE_APP_KEY_REPLACE_ME==',
+            'base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU=',
+        ];
+
+        if (in_array($key, $prohibitedKeys, true)
+            || str_contains(strtolower($key), 'example')
+            || str_contains(strtolower($key), 'placeholder')
+            || str_contains(strtolower($key), 'change_me')
+        ) {
+            throw new \RuntimeException('Application key (APP_KEY) is an example or placeholder. Run the init-secrets script to generate unique secrets.');
         }
     }
 }

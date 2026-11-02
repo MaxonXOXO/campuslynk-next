@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-use App\Core\Auth\Http\Controllers\AuthController;
-use App\Core\Auth\Http\Controllers\MeController;
-use App\Core\Auth\Middleware\EnsurePasswordNotMustChange;
 use App\Core\Http\Controllers\MetaController;
+use App\Modules\Identity\Http\Controllers\AuthController;
+use App\Modules\Identity\Http\Controllers\MeController;
+use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Route;
 

@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
-use App\Core\Auth\Models\User;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Models\User;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;

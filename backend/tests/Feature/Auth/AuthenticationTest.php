@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Auth;
 
-use App\Core\Auth\Models\PersonalAccessToken;
-use App\Core\Auth\Models\User;
 use App\Core\Tenancy\Models\License;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Models\PersonalAccessToken;
+use App\Modules\Identity\Models\User;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -826,6 +826,182 @@ it('enforces login identifier precedence and prevents registration number collis
         'client' => 'web',
     ])->assertStatus(200)
         ->assertJsonPath('data.user.id', $userReg->id);
+});
+
+it('allows student with 10-digit registration number to log in successfully', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+    $tenant = $this->provisioner->provision('tenant_reg10', 'Reg10 College', 'reg10.test', 'cloud');
+
+    $this->tenantContext->setTenant($tenant);
+    $student = User::create([
+        'type' => 'student',
+        'name' => 'Kavya Suresh',
+        'registration_number' => '2401019988',
+        'password' => Hash::make('StudentPass123!'),
+        'must_change_password' => false,
+        'status' => 'active',
+    ]);
+    $this->tenantContext->forget();
+
+    $this->postJson('http://reg10.test/api/v1/auth/login', [
+        'identifier' => '2401019988',
+        'password' => 'StudentPass123!',
+        'device_name' => 'Student Portal',
+        'client' => 'web',
+    ])->assertStatus(200)
+        ->assertJsonPath('data.user.id', $student->id)
+        ->assertJsonPath('data.user.registration_number', '2401019988');
+});
+
+it('allows mobile login typed as 9876543210, +919876543210, and 98765 43210', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+    $tenant = $this->provisioner->provision('tenant_mob_types', 'Mobile Types College', 'mobtypes.test', 'cloud');
+
+    $this->tenantContext->setTenant($tenant);
+    $user = User::create([
+        'type' => 'staff',
+        'name' => 'Anand Kumar',
+        'mobile' => '+919876543210',
+        'password' => Hash::make('MobilePass123!'),
+        'must_change_password' => false,
+        'status' => 'active',
+    ]);
+    $this->tenantContext->forget();
+
+    // 1. Plain 10 digits
+    $this->postJson('http://mobtypes.test/api/v1/auth/login', [
+        'identifier' => '9876543210',
+        'password' => 'MobilePass123!',
+        'device_name' => 'App 1',
+        'client' => 'mobile',
+    ])->assertStatus(200)
+        ->assertJsonPath('data.user.id', $user->id);
+
+    // 2. E.164 with +91
+    $this->postJson('http://mobtypes.test/api/v1/auth/login', [
+        'identifier' => '+919876543210',
+        'password' => 'MobilePass123!',
+        'device_name' => 'App 2',
+        'client' => 'mobile',
+    ])->assertStatus(200)
+        ->assertJsonPath('data.user.id', $user->id);
+
+    // 3. Formatted with space: '98765 43210'
+    $this->postJson('http://mobtypes.test/api/v1/auth/login', [
+        'identifier' => '98765 43210',
+        'password' => 'MobilePass123!',
+        'device_name' => 'App 3',
+        'client' => 'mobile',
+    ])->assertStatus(200)
+        ->assertJsonPath('data.user.id', $user->id);
+});
+
+it('rejects creating registration number equaling an existing mobile in any format and the reverse', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+    $tenant = $this->provisioner->provision('tenant_cross_col', 'Cross Col College', 'crosscol.test', 'cloud');
+
+    $this->tenantContext->setTenant($tenant);
+
+    // A. Create user with mobile '+919876543210'
+    $userA = User::create([
+        'type' => 'parent',
+        'name' => 'Parent Mobile',
+        'mobile' => '+919876543210',
+        'password' => Hash::make('Pass12345!'),
+        'status' => 'active',
+    ]);
+    expect($userA->id)->not->toBeNull();
+
+    // Attempt to create student with registration number '9876543210' (plain digits)
+    $rejected1 = false;
+    try {
+        User::create([
+            'type' => 'student',
+            'name' => 'Colliding Student 1',
+            'registration_number' => '9876543210',
+            'password' => Hash::make('Pass12345!'),
+            'status' => 'active',
+        ]);
+    } catch (\Throwable $e) {
+        $rejected1 = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
+    }
+    expect($rejected1)->toBeTrue();
+
+    // Attempt to create student with registration number '98765 43210' (spaced digits)
+    $rejected2 = false;
+    try {
+        User::create([
+            'type' => 'student',
+            'name' => 'Colliding Student 2',
+            'registration_number' => '98765 43210',
+            'password' => Hash::make('Pass12345!'),
+            'status' => 'active',
+        ]);
+    } catch (\Throwable $e) {
+        $rejected2 = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
+    }
+    expect($rejected2)->toBeTrue();
+
+    // B. Reverse test: create student with registration number '9123456789'
+    $userB = User::create([
+        'type' => 'student',
+        'name' => 'Existing Student Reg',
+        'registration_number' => '9123456789',
+        'password' => Hash::make('Pass12345!'),
+        'status' => 'active',
+    ]);
+    expect($userB->id)->not->toBeNull();
+
+    // Attempt to create user with mobile in E.164 form '+919123456789'
+    $rejectedReverse = false;
+    try {
+        User::create([
+            'type' => 'parent',
+            'name' => 'Colliding Parent Mobile',
+            'mobile' => '+919123456789',
+            'password' => Hash::make('Pass12345!'),
+            'status' => 'active',
+        ]);
+    } catch (\Throwable $e) {
+        $rejectedReverse = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
+    }
+    expect($rejectedReverse)->toBeTrue();
+
+    $this->tenantContext->forget();
+});
+
+it('rejects staff ID and student registration number with the same string', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+    $tenant = $this->provisioner->provision('tenant_staff_reg', 'Staff Reg College', 'staffreg.test', 'cloud');
+
+    $this->tenantContext->setTenant($tenant);
+
+    // 1. Create staff with registration_number (staff ID) 'EMP-2026-99'
+    $staff = User::create([
+        'type' => 'staff',
+        'name' => 'Dr. Thomas',
+        'registration_number' => 'EMP-2026-99',
+        'password' => Hash::make('Pass12345!'),
+        'status' => 'active',
+    ]);
+    expect($staff->id)->not->toBeNull();
+
+    // 2. Attempt to create student with identical registration number (even different casing 'emp-2026-99')
+    $rejected = false;
+    try {
+        User::create([
+            'type' => 'student',
+            'name' => 'Colliding Student',
+            'registration_number' => 'emp-2026-99',
+            'password' => Hash::make('Pass12345!'),
+            'status' => 'active',
+        ]);
+    } catch (\Throwable $e) {
+        $rejected = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
+    }
+    expect($rejected)->toBeTrue();
+
+    $this->tenantContext->forget();
 });
 
 it('never exposes license expiration dates or plan details to unauthenticated callers', function () {

@@ -41,3 +41,11 @@ it('refuses app:install in cloud profile', function () {
 
     expect($exitCode)->toBe(1);
 });
+
+it('refuses app:install when APP_KEY is missing or invalid', function () {
+    config(['app.key' => '']);
+
+    $exitCode = Artisan::call('app:install');
+
+    expect($exitCode)->toBe(1);
+});

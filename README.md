@@ -51,14 +51,42 @@ To run and verify the stack locally:
 ## 3. Quick Start (Docker Stack)
 
 ### On-Premise Profile (`onprem`)
+
+#### 1. Generate Environment Secrets (First install)
+Before the first `docker compose up`, generate a dedicated `.env` with unique `APP_KEY` and random passwords for every PostgreSQL role:
+```powershell
+# Windows (PowerShell)
+.\deploy\compose\onprem\init-secrets.ps1
+
+# Linux / macOS (POSIX Shell)
+sh deploy/compose/onprem/init-secrets.sh
+```
+
+#### 2. Start Services
 ```bash
 # Start all services (api, web, postgres, pgbouncer, redis)
 docker compose -f deploy/compose/onprem/docker-compose.yml up -d --build
 
 # View container status
 docker compose -f deploy/compose/onprem/docker-compose.yml ps
+```
 
-# Tear down stack
+#### 3. Run Landlord Migrations & Appliance Install (via Ops Service)
+```bash
+# Run landlord migrations
+docker compose -f deploy/compose/onprem/docker-compose.yml run --rm ops php artisan landlord:migrate
+
+# Install appliance & bootstrap first Super Admin
+docker compose -f deploy/compose/onprem/docker-compose.yml run --rm ops php artisan app:install \
+  --slug=carmel \
+  --name="Carmel Polytechnic College" \
+  --domain=app.carmelpoly.in \
+  --admin-name="Carmel Administrator" \
+  --admin-email="admin@app.carmelpoly.in"
+```
+
+#### 4. Tear down stack
+```bash
 docker compose -f deploy/compose/onprem/docker-compose.yml down -v
 ```
 

@@ -6,10 +6,13 @@ services:
     environment:
       POSTGRES_DB: landlord
       POSTGRES_USER: ${POSTGRES_ADMIN_USER:-academic_admin}
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-supersecret}
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD}
+      PROVISIONER_PASSWORD: ${PROVISIONER_PASSWORD}
+      LANDLORD_APP_PASSWORD: ${LANDLORD_APP_PASSWORD}
+      PGBOUNCER_AUTH_PASSWORD: ${PGBOUNCER_AUTH_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ../../docker/postgres-init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ../../docker/postgres-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_ADMIN_USER:-academic_admin} -d landlord" ]
       interval: 10s
@@ -25,7 +28,7 @@ services:
       DB_HOST: postgres
       DB_PORT: 5432
       DB_USER: pgbouncer_auth
-      DB_PASSWORD: ${DB_PASSWORD:-secret}
+      DB_PASSWORD: ${PGBOUNCER_AUTH_PASSWORD}
       LISTEN_PORT: 6432
       POOL_MODE: transaction
       MAX_CLIENT_CONN: 100
@@ -78,8 +81,8 @@ services:
       LANDLORD_DB_HOST: pgbouncer
       LANDLORD_DB_PORT: 6432
       LANDLORD_DB_DATABASE: landlord
-      LANDLORD_DB_USERNAME: ${LANDLORD_DB_USER:-landlord_app}
-      LANDLORD_DB_PASSWORD: ${DB_PASSWORD:-secret}
+      LANDLORD_DB_USERNAME: ${LANDLORD_APP_USER:-landlord_app}
+      LANDLORD_DB_PASSWORD: ${LANDLORD_APP_PASSWORD}
       TENANT_DB_HOST: pgbouncer
       TENANT_DB_PORT: 6432
       REDIS_HOST: redis
@@ -118,13 +121,13 @@ services:
       LANDLORD_DB_HOST: pgbouncer
       LANDLORD_DB_PORT: 6432
       LANDLORD_DB_DATABASE: landlord
-      LANDLORD_DB_USERNAME: ${ADMIN_DB_USER:-provisioner}
-      LANDLORD_DB_PASSWORD: ${ADMIN_DB_PASSWORD:-secret}
+      LANDLORD_DB_USERNAME: ${PROVISIONER_USER:-provisioner}
+      LANDLORD_DB_PASSWORD: ${PROVISIONER_PASSWORD}
       ADMIN_DB_HOST: postgres
       ADMIN_DB_PORT: 5432
       ADMIN_DB_DATABASE: landlord
-      ADMIN_DB_USERNAME: ${ADMIN_DB_USER:-provisioner}
-      ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:-secret}
+      ADMIN_DB_USERNAME: ${PROVISIONER_USER:-provisioner}
+      ADMIN_DB_PASSWORD: ${PROVISIONER_PASSWORD}
       TENANT_DB_HOST: pgbouncer
       TENANT_DB_PORT: 6432
       REDIS_HOST: redis

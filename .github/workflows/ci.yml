@@ -204,14 +204,13 @@ jobs:
     name: 4. Docker Compose Smoke Test
     needs: [backend-tests, frontend-checks]
     runs-on: ubuntu-latest
-    env:
-      # CI-only throwaway secrets (never used in production)
-      APP_KEY: base64:c6K7LzN5yVq8D2wT9X1uJ4mP7sR0vE3bA5hY8kM2tQ0=
-      DB_PASSWORD: secret
-      POSTGRES_ADMIN_PASSWORD: supersecret
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Generate Appliance Secrets via Init Script
+        run: |
+          sh deploy/compose/onprem/init-secrets.sh
 
       - name: Build and Start Compose Stack (On-Prem Profile)
         run: |
@@ -245,11 +244,38 @@ jobs:
           fi
           echo "Verified: public api container has no admin credentials."
 
-      - name: Provision Tenant via Ops Service and Verify Isolation
+      - name: Provision Tenant via Ops Service and Verify Authentication & Profile Flow
         run: |
-          docker compose -f deploy/compose/onprem/docker-compose.yml run --rm ops php artisan app:install --slug=carmel --name="Carmel Polytechnic College" --domain=app.carmelpoly.in
+          INSTALL_OUTPUT=$(docker compose -f deploy/compose/onprem/docker-compose.yml run --rm ops php artisan app:install --slug=carmel --name="Carmel Polytechnic College" --domain=app.carmelpoly.in --admin-name="Admin User" --admin-email="admin@app.carmelpoly.in")
+          echo "$INSTALL_OUTPUT"
+
+          ADMIN_PW=$(echo "$INSTALL_OUTPUT" | grep "One-time Password:" | awk '{print $NF}')
+          echo "Bootstrapped Super Admin password extracted successfully."
+
+          # Verify tenant resolution on public endpoint
           curl -sf -H "Host: app.carmelpoly.in" http://localhost:8000/api/v1/meta | grep '"slug":"carmel"'
-          echo "Tenant provisioned and verified through ops profile."
+          echo "Tenant meta verified."
+
+          # Authenticate as the bootstrapped Super Admin through the running API container
+          LOGIN_JSON=$(curl -sf -X POST http://localhost:8000/api/v1/auth/login \
+            -H "Host: app.carmelpoly.in" \
+            -H "Content-Type: application/json" \
+            -d "{\"identifier\":\"admin@app.carmelpoly.in\",\"password\":\"$ADMIN_PW\",\"device_name\":\"SmokeVerifier\",\"client\":\"web\"}")
+          echo "Login response: $LOGIN_JSON"
+
+          TOKEN=$(echo "$LOGIN_JSON" | jq -r '.data.token')
+          if [ -z "$TOKEN" ] || [ "$TOKEN" = "null" ]; then
+            echo "ERROR: Failed to retrieve token from login response!"
+            exit 1
+          fi
+
+          # Call /api/v1/me through the API container and verify authenticated profile
+          ME_JSON=$(curl -sf http://localhost:8000/api/v1/me \
+            -H "Host: app.carmelpoly.in" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "Me response: $ME_JSON"
+          echo "$ME_JSON" | grep '"email":"admin@app.carmelpoly.in"'
+          echo "Full clean-install and login flow verified end-to-end!"
 
       - name: Verify Web Frontend Server Component Status Display
         run: |

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy;
 
-use App\Core\Auth\Commands\UsersUnlockCommand;
 use App\Core\Tenancy\Bootstrappers\CacheBootstrapper;
 use App\Core\Tenancy\Bootstrappers\DatabaseBootstrapper;
 use App\Core\Tenancy\Bootstrappers\FilesystemBootstrapper;
@@ -64,7 +63,6 @@ class TenancyServiceProvider extends ServiceProvider
                 TenantsCreateCommand::class,
                 TenantsMigrateCommand::class,
                 TenantsLicenseRenewCommand::class,
-                UsersUnlockCommand::class,
             ]);
         }
 
