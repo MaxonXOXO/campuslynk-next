@@ -8,6 +8,8 @@ use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Models\User;
+use App\Modules\Organisation\Database\Seeders\KeralaPolytechnicProfileSeeder;
+use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -25,6 +27,7 @@ class AppInstallCommand extends Command
                             {--domain= : The primary domain for the institution (defaults to app.carmelpoly.in)}
                             {--name=Carmel Polytechnic College : The institution name}
                             {--slug=carmel : The institution tenant slug}
+                            {--seed-profile=kerala-polytechnic : Seed profile to populate on tenant creation (kerala-polytechnic, baseline, or none)}
                             {--admin-name= : First Super Admin name}
                             {--admin-email= : First Super Admin email}';
 
@@ -122,6 +125,15 @@ class AppInstallCommand extends Command
 
             $tenantContext->setTenant($tenant);
             try {
+                $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
+                if ($seedProfile === 'kerala-polytechnic') {
+                    $this->info('Seeding Kerala Polytechnic profile...');
+                    app(KeralaPolytechnicProfileSeeder::class)->run();
+                } elseif ($seedProfile === 'baseline') {
+                    $this->info('Seeding tenant baseline profile...');
+                    app(TenantBaselineSeeder::class)->run();
+                }
+
                 if (User::where('type', 'staff')->count() === 0) {
                     $oneTimePassword = Str::password(16);
                     User::create([
