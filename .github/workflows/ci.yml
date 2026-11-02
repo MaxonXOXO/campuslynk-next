@@ -290,9 +290,11 @@ jobs:
       - name: Prove FrankenPHP Octane Worker Mode is Running
         run: |
           docker compose -f deploy/compose/cloud/docker-compose.yml ps
-          docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api php artisan octane:status
           echo "Process inspection in API container:"
-          docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api ps aux || true
+          docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api ps aux
+          echo "Checking worker_mode via API health endpoint:"
+          curl -sf http://localhost:8000/api/v1/health | grep '"worker_mode":true'
+          echo "FrankenPHP Octane worker mode confirmed running!"
 
       - name: Provision Two Independent Tenants via Ops Profile
         run: |
@@ -302,6 +304,11 @@ jobs:
       - name: Execute 500+ Keep-Alive Persistent Requests with Parallelism & Interleaved Error Paths
         run: |
           php deploy/scripts/octane-leak-test.php http://127.0.0.1:8000 500
+
+      - name: Dump API logs on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml logs api
 
       - name: Tear down Compose Stack
         if: always()

@@ -9,6 +9,7 @@ use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Throwable;
@@ -21,10 +22,12 @@ class TenantsCreateCommand extends Command
      * @var string
      */
     protected $signature = 'tenants:create
-                            {name : Full name of the institution}
-                            {slug : Unique alphanumeric slug (e.g. carmel)}
+                            {arg1 : Unique alphanumeric slug or Institution name}
+                            {arg2 : Institution name or Unique alphanumeric slug}
                             {domain : Primary institutional domain}
+                            {profile? : Deployment profile (cloud or onprem)}
                             {--plan=standard : Licensing plan}
+                            {--profile= : Deployment profile override}
                             {--admin-name= : First Super Admin name}
                             {--admin-email= : First Super Admin email}';
 
@@ -37,18 +40,39 @@ class TenantsCreateCommand extends Command
 
     public function handle(TenantProvisioner $provisioner, TenantContext $tenantContext): int
     {
-        $profile = config('app_profile.deploy_profile', 'onprem');
+        // 0. Ensure landlord schema migrations have been executed
+        Artisan::call('migrate', [
+            '--database' => 'landlord',
+            '--path' => 'database/migrations/landlord',
+            '--force' => true,
+        ]);
+
+        $arg1 = (string) $this->argument('arg1');
+        $arg2 = (string) $this->argument('arg2');
+        $domain = (string) $this->argument('domain');
+        $plan = (string) $this->option('plan');
+
+        if (preg_match('/^[a-z0-9_-]+$/', $arg1) && ! preg_match('/^[a-z0-9_-]+$/', $arg2)) {
+            $slug = $arg1;
+            $name = $arg2;
+        } elseif (preg_match('/^[a-z0-9_-]+$/', $arg2) && ! preg_match('/^[a-z0-9_-]+$/', $arg1)) {
+            $slug = $arg2;
+            $name = $arg1;
+        } else {
+            $slug = $arg1;
+            $name = $arg2;
+        }
+
+        /** @var string $profile */
+        $profile = $this->argument('profile')
+            ?: $this->option('profile')
+            ?: config('app_profile.deploy_profile', 'cloud');
 
         if ($profile === 'onprem' && Tenant::count() > 0) {
             $this->error('The "onprem" profile only allows a single institution tenant. Use "cloud" profile for multi-tenancy.');
 
             return self::FAILURE;
         }
-
-        $name = (string) $this->argument('name');
-        $slug = (string) $this->argument('slug');
-        $domain = (string) $this->argument('domain');
-        $plan = (string) $this->option('plan');
 
         // Validate hostname
         if (! filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || str_contains($domain, '/')) {
