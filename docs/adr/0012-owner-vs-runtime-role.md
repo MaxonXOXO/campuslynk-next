@@ -72,3 +72,21 @@ We recommend keeping Option 2 **Proposed** for Sprint 0. The current single role
 
 The split between owner and runtime roles should be scheduled for Sprint 1 / Production Hardening once tenant migrations are fully automated within the deployment pipeline.
 
+---
+
+## Appendix: Application Key (`APP_KEY`) Rotation & Credential Re-encryption (Proposed)
+
+### Problem
+The Laravel `APP_KEY` encrypts and decrypts every tenant's database password stored in `landlord.tenant_databases.password` via `Crypt::encryptString()` / `Crypt::decryptString()`. If the master `APP_KEY` must be rotated (e.g., following scheduled annual compliance rotation, staff offboarding, or credential compromise), all existing ciphertext records in `tenant_databases` would become unreadable, taking all tenants offline.
+
+### Proposed Rotation Protocol (Zero-Downtime Expand-Migrate-Contract)
+1. **Multi-Key Decryption Support (`previous_keys`):**
+   - Configure Laravel's encrypter with support for a list of previous valid keys (`config('app.previous_keys')`).
+   - The runtime encrypter attempts decryption using the primary `APP_KEY`; if MAC verification fails, it iterates through `previous_keys` to decrypt existing payloads.
+2. **Re-encryption Maintenance Command (`tenants:reencrypt-credentials`):**
+   - An operator invokes `php artisan tenants:reencrypt-credentials --old-key=<OLD_KEY> --new-key=<NEW_KEY>` via the `ops` profile service.
+   - The command connects to the landlord database, loads all `tenant_databases` rows, decrypts each password using the old key, re-encrypts using the new key, and updates the record within a single transactional boundary.
+3. **Key Decommissioning:**
+   - Once all rows in `tenant_databases` and encrypted tenant settings are verified to decrypt under the new key, the old key is purged from `previous_keys` across all application container configurations.
+
+

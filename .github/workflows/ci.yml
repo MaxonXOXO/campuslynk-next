@@ -58,7 +58,6 @@ jobs:
 
   backend-tests:
     name: 2. Backend Feature & Architecture Tests
-    needs: backend-lint-and-analyse
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -139,7 +138,7 @@ jobs:
           LANDLORD_DB_DATABASE: landlord
           LANDLORD_DB_USERNAME: provisioner
           LANDLORD_DB_PASSWORD: secret
-        run: php artisan migrate --database=landlord --path=database/migrations/landlord --force
+        run: php artisan landlord:migrate
 
       - name: Run Pest Tests (Feature & Architecture)
         env:
@@ -162,7 +161,6 @@ jobs:
 
   frontend-checks:
     name: 3. Frontend Quality Checks & Build
-    needs: backend-tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -203,8 +201,13 @@ jobs:
 
   compose-smoke:
     name: 4. Docker Compose Smoke Test
-    needs: frontend-checks
+    needs: [backend-tests, frontend-checks]
     runs-on: ubuntu-latest
+    env:
+      # CI-only throwaway secrets (never used in production)
+      APP_KEY: base64:c6K7LzN5yVq8D2wT9X1uJ4mP7sR0vE3bA5hY8kM2tQ0=
+      DB_PASSWORD: secret
+      POSTGRES_ADMIN_PASSWORD: supersecret
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -272,6 +275,11 @@ jobs:
     name: 5. Octane Worker Mode Leak Test
     needs: backend-tests
     runs-on: ubuntu-latest
+    env:
+      # CI-only throwaway secrets (never used in production)
+      APP_KEY: base64:c6K7LzN5yVq8D2wT9X1uJ4mP7sR0vE3bA5hY8kM2tQ0=
+      DB_PASSWORD: secret
+      POSTGRES_ADMIN_PASSWORD: supersecret
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -285,7 +293,7 @@ jobs:
 
       - name: Build and Start Compose Stack (Cloud Profile with Octane Worker Mode)
         run: |
-          docker compose -f deploy/compose/cloud/docker-compose.yml up -d --build --wait --wait-timeout 180
+          docker compose -f deploy/compose/cloud/docker-compose.yml up -d --build --wait api
 
       - name: Prove FrankenPHP Octane Worker Mode is Running
         run: |
@@ -293,16 +301,22 @@ jobs:
           echo "Process inspection in API container:"
           docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api ps aux
           echo "Inspecting FrankenPHP worker threads in container startup log:"
-          docker compose -f deploy/compose/cloud/docker-compose.yml logs api | grep "worker_threads"
-          echo "Checking worker_mode via API health endpoint:"
-          curl -sf http://localhost:8000/api/v1/health
-          echo ""
-          echo "FrankenPHP Octane worker mode confirmed running!"
+          docker compose -f deploy/compose/cloud/docker-compose.yml logs api | grep -E '"worker_threads":[1-9][0-9]*'
+          echo "Asserting public endpoints do not expose worker_mode:"
+          if curl -sf http://localhost:8000/api/v1/health | grep -i "worker_mode"; then
+            echo "ERROR: worker_mode leaked in /api/v1/health"
+            exit 1
+          fi
+          echo "FrankenPHP Octane worker mode confirmed running and isolated!"
+
+      - name: Run Landlord Migrations via Ops Profile
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan landlord:migrate
 
       - name: Provision Two Independent Tenants via Ops Profile
         run: |
-          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create carmel "Carmel Polytechnic College" carmel.test cloud --admin-name="Admin A" --admin-email="admin@carmel.test"
-          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create stmarys "St. Marys Polytechnic" stmarys.test cloud --admin-name="Admin B" --admin-email="admin@stmarys.test"
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create "Carmel Polytechnic College" carmel carmel.test --profile=cloud --admin-name="Admin A" --admin-email="admin@carmel.test"
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create "St. Marys Polytechnic" stmarys stmarys.test --profile=cloud --admin-name="Admin B" --admin-email="admin@stmarys.test"
 
       - name: Execute 500+ Keep-Alive Persistent Requests with Parallelism & Interleaved Error Paths
         run: |

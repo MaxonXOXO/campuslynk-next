@@ -139,7 +139,8 @@ Uses ULID public IDs and strict PostgreSQL database-level constraints:
 
 #### 8. Commands
 - `app:install`: On-premise appliance installer; fails if `DEPLOY_PROFILE != onprem` or a tenant exists; runs landlord migrations, then provisions the Carmel institution tenant (`carmel`).
-- `tenants:create {name} {slug} {domain}`: Cloud profile tenant provisioning; refuses second tenant when `onprem`.
+- `landlord:migrate`: Explicit landlord schema migration command executed via `ops`; applies migrations from `database/migrations/landlord` to the landlord database.
+- `tenants:create {name} {slug} {domain} {--profile=}`: Cloud profile tenant provisioning; requires the landlord schema to be migrated first (fails with explicit instruction if missing); refuses second tenant when `onprem`.
 - `tenants:migrate {--tenant=}`: Runs tenant migrations across tenants, updates `schema_versions`, continues past failing tenants, and outputs a summary table with non-zero exit code on failure.
 
 ---

@@ -6,6 +6,7 @@ namespace App\Core\Auth\Models;
 
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -113,5 +114,59 @@ class User extends Authenticatable
     public function isPending(): bool
     {
         return $this->status === 'pending';
+    }
+
+    /**
+     * @return HasMany<UserIdentifier, $this>
+     */
+    public function identifiers(): HasMany
+    {
+        return $this->hasMany(UserIdentifier::class);
+    }
+
+    protected static function booted(): void
+    {
+        static::saved(function (User $user): void {
+            $user->syncIdentifiers();
+        });
+    }
+
+    /**
+     * Synchronize normalised login identifiers into user_identifiers table.
+     */
+    public function syncIdentifiers(): void
+    {
+        // 1. Email
+        if (is_string($this->email) && trim($this->email) !== '') {
+            $norm = UserIdentifier::normalise($this->email, 'email');
+            $this->identifiers()->updateOrCreate(
+                ['kind' => 'email'],
+                ['value' => $this->email, 'value_normalised' => $norm]
+            );
+        } else {
+            $this->identifiers()->where('kind', 'email')->delete();
+        }
+
+        // 2. Mobile
+        if (is_string($this->mobile) && trim($this->mobile) !== '') {
+            $norm = UserIdentifier::normalise($this->mobile, 'mobile');
+            $this->identifiers()->updateOrCreate(
+                ['kind' => 'mobile'],
+                ['value' => $this->mobile, 'value_normalised' => $norm]
+            );
+        } else {
+            $this->identifiers()->where('kind', 'mobile')->delete();
+        }
+
+        // 3. Registration Number
+        if (is_string($this->registration_number) && trim($this->registration_number) !== '') {
+            $norm = UserIdentifier::normalise($this->registration_number, 'registration_number');
+            $this->identifiers()->updateOrCreate(
+                ['kind' => 'registration_number'],
+                ['value' => $this->registration_number, 'value_normalised' => $norm]
+            );
+        } else {
+            $this->identifiers()->where('kind', 'registration_number')->delete();
+        }
     }
 }

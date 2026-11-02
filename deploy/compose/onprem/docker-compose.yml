@@ -69,7 +69,7 @@ services:
       DEPLOY_PROFILE: onprem
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:-base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU=}
+      APP_KEY: ${APP_KEY}
       APP_URL: ${API_URL:-http://localhost:8000}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis
@@ -109,7 +109,7 @@ services:
       DEPLOY_PROFILE: onprem
       APP_ENV: production
       APP_DEBUG: "false"
-      APP_KEY: ${APP_KEY:-base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU=}
+      APP_KEY: ${APP_KEY}
       APP_URL: ${API_URL:-http://localhost:8000}
       CACHE_STORE: redis
       QUEUE_CONNECTION: redis

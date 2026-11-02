@@ -23,9 +23,9 @@ class LoginRateLimiter
     public const DECAY_IDENTIFIER_SECONDS = 900; // 15 minute window
 
     /**
-     * Tier 3: Per tenant + IP across all identifiers (anti-credential stuffing)
+     * Tier 3: Per tenant + IP across all identifiers (anti-credential stuffing with campus NAT tolerance)
      */
-    public const MAX_IP_ATTEMPTS = 30;
+    public const MAX_IP_ATTEMPTS = 200;
 
     public const DECAY_IP_SECONDS = 900; // 15 minute window
 
@@ -95,5 +95,14 @@ class LoginRateLimiter
     public function clear(string $tenantId, string $identifier, string $ip): void
     {
         RateLimiter::clear($this->throttleKey($tenantId, $identifier, $ip));
+    }
+
+    /**
+     * Administratively unlock an account across all IPs.
+     */
+    public function unlock(string $tenantId, string $identifier): void
+    {
+        $hash = hash('sha256', strtolower(trim($identifier)));
+        RateLimiter::clear("auth:throttle:account:{$tenantId}:{$hash}");
     }
 }

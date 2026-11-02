@@ -15,7 +15,6 @@ Route::prefix('v1')->group(function (): void {
         return response()->json([
             'data' => [
                 'status' => 'ok',
-                'worker_mode' => (bool) ($_SERVER['FRANKENPHP_WORKER'] ?? false),
             ],
             'meta' => [
                 'timestamp' => now()->toIso8601String(),

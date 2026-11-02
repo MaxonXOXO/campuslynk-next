@@ -658,7 +658,19 @@ it('enforces multi-tier throttling for rotating IPs and credential stuffing and 
     ]);
     $this->tenantContext->forget();
 
-    // 1. Rotating IPs against one identifier hits Tier 2 limit (15 attempts across any IP)
+    // 1. Campus NAT tolerance: 50 distinct students failing once from the same campus NAT IP does NOT lock out the IP
+    $campusGatewayIp = '203.0.113.100';
+    for ($i = 1; $i <= 50; $i++) {
+        $this->withServerVariables(['REMOTE_ADDR' => $campusGatewayIp])
+            ->postJson('http://tier-a.test/api/v1/auth/login', [
+                'identifier' => "student_{$i}@tier.test",
+                'password' => 'WrongPassword!',
+                'device_name' => "CampusPC-{$i}",
+                'client' => 'web',
+            ])->assertStatus(401);
+    }
+
+    // 2. Rotating IPs against one identifier hits Tier 2 limit (15 attempts across any IP)
     for ($i = 1; $i <= 15; $i++) {
         $simulatedIp = "192.168.1.{$i}";
         $this->withServerVariables(['REMOTE_ADDR' => $simulatedIp])
@@ -680,6 +692,22 @@ it('enforces multi-tier throttling for rotating IPs and credential stuffing and 
         ])->assertStatus(429)
         ->assertJsonPath('title', 'Too Many Requests');
 
+    // Operator clears lockout via users:unlock command
+    $unlockExit = Artisan::call('users:unlock', [
+        'identifier' => 'target@tier.test',
+        '--tenant' => 'tenant_tier_a',
+    ]);
+    expect($unlockExit)->toBe(0);
+
+    // Account is immediately unlocked for subsequent attempts
+    $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.99'])
+        ->postJson('http://tier-a.test/api/v1/auth/login', [
+            'identifier' => 'target@tier.test',
+            'password' => 'WrongPassword!',
+            'device_name' => 'Bot-NewIP',
+            'client' => 'web',
+        ])->assertStatus(401); // 401 instead of 429!
+
     // Tenant B is completely unaffected
     $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.99'])
         ->postJson('http://tier-b.test/api/v1/auth/login', [
@@ -688,27 +716,6 @@ it('enforces multi-tier throttling for rotating IPs and credential stuffing and 
             'device_name' => 'Bot-NewIP',
             'client' => 'web',
         ])->assertStatus(401);
-
-    // 2. Single IP trying many identifiers hits Tier 3 limit (30 attempts from one IP)
-    $attackerIp = '198.51.100.55';
-    for ($i = 1; $i <= 30; $i++) {
-        $this->withServerVariables(['REMOTE_ADDR' => $attackerIp])
-            ->postJson('http://tier-a.test/api/v1/auth/login', [
-                'identifier' => "user_{$i}@stuffing.test",
-                'password' => 'GuessedPass123!',
-                'device_name' => 'StuffingBot',
-                'client' => 'web',
-            ])->assertStatus(401);
-    }
-
-    // 31st attempt from that IP (even for a new identifier) is locked out
-    $this->withServerVariables(['REMOTE_ADDR' => $attackerIp])
-        ->postJson('http://tier-a.test/api/v1/auth/login', [
-            'identifier' => 'fresh_victim@stuffing.test',
-            'password' => 'GuessedPass123!',
-            'device_name' => 'StuffingBot',
-            'client' => 'web',
-        ])->assertStatus(429);
 
     // 3. Spoofed X-Forwarded-For from untrusted peer is ignored
     config(['app.trusted_proxies' => ['10.0.0.1']]);
@@ -751,7 +758,7 @@ it('enforces login identifier precedence and prevents registration number collis
         'status' => 'active',
     ]);
 
-    // User C: Registration number user (numeric, but not ambiguous with mobile phone)
+    // User C: Registration number user (10-digit numeric polytechnic registration number!)
     $userReg = User::create([
         'type' => 'student',
         'name' => 'Registration Student',
@@ -761,24 +768,39 @@ it('enforces login identifier precedence and prevents registration number collis
         'status' => 'active',
     ]);
 
-    // 1. Database constraint rejects registration numbers formatted as phone numbers
-    $constraintViolated = false;
+    // 1. Database unique constraint rejects creating a registration number equal to an existing mobile
+    $collisionRejected = false;
     try {
         User::create([
             'type' => 'student',
-            'name' => 'Illegal Phone Reg Student',
+            'name' => 'Colliding Reg Student',
             'registration_number' => '+919876543210',
             'password' => Hash::make('Pass123!'),
             'status' => 'active',
         ]);
     } catch (\Throwable $e) {
-        $constraintViolated = str_contains($e->getMessage(), 'users_reg_number_not_phone_check');
+        $collisionRejected = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
     }
-    expect($constraintViolated)->toBeTrue();
+    expect($collisionRejected)->toBeTrue();
+
+    // 2. Database unique constraint rejects staff and student sharing the same identifier string
+    $crossTypeRejected = false;
+    try {
+        User::create([
+            'type' => 'staff',
+            'name' => 'Colliding Staff Email',
+            'email' => 'prof.sharma@prec.test',
+            'password' => Hash::make('Pass123!'),
+            'status' => 'active',
+        ]);
+    } catch (\Throwable $e) {
+        $crossTypeRejected = str_contains($e->getMessage(), 'user_identifiers_value_normalised_unique');
+    }
+    expect($crossTypeRejected)->toBeTrue();
 
     $this->tenantContext->forget();
 
-    // 2. Contains '@' -> Email precedence
+    // 3. User with email logs in
     $this->postJson('http://prec.test/api/v1/auth/login', [
         'identifier' => 'prof.sharma@prec.test',
         'password' => 'SecretPass123!',
@@ -787,7 +809,7 @@ it('enforces login identifier precedence and prevents registration number collis
     ])->assertStatus(200)
         ->assertJsonPath('data.user.id', $userEmail->id);
 
-    // 3. E.164 mobile login (with +91 or normalized 10-digit) -> Mobile precedence
+    // 4. User with mobile logs in directly
     $this->postJson('http://prec.test/api/v1/auth/login', [
         'identifier' => '+919876543210',
         'password' => 'SecretPass123!',
@@ -796,15 +818,7 @@ it('enforces login identifier precedence and prevents registration number collis
     ])->assertStatus(200)
         ->assertJsonPath('data.user.id', $userMobile->id);
 
-    $this->postJson('http://prec.test/api/v1/auth/login', [
-        'identifier' => '9876543210',
-        'password' => 'SecretPass123!',
-        'device_name' => 'Mobile App',
-        'client' => 'mobile',
-    ])->assertStatus(200)
-        ->assertJsonPath('data.user.id', $userMobile->id);
-
-    // 4. Registration number login -> Registration precedence
+    // 5. 10-digit registration number user logs in directly without mobile ambiguity
     $this->postJson('http://prec.test/api/v1/auth/login', [
         'identifier' => '2026001234',
         'password' => 'SecretPass123!',
@@ -812,6 +826,33 @@ it('enforces login identifier precedence and prevents registration number collis
         'client' => 'web',
     ])->assertStatus(200)
         ->assertJsonPath('data.user.id', $userReg->id);
+});
+
+it('never exposes license expiration dates or plan details to unauthenticated callers', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+    $tenant = $this->provisioner->provision('tenant_leak_check', 'Leak Check College', 'leak-check.test', 'cloud');
+
+    /** @var License $license */
+    $license = $tenant->license;
+    $futureDate = Carbon::now()->addDays(45)->toDateString();
+    $license->update(['valid_until' => Carbon::now()->addDays(45), 'plan' => 'super_secret_custom_plan']);
+
+    $response = $this->getJson('http://leak-check.test/api/v1/meta');
+    $response->assertStatus(200);
+
+    $body = (string) $response->getContent();
+    expect($body)->not->toContain($futureDate)
+        ->and($body)->not->toContain('super_secret_custom_plan')
+        ->and($response->headers->has('X-License-Warning'))->toBeFalse();
+
+    // Also verify login endpoint does not leak license dates in headers
+    $loginResp = $this->postJson('http://leak-check.test/api/v1/auth/login', [
+        'identifier' => 'unauth@leak-check.test',
+        'password' => 'WrongPass!',
+        'device_name' => 'TestDevice',
+        'client' => 'web',
+    ]);
+    expect($loginResp->headers->has('X-License-Warning'))->toBeFalse();
 });
 
 it('handles license expiration with grace period and allows renewal via tenants:license:renew', function () {

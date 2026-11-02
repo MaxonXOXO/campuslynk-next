@@ -9,6 +9,7 @@ use App\Core\Auth\Events\LoginSucceeded;
 use App\Core\Auth\Exceptions\AuthenticationException;
 use App\Core\Auth\Exceptions\LockoutException;
 use App\Core\Auth\Models\User;
+use App\Core\Auth\Models\UserIdentifier;
 use App\Core\Auth\Services\LoginRateLimiter;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Support\Carbon;
@@ -116,46 +117,17 @@ class LoginAction
     }
 
     /**
-     * Resolve user following strict precedence:
-     * 1. Contains '@' -> email
-     * 2. Normalizes to valid E.164 mobile -> mobile
-     * 3. Otherwise -> registration number
+     * Resolve user from the unified user_identifiers table without guessing.
      */
     protected function resolveUser(string $identifier): ?User
     {
-        // 1. Email Precedence
-        if (str_contains($identifier, '@')) {
-            return User::whereRaw('LOWER(email) = ?', [strtolower($identifier)])->first();
-        }
+        $normalised = UserIdentifier::normalise($identifier);
 
-        // 2. Mobile Precedence (E.164 normalisation)
-        $normalizedMobile = $this->normalizeToE164($identifier);
-        if ($normalizedMobile !== null) {
-            $user = User::where('mobile', $normalizedMobile)->first();
-            if ($user !== null) {
-                return $user;
-            }
-        }
+        /** @var UserIdentifier|null $record */
+        $record = UserIdentifier::with('user')
+            ->where('value_normalised', $normalised)
+            ->first();
 
-        // 3. Otherwise: Registration Number Precedence
-        return User::where('registration_number', $identifier)->first();
-    }
-
-    /**
-     * Normalize identifier to E.164 format if applicable.
-     */
-    protected function normalizeToE164(string $identifier): ?string
-    {
-        // Explicit E.164 format (e.g. +919876543210)
-        if (preg_match('/^\+[1-9]\d{7,14}$/', $identifier) === 1) {
-            return $identifier;
-        }
-
-        // 10-digit Indian standard mobile starting with 6-9
-        if (preg_match('/^[6-9]\d{9}$/', $identifier) === 1) {
-            return '+91'.$identifier;
-        }
-
-        return null;
+        return $record?->user;
     }
 }

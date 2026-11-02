@@ -9,7 +9,7 @@ use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Throwable;
@@ -22,12 +22,11 @@ class TenantsCreateCommand extends Command
      * @var string
      */
     protected $signature = 'tenants:create
-                            {arg1 : Unique alphanumeric slug or Institution name}
-                            {arg2 : Institution name or Unique alphanumeric slug}
+                            {name : Full name of the institution}
+                            {slug : Unique alphanumeric slug (e.g. carmel)}
                             {domain : Primary institutional domain}
-                            {profile? : Deployment profile (cloud or onprem)}
+                            {--profile= : Deployment profile override (cloud or onprem)}
                             {--plan=standard : Licensing plan}
-                            {--profile= : Deployment profile override}
                             {--admin-name= : First Super Admin name}
                             {--admin-email= : First Super Admin email}';
 
@@ -40,41 +39,45 @@ class TenantsCreateCommand extends Command
 
     public function handle(TenantProvisioner $provisioner, TenantContext $tenantContext): int
     {
-        // 0. Ensure landlord schema migrations have been executed
-        Artisan::call('migrate', [
-            '--database' => 'landlord',
-            '--path' => 'database/migrations/landlord',
-            '--force' => true,
-        ]);
+        // 0. Explicit landlord schema presence check
+        $landlord = DB::connection('landlord');
+        /** @var object{exists: bool}|null $tenantsRow */
+        $tenantsRow = $landlord->selectOne("SELECT to_regclass('tenants') IS NOT NULL AS exists");
+        /** @var object{exists: bool}|null $domainsRow */
+        $domainsRow = $landlord->selectOne("SELECT to_regclass('domains') IS NOT NULL AS exists");
 
-        $arg1 = (string) $this->argument('arg1');
-        $arg2 = (string) $this->argument('arg2');
-        $domain = (string) $this->argument('domain');
-        $plan = (string) $this->option('plan');
+        $hasTenants = $tenantsRow !== null && (bool) $tenantsRow->exists;
+        $hasDomains = $domainsRow !== null && (bool) $domainsRow->exists;
 
-        if (preg_match('/^[a-z0-9_-]+$/', $arg1) && ! preg_match('/^[a-z0-9_-]+$/', $arg2)) {
-            $slug = $arg1;
-            $name = $arg2;
-        } elseif (preg_match('/^[a-z0-9_-]+$/', $arg2) && ! preg_match('/^[a-z0-9_-]+$/', $arg1)) {
-            $slug = $arg2;
-            $name = $arg1;
-        } else {
-            $slug = $arg1;
-            $name = $arg2;
-        }
-
-        /** @var string $profile */
-        $profile = $this->argument('profile')
-            ?: $this->option('profile')
-            ?: config('app_profile.deploy_profile', 'cloud');
-
-        if ($profile === 'onprem' && Tenant::count() > 0) {
-            $this->error('The "onprem" profile only allows a single institution tenant. Use "cloud" profile for multi-tenancy.');
+        if (! $hasTenants || ! $hasDomains) {
+            $this->line('Landlord schema is missing or unmigrated. Please run "php artisan landlord:migrate" via the ops service first.');
 
             return self::FAILURE;
         }
 
-        // Validate hostname
+        $name = trim((string) $this->argument('name'));
+        $slug = trim((string) $this->argument('slug'));
+        $domain = trim((string) $this->argument('domain'));
+        $plan = (string) $this->option('plan');
+
+        $profileOption = $this->option('profile');
+        /** @var string $profile */
+        $profile = is_string($profileOption) && trim($profileOption) !== ''
+            ? trim($profileOption)
+            : (string) config('app_profile.deploy_profile', 'cloud');
+
+        if ($profile === 'onprem' && Tenant::count() > 0) {
+            $this->line('The "onprem" profile only allows a single institution tenant. Use "cloud" profile for multi-tenancy.');
+
+            return self::FAILURE;
+        }
+
+        if (! preg_match('/^[a-z0-9_]{3,32}$/', $slug)) {
+            $this->line(sprintf('Invalid tenant slug [%s]. Slug must be 3-32 lowercase alphanumeric characters or underscores.', $slug));
+
+            return self::FAILURE;
+        }
+
         if (! filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || str_contains($domain, '/')) {
             $this->error(sprintf('Domain [%s] is not a valid hostname.', $domain));
 

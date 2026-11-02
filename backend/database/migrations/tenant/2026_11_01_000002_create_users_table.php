@@ -28,7 +28,7 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // PostgreSQL CHECK constraints and case-insensitive unique index
+        // PostgreSQL CHECK constraints on users
         DB::connection('tenant')->statement(
             "ALTER TABLE users ADD CONSTRAINT users_type_check CHECK (type IN ('staff', 'student', 'parent'))"
         );
@@ -38,14 +38,19 @@ return new class extends Migration
         DB::connection('tenant')->statement(
             'ALTER TABLE users ADD CONSTRAINT users_identifier_presence_check CHECK (email IS NOT NULL OR mobile IS NOT NULL OR registration_number IS NOT NULL)'
         );
+
+        // Unified User Identifiers Table (Single Unique Constraint across all kinds)
+        Schema::connection('tenant')->create('user_identifiers', function (Blueprint $table): void {
+            $table->ulid('id')->primary();
+            $table->foreignUlid('user_id')->constrained('users')->cascadeOnDelete();
+            $table->string('kind', 30); // 'email', 'mobile', 'registration_number'
+            $table->string('value', 255);
+            $table->string('value_normalised', 255)->unique();
+            $table->timestamps();
+        });
+
         DB::connection('tenant')->statement(
-            "ALTER TABLE users ADD CONSTRAINT users_mobile_e164_check CHECK (mobile IS NULL OR mobile ~ '^\+[1-9][0-9]{7,14}$')"
-        );
-        DB::connection('tenant')->statement(
-            "ALTER TABLE users ADD CONSTRAINT users_reg_number_not_phone_check CHECK (registration_number IS NULL OR (registration_number !~ '^\+[0-9]+' AND registration_number !~ '^[6-9][0-9]{9}$'))"
-        );
-        DB::connection('tenant')->statement(
-            'CREATE UNIQUE INDEX users_email_unique ON users (LOWER(email)) WHERE email IS NOT NULL'
+            "ALTER TABLE user_identifiers ADD CONSTRAINT user_identifiers_kind_check CHECK (kind IN ('email', 'mobile', 'registration_number'))"
         );
     }
 
@@ -54,6 +59,7 @@ return new class extends Migration
      */
     public function down(): void
     {
+        Schema::connection('tenant')->dropIfExists('user_identifiers');
         Schema::connection('tenant')->dropIfExists('users');
     }
 };

@@ -45,6 +45,9 @@ class AppInstallCommand extends Command
             return self::FAILURE;
         }
 
+        // 0. Ensure unique APP_KEY and role secrets exist in .env
+        $this->ensureSecretsConfigured();
+
         // 1. Run Landlord Migrations
         $this->info('Running landlord migrations...');
         $exitCode = Artisan::call('migrate', [
@@ -147,6 +150,37 @@ class AppInstallCommand extends Command
             $this->error('Failed to provision institution tenant: '.$e->getMessage());
 
             return self::FAILURE;
+        }
+    }
+
+    /**
+     * Ensure unique APP_KEY and role credentials exist on first install.
+     */
+    protected function ensureSecretsConfigured(): void
+    {
+        $envPath = base_path('.env');
+        if (! file_exists($envPath) || ! is_writable($envPath)) {
+            return;
+        }
+
+        $envContent = (string) file_get_contents($envPath);
+        $modified = false;
+
+        $key = config('app.key');
+        if (empty($key) || ! is_string($key) || str_contains($key, 'EXAMPLE') || str_contains($key, 'c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==')) {
+            $generatedKey = 'base64:'.base64_encode(random_bytes(32));
+            config(['app.key' => $generatedKey]);
+
+            if (preg_match('/^APP_KEY=.*$/m', $envContent)) {
+                $envContent = (string) preg_replace('/^APP_KEY=.*$/m', "APP_KEY={$generatedKey}", $envContent);
+            } else {
+                $envContent .= "\nAPP_KEY={$generatedKey}\n";
+            }
+            $modified = true;
+        }
+
+        if ($modified) {
+            file_put_contents($envPath, $envContent);
         }
     }
 }
