@@ -83,8 +83,11 @@ services:
       DEPLOY_PROFILE: onprem
       APP_ENV: local
       APP_DEBUG: "true"
-      APP_KEY: ${APP_KEY:-base64:c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==}
+      APP_KEY: ${APP_KEY:-base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU=}
       APP_URL: ${API_URL:-http://localhost:8000}
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
       DB_CONNECTION: unconfigured
       LANDLORD_DB_HOST: pgbouncer
       LANDLORD_DB_PORT: 6432
@@ -122,8 +125,11 @@ services:
       DEPLOY_PROFILE: onprem
       APP_ENV: local
       APP_DEBUG: "true"
-      APP_KEY: ${APP_KEY:-base64:c29tZXJhbmRvbXN0cmluZ2ZvcmFwcGtleXNlY3VyZTEyMw==}
+      APP_KEY: ${APP_KEY:-base64:o+PwvSaXMDgy1jfacfUAh5aH0pBRCtm10lxCmmE7NtU=}
       APP_URL: ${API_URL:-http://localhost:8000}
+      CACHE_STORE: redis
+      QUEUE_CONNECTION: redis
+      SESSION_DRIVER: redis
       DB_CONNECTION: unconfigured
       LANDLORD_DB_HOST: pgbouncer
       LANDLORD_DB_PORT: 6432
