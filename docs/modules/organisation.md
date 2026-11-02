@@ -48,6 +48,9 @@ Every batch maintains two native PostgreSQL `ltree` paths:
 9. `department_semester_governance`: Dynamic governance rules mapping home department and semester ranges (`semester_from` to `semester_to`) to a managing department.
 10. `academic_calendar_events`: Institutional diary events.
 
+### Events Emitted
+- `App\Modules\Organisation\Events\BatchSemesterPromoted`: Dispatched when a batch is promoted to a higher semester, triggering automatic archival of first-year tutor/mentor assignments when crossing from S2 to S3.
+
 ### PostgreSQL Integrity & GiST Constraints
 1. **LTree GiST Indexes:**
    ```sql
@@ -82,8 +85,20 @@ All endpoints are prefixed with `/api/v1` and protected by `auth:sanctum` and pe
 
 | Method | Endpoint | Permission Required | Description |
 |---|---|---|---|
-| `GET` | `/departments` | `organisation.department.manage` | List institution departments |
+| `GET` | `/departments` | `organisation.batch.view` | List institution departments |
+| `GET` | `/programs` | `organisation.batch.view` | List academic programs |
+| `GET` | `/academic-years` | `organisation.batch.view` | List academic years |
+| `GET` | `/regulations` | `organisation.batch.view` | List academic regulations |
+| `GET` | `/workshop-sections` | `organisation.batch.view` | List workshop trade sections |
+| `GET` | `/governance-rules` | `organisation.department.manage` | List semester governance rules |
+| `PUT` | `/governance-rules/{id}` | `organisation.department.manage` | Update semester governance rule |
 | `GET` | `/batches` | `organisation.batch.view` | List batches visible to user (filtered via `visibleTo` query scope) |
 | `POST` | `/batches` | `organisation.batch.create` | Create a new academic batch |
 | `GET` | `/batches/{id}` | `organisation.batch.view` | Retrieve batch details |
 | `POST` | `/batches/{id}/promote` | `organisation.batch.promote_semester` | Advance batch to next semester and transition managing department |
+| `GET` | `/batches/{batchId}/sub-batches` | `organisation.batch.view` | List sub-batches for a batch |
+| `POST` | `/batches/{batchId}/sub-batches` | `organisation.batch.create` | Create a typed sub-batch |
+| `GET` | `/sub-batches/{id}` | `organisation.batch.view` | View sub-batch details |
+| `PUT` | `/sub-batches/{id}` | `organisation.batch.create` | Update sub-batch details |
+| `DELETE` | `/sub-batches/{id}` | `organisation.batch.create` | Delete sub-batch |
+

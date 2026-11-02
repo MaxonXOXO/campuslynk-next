@@ -19,12 +19,21 @@ class ImpersonationController
         /** @var User $admin */
         $admin = $request->user();
 
-        $data = $action->execute(
-            admin: $admin,
-            targetUserId: (string) $request->validated('user_id'),
-            ticket: (string) $request->validated('ticket'),
-            reason: (string) $request->validated('reason')
-        );
+        try {
+            $data = $action->execute(
+                admin: $admin,
+                targetUserId: (string) $request->validated('user_id'),
+                ticket: (string) $request->validated('ticket'),
+                reason: (string) $request->validated('reason')
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => $e->getMessage(),
+            ], 403, ['Content-Type' => 'application/problem+json']);
+        }
 
         return response()->json([
             'data' => [

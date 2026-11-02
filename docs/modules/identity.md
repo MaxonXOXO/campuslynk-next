@@ -36,9 +36,9 @@ Following the system architecture rules:
   - Logs audit entry and emits `RoleRevoked`.
 - `ImpersonateUserAction`:
   - Enforces caller is `super_admin`.
-  - Determines if target user possesses academic approval authority (e.g., `principal`, `hod`, `tutor`, coordinators).
-  - Issues short-lived Sanctum token (max 30 minutes) tagged with `['impersonation:read_only']` for academic roles.
-  - Logs impersonation start and reason to `activity_log`.
+  - Prohibits self-impersonation, nested impersonation, and impersonating other Super Admins.
+  - ADR-0004 resolved: Issues short-lived Sanctum token (max 30 minutes) tagged with `['impersonation:read_only']` for ALL target users without exception.
+  - Logs impersonation start, ticket, and reason to `activity_log`.
 
 ---
 
@@ -46,12 +46,18 @@ Following the system architecture rules:
 
 ### Schema Tables (`tenant` connection)
 1. `users`: Core tenant identity accounts (`id` ULID, `type`, `name`, `email`, `mobile`, `registration_number`, `password`, `status`, `must_change_password`, `last_login_at`).
-2. `roles`: Role catalogue (`id` ULID, `key`, `name`, `scope_type`, `stream`, `is_singleton`). Seeded with the 21 institutional roles.
-3. `permissions`: Declared module capabilities (`id` ULID, `key`, `name`, `module`, `description`). Synced dynamically via `php artisan permissions:sync`.
-4. `role_permission`: Pivot table binding permissions to roles.
-5. `role_assignments`: User role bindings (`id` ULID, `user_id`, `role_id`, `scope_type`, `scope_label`, `valid_from`, `valid_to`, `is_singleton`, `is_active`, `order_record`, `assigned_by`).
-6. `delegation_rules`: Matrix defining which assigner role can grant which assignee role, under what scope constraint (`institution`, `stream`, `department`, `managing_department`, `workshop_section`, `batch`).
-7. `activity_log`: Tenant-scoped audit trail (using ULID subject/causer keys).
+2. `user_identifiers`: Normalised multi-attribute lookup table (`user_id`, `kind`, `value`, `value_normalised`, `is_primary`) with unique index preventing collisions.
+3. `roles`: Role catalogue (`id` ULID, `key`, `name`, `scope_type`, `stream`, `is_singleton`). Seeded with the 21 institutional roles.
+4. `permissions`: Declared module capabilities (`id` ULID, `key`, `name`, `module`, `description`). Synced dynamically via `php artisan permissions:sync`.
+5. `role_permission`: Pivot table binding permissions to roles.
+6. `role_assignments`: User role bindings (`id` ULID, `user_id`, `role_id`, `scope_type`, `scope_label`, `valid_from`, `valid_to`, `is_singleton`, `is_active`, `order_record`, `assigned_by`).
+7. `delegation_rules`: Matrix defining which assigner role can grant which assignee role, under what scope constraint (`institution`, `stream`, `department`, `managing_department`, `workshop_section`, `batch`).
+8. `activity_log`: Tenant-scoped audit trail (using ULID subject/causer keys).
+
+### Events Emitted
+- `App\Modules\Identity\Events\RoleAssigned`: Dispatched when a scoped role assignment is created.
+- `App\Modules\Identity\Events\RoleRevoked`: Dispatched when a scoped role assignment is deactivated.
+- `App\Modules\Identity\Events\UserPasswordChanged`: Dispatched when a user changes their password.
 
 ### Singleton Exclusion Constraint (`btree_gist`)
 To prevent race conditions and concurrent role collisions (e.g. two users being assigned HOD of the same department simultaneously), `role_assignments` uses PostgreSQL's `btree_gist` extension:
@@ -77,13 +83,20 @@ All endpoints are prefixed with `/api/v1` and protected by `auth:sanctum` and pe
 | `POST` | `/auth/login` | None (Public) | Authenticate by email, mobile, or registration number |
 | `POST` | `/auth/logout` | Authenticated | Revoke current access token |
 | `POST` | `/auth/password/change` | Authenticated | Change user password and revoke other tokens |
-| `GET` | `/me` | Authenticated | Return authenticated user profile and roles |
+| `GET` | `/me` | Authenticated | Return authenticated user profile with active `assignments` and `capabilities` |
 | `GET` | `/users` | `identity.user.view` | List users with pagination and filtering |
 | `POST` | `/users` | `identity.user.create` | Create a new user account |
 | `GET` | `/users/{id}` | `identity.user.view` | Retrieve user details and role assignments |
 | `PUT` | `/users/{id}` | `identity.user.update` | Update user details or status |
-| `GET` | `/roles` | `identity.role.view` | List assignable roles |
+| `POST` | `/users/{id}/unlock` | `identity.user.update` | Administratively clear login lockouts across all rate limiting tiers |
+| `POST` | `/users/{id}/suspend` | `identity.user.suspend` | Suspend user account and revoke active tokens |
+| `POST` | `/users/{id}/reactivate` | `identity.user.suspend` | Reactivate suspended user account |
+| `GET` | `/roles` | `identity.role.assign` | List catalogue roles and assigned permissions |
 | `POST` | `/roles/assign` | `identity.role.assign` | Assign scoped role to user |
-| `POST` | `/roles/revoke` | `identity.role.revoke` | Revoke active role assignment |
-| `POST` | `/impersonation` | `identity.impersonation.start` | Start audited impersonation session (max 30m) |
+| `POST` | `/roles/revoke` | `identity.role.assign` | Revoke active role assignment |
+| `GET` | `/role-assignments` | `identity.role.assign` | List role assignments with user, role, and scope filtering |
+| `POST` | `/role-assignments` | `identity.role.assign` | Create role assignment |
+| `DELETE` | `/role-assignments/{id}` | `identity.role.assign` | Revoke role assignment by ID |
+| `POST` | `/impersonation` | `identity.user.impersonate` | Start audited read-only impersonation session (max 30m) |
 | `POST` | `/impersonation/stop` | Authenticated | End active impersonation session |
+

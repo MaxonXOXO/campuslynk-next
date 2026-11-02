@@ -16,6 +16,7 @@ use App\Modules\Organisation\Models\Batch;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Program;
 use App\Modules\Organisation\Models\Regulation;
+use App\Modules\Organisation\Models\SubBatch;
 use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Tenancy\TenancyTestHelper;
 
@@ -275,6 +276,173 @@ it('enforces cross-tenant isolation and prevents viewing or promoting a batch fr
             'Authorization' => "Bearer {$tokenA}",
         ])->postJson("http://bma.test/api/v1/batches/{$batchBId}/promote");
         $promoteResponse->assertStatus(404);
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('supports full CRUD lifecycle for sub-batches within a batch', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_subbatch', 'SubBatch Poly', 'subbatch.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $ceHod = User::create([
+            'type' => 'staff',
+            'name' => 'CE HOD',
+            'email' => 'cehod@subbatch.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $hodRole = Role::where('key', 'hod')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $ceHod->id,
+            'role_id' => $hodRole->id,
+            'scope_type' => 'department',
+            'scope_label' => 'd_ce',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+
+        $progCE = Program::where('code', 'DCE')->firstOrFail();
+        $deptCE = Department::where('code', 'CE')->firstOrFail();
+        $acadYear = AcademicYear::where('label', '2026-27')->firstOrFail();
+        $reg2021 = Regulation::where('code', 'REV2021')->firstOrFail();
+
+        /** @var CreateBatchAction $createAction */
+        $createAction = app(CreateBatchAction::class);
+        $batch = $createAction->execute($progCE->id, $deptCE->id, $acadYear->id, $reg2021->id, 'CE S3 Batch', 'regular', 3);
+
+        $token = $ceHod->createToken('hod_token')->plainTextToken;
+
+        // 1. POST /api/v1/batches/{id}/sub-batches
+        $createRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->postJson("http://subbatch.test/api/v1/batches/{$batch->id}/sub-batches", [
+            'kind' => 'lab',
+            'name' => 'Survey Lab Batch 1',
+        ]);
+        $createRes->assertStatus(201);
+        $subBatchId = (string) $createRes->json('data.id');
+        expect($subBatchId)->not->toBeEmpty()
+            ->and($createRes->json('data.name'))->toBe('Survey Lab Batch 1')
+            ->and($createRes->json('data.home_path'))->toContain($batch->home_path);
+
+        // 2. GET /api/v1/batches/{id}/sub-batches
+        $listRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson("http://subbatch.test/api/v1/batches/{$batch->id}/sub-batches");
+        $listRes->assertStatus(200);
+        expect($listRes->json('meta.total'))->toBe(1);
+
+        // 3. GET /api/v1/sub-batches/{id}
+        $showRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson("http://subbatch.test/api/v1/sub-batches/{$subBatchId}");
+        $showRes->assertStatus(200);
+        expect($showRes->json('data.name'))->toBe('Survey Lab Batch 1');
+
+        // 4. PUT /api/v1/sub-batches/{id}
+        $updateRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->putJson("http://subbatch.test/api/v1/sub-batches/{$subBatchId}", [
+            'name' => 'Survey Lab Batch 1 Renamed',
+        ]);
+        $updateRes->assertStatus(200);
+        expect($updateRes->json('data.name'))->toBe('Survey Lab Batch 1 Renamed');
+
+        // 5. DELETE /api/v1/sub-batches/{id}
+        $delRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->deleteJson("http://subbatch.test/api/v1/sub-batches/{$subBatchId}");
+        $delRes->assertStatus(200);
+
+        // Verify deleted
+        $this->tenantContext->setTenant($tenant);
+        expect(SubBatch::find($subBatchId))->toBeNull();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('supports lookups for programs, academic years, regulations, workshop sections, and governance rules', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_lookups', 'Lookups Poly', 'lookups.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $principal = User::create([
+            'type' => 'staff',
+            'name' => 'Principal Peter',
+            'email' => 'principal@lookups.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $principal->id,
+            'role_id' => $principalRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+
+        $token = $principal->createToken('principal_token')->plainTextToken;
+
+        // 1. GET /api/v1/programs
+        $progRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson('http://lookups.test/api/v1/programs');
+        $progRes->assertStatus(200);
+        expect($progRes->json('meta.total'))->toBeGreaterThanOrEqual(6);
+
+        // 2. GET /api/v1/academic-years
+        $ayRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson('http://lookups.test/api/v1/academic-years');
+        $ayRes->assertStatus(200);
+        expect($ayRes->json('meta.total'))->toBeGreaterThanOrEqual(1);
+
+        // 3. GET /api/v1/regulations
+        $regRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson('http://lookups.test/api/v1/regulations');
+        $regRes->assertStatus(200);
+        expect($regRes->json('meta.total'))->toBeGreaterThanOrEqual(2);
+
+        // 4. GET /api/v1/workshop-sections
+        $wsRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson('http://lookups.test/api/v1/workshop-sections');
+        $wsRes->assertStatus(200);
+        expect($wsRes->json('meta.total'))->toBe(6);
+
+        // 5. GET /api/v1/governance-rules
+        $govRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->getJson('http://lookups.test/api/v1/governance-rules');
+        $govRes->assertStatus(200);
+        expect($govRes->json('meta.total'))->toBeGreaterThanOrEqual(6);
+
+        $ruleId = (string) $govRes->json('data.0.id');
+
+        // 6. PUT /api/v1/governance-rules/{id}
+        $putGovRes = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->putJson("http://lookups.test/api/v1/governance-rules/{$ruleId}", [
+            'semester_to' => 2,
+        ]);
+        $putGovRes->assertStatus(200);
+        expect($putGovRes->json('data.semester_to'))->toBe(2);
     } finally {
         $this->tenantContext->forget();
     }

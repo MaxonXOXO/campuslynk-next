@@ -34,9 +34,14 @@ class AssignRoleAction
         ?string $orderRecord = null,
         bool $bypassDelegationCheck = false
     ): RoleAssignment {
+        // Validate scope label pattern strictly per ADR-0013
+        if (! preg_match('/^[a-zA-Z0-9_]{1,63}$/', $scopeLabel)) {
+            throw new InvalidArgumentException("Malformed scope label [{$scopeLabel}]. Scope labels must match /^[a-zA-Z0-9_]{1,63}$/.");
+        }
+
         // 1. Delegation matrix verification (unless explicitly bypassed during system bootstrap)
         if (! $bypassDelegationCheck) {
-            $this->verifyDelegation($assigner, $targetRole, $scopeLabel, $orderRecord);
+            $this->verifyDelegation($assigner, $targetRole, $scopeType, $scopeLabel, $scopeId, $orderRecord);
         }
 
         // 2. Insert assignment with singleton exclusion constraint safety
@@ -88,7 +93,9 @@ class AssignRoleAction
     protected function verifyDelegation(
         User $assigner,
         Role $targetRole,
+        string $scopeType,
         string $scopeLabel,
+        ?string $scopeId,
         ?string $orderRecord
     ): void {
         /** @var list<string> $assignerRoleKeys */
@@ -119,7 +126,7 @@ class AssignRoleAction
         }
 
         // Check if assigner has authority over scope
-        if (! $this->authorizer->canAtScope($assigner, 'identity.role.assign', $scopeLabel)) {
+        if (! $this->authorizer->canAtScope($assigner, 'identity.role.assign', $scopeLabel, $scopeType, $scopeId)) {
             throw new UnauthorizedDelegationException(
                 "Assigner does not possess role assignment authority at scope [{$scopeLabel}]."
             );

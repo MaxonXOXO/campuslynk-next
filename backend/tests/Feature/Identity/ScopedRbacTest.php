@@ -612,3 +612,209 @@ it('logs RBAC role assignments and revocations in activity_log', function () {
         $this->tenantContext->forget();
     }
 });
+
+it('allows singleton role to be reassigned after revoking the previous active assignment', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_reassign', 'Reassign Poly', 'reassign.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $principal = User::create([
+            'type' => 'staff',
+            'name' => 'Principal Patrick',
+            'email' => 'principal@reassign.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $principal->id,
+            'role_id' => $principalRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => true,
+            'is_active' => true,
+        ]);
+
+        $alice = User::create([
+            'type' => 'staff',
+            'name' => 'Alice HOD',
+            'email' => 'alice@reassign.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $bob = User::create([
+            'type' => 'staff',
+            'name' => 'Bob HOD',
+            'email' => 'bob@reassign.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $hodRole = Role::where('key', 'hod')->firstOrFail();
+
+        /** @var AssignRoleAction $assignAction */
+        $assignAction = app(AssignRoleAction::class);
+        /** @var RevokeRoleAction $revokeAction */
+        $revokeAction = app(RevokeRoleAction::class);
+        /** @var ScopeAuthorizer $authorizer */
+        $authorizer = app(ScopeAuthorizer::class);
+
+        // 1. Assign Alice as HOD of Civil (d_ce)
+        $aliceAssignment = $assignAction->execute(
+            assigner: $principal,
+            targetUser: $alice,
+            targetRole: $hodRole,
+            scopeType: 'department',
+            scopeLabel: 'd_ce'
+        );
+
+        expect($authorizer->canAtScope($alice, 'organisation.batch.create', 'd_ce'))->toBeTrue();
+
+        // 2. Revoke Alice's HOD role (closes valid_to range to now and sets is_active = false)
+        $revokeAction->execute(
+            revoker: $principal,
+            assignment: $aliceAssignment
+        );
+
+        $aliceAssignment->refresh();
+        expect($aliceAssignment->is_active)->toBeFalse()
+            ->and($aliceAssignment->valid_to)->not->toBeNull();
+
+        // Alice no longer possesses HOD permissions
+        expect($authorizer->canAtScope($alice, 'organisation.batch.create', 'd_ce'))->toBeFalse();
+
+        // 3. Reassign Bob as HOD of Civil (d_ce) - must succeed because the validity range is closed
+        $bobAssignment = $assignAction->execute(
+            assigner: $principal,
+            targetUser: $bob,
+            targetRole: $hodRole,
+            scopeType: 'department',
+            scopeLabel: 'd_ce'
+        );
+
+        expect($bobAssignment->user_id)->toBe($bob->id)
+            ->and($authorizer->canAtScope($bob, 'organisation.batch.create', 'd_ce'))->toBeTrue();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('enforces temporal validity so future valid_from does not grant access and expired valid_to denies access', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_temporal', 'Temporal Poly', 'temporal.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer Time',
+            'email' => 'time@temporal.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $lecturerRole = Role::where('key', 'lecturer')->firstOrFail();
+
+        /** @var ScopeAuthorizer $authorizer */
+        $authorizer = app(ScopeAuthorizer::class);
+
+        // Future assignment (starts tomorrow)
+        $futureAssignment = RoleAssignment::create([
+            'user_id' => $lecturer->id,
+            'role_id' => $lecturerRole->id,
+            'scope_type' => 'department',
+            'scope_label' => 'd_ce',
+            'is_singleton' => false,
+            'valid_from' => Carbon::now()->addDay(),
+            'valid_to' => Carbon::now()->addMonth(),
+            'is_active' => true,
+        ]);
+
+        // Access not yet active
+        expect($authorizer->canAtScope($lecturer, 'organisation.batch.view', 'd_ce'))->toBeFalse();
+
+        // Past expired assignment
+        $futureAssignment->valid_from = Carbon::now()->subMonths(2);
+        $futureAssignment->valid_to = Carbon::now()->subMinute();
+        $futureAssignment->save();
+
+        // Access has expired
+        expect($authorizer->canAtScope($lecturer, 'organisation.batch.view', 'd_ce'))->toBeFalse();
+
+        // Active assignment
+        $futureAssignment->valid_to = Carbon::now()->addHour();
+        $futureAssignment->save();
+
+        expect($authorizer->canAtScope($lecturer, 'organisation.batch.view', 'd_ce'))->toBeTrue();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('strictly validates scope labels against malicious and malformed inputs', function () {
+    $malformedLabels = [
+        'x.*',
+        'a|b',
+        "' OR 1=1 --",
+        '',
+        'label with spaces',
+        'invalid!char',
+        'semi;colon',
+        '../path/traversal',
+        'quotes"inside',
+    ];
+
+    foreach ($malformedLabels as $label) {
+        expect(fn () => ScopeAuthorizer::validateScopeLabel($label))
+            ->toThrow(InvalidArgumentException::class);
+    }
+
+    // Valid labels succeed
+    $validLabels = ['i_carmel', 'd_ce', 'b_2024_ce_s1', 'u_01j7abc123', 'stream_aided', 'sb_lab_1'];
+    foreach ($validLabels as $label) {
+        ScopeAuthorizer::validateScopeLabel($label);
+        expect(true)->toBeTrue();
+    }
+});
+
+it('verifies that Super Admin permission set contains no academic or leave approvals', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_super_perms', 'Super Perms Poly', 'superperms.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+        app(PermissionsSyncCommand::class)->syncCurrentTenant();
+
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        $permissions = $superAdminRole->permissions()->pluck('key')->all();
+
+        // Super Admin holds identity and system permissions
+        expect($permissions)->toContain('identity.user.view')
+            ->toContain('identity.user.create')
+            ->toContain('identity.user.impersonate')
+            ->toContain('identity.role.assign');
+
+        // Super Admin NEVER holds assessment.* permissions
+        $assessmentPerms = array_filter($permissions, fn ($p) => str_starts_with((string) $p, 'assessment.'));
+        expect($assessmentPerms)->toBeEmpty();
+
+        // Super Admin NEVER holds office.staff_leave.approve_* permissions
+        $leaveApprovalPerms = array_filter($permissions, fn ($p) => str_starts_with((string) $p, 'office.staff_leave.approve_'));
+        expect($leaveApprovalPerms)->toBeEmpty();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});

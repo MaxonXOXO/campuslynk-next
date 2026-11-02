@@ -13,20 +13,6 @@ use InvalidArgumentException;
 class ImpersonateUserAction
 {
     /**
-     * Academic and HR-approval roles requiring mandatory read-only impersonation per ADR-0004.
-     *
-     * @var list<string>
-     */
-    protected const ACADEMIC_APPROVAL_ROLES = [
-        'principal',
-        'hod',
-        'gen_dept_coordinator',
-        'academic_coordinator',
-        'tutor',
-        'course_teacher',
-    ];
-
-    /**
      * @return array{
      *     token: string,
      *     user: User,
@@ -37,6 +23,12 @@ class ImpersonateUserAction
      */
     public function execute(User $admin, string $targetUserId, string $ticket, string $reason): array
     {
+        // 1. Prohibit nested impersonation (cannot impersonate while already in an impersonation session)
+        $adminToken = $admin->currentAccessToken();
+        if (in_array('impersonation:read_only', $adminToken->abilities ?? [], true)) {
+            throw new InvalidArgumentException('Nested impersonation is prohibited.');
+        }
+
         /** @var User $targetUser */
         $targetUser = User::findOrFail($targetUserId);
 
@@ -55,11 +47,9 @@ class ImpersonateUserAction
             throw new InvalidArgumentException('Impersonation of another Super Admin is prohibited.');
         }
 
-        // Check if user holds any academic or HR approval role
-        $hasAcademicRole = ! empty(array_intersect(self::ACADEMIC_APPROVAL_ROLES, $targetRoleKeys));
-        $isReadOnly = $hasAcademicRole;
-
-        $abilities = $isReadOnly ? ['impersonation:read_only'] : ['*'];
+        // ADR-0004: All impersonation sessions are strictly read-only for EVERY target user
+        $isReadOnly = true;
+        $abilities = ['impersonation:read_only'];
         $expiresAt = Carbon::now()->addMinutes(30);
 
         // Issue time-limited Sanctum token
@@ -78,16 +68,16 @@ class ImpersonateUserAction
                 'target_user_id' => $targetUser->id,
                 'ticket' => $ticket,
                 'reason' => $reason,
-                'read_only' => $isReadOnly,
+                'read_only' => true,
                 'roles' => $targetRoleKeys,
                 'expires_at' => $expiresAt->toIso8601String(),
             ])
-            ->log("Started impersonation session for [{$targetUser->name}] ({$ticket}) - read_only: ".($isReadOnly ? 'true' : 'false'));
+            ->log("Started impersonation session for [{$targetUser->name}] ({$ticket}) - read_only: true");
 
         return [
             'token' => $token->plainTextToken,
             'user' => $targetUser,
-            'read_only' => $isReadOnly,
+            'read_only' => true,
             'expires_at' => $expiresAt,
             'ticket' => $ticket,
         ];

@@ -26,86 +26,30 @@ afterEach(function () {
     $this->purgeAllTenantDatabases();
 });
 
-it('allows super admin to start and stop impersonation with security audit logging', function () {
-    config(['app_profile.deploy_profile' => 'cloud']);
+dataset('impersonatable_target_roles', [
+    'principal',
+    'chairman',
+    'admin',
+    'academic_coordinator',
+    'gen_dept_coordinator',
+    'sf_office',
+    'hod',
+    'workshop_superintendent',
+    'tutor',
+    'mentor',
+    'course_teacher',
+    'lecturer',
+    'demonstrator',
+    'workshop_instructor',
+    'trade_instructor',
+    'tradesman',
+    'laboratory_assistant',
+    'physical_instructor',
+    'student',
+    'parent',
+]);
 
-    $tenant = $this->provisioner->provision('tenant_imp_ok', 'Imp Poly', 'imp.test', 'cloud');
-    $this->tenantContext->setTenant($tenant);
-
-    try {
-        app(KeralaPolytechnicProfileSeeder::class)->run();
-
-        $superAdmin = User::create([
-            'type' => 'staff',
-            'name' => 'IT Head',
-            'email' => 'ithead@imp.test',
-            'password' => Hash::make('Password123!'),
-            'status' => 'active',
-            'must_change_password' => false,
-        ]);
-        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
-        RoleAssignment::create([
-            'user_id' => $superAdmin->id,
-            'role_id' => $superAdminRole->id,
-            'scope_type' => 'institution',
-            'scope_label' => 'i_carmel',
-            'is_singleton' => false,
-            'is_active' => true,
-        ]);
-
-        $lecturer = User::create([
-            'type' => 'staff',
-            'name' => 'Lecturer Bob',
-            'email' => 'bob@imp.test',
-            'password' => Hash::make('Password123!'),
-            'status' => 'active',
-            'must_change_password' => false,
-        ]);
-        $lecturerRole = Role::where('key', 'lecturer')->firstOrFail();
-        RoleAssignment::create([
-            'user_id' => $lecturer->id,
-            'role_id' => $lecturerRole->id,
-            'scope_type' => 'department',
-            'scope_label' => 'd_ce',
-            'is_singleton' => false,
-            'is_active' => true,
-        ]);
-
-        $adminToken = $superAdmin->createToken('test_token')->plainTextToken;
-
-        $response = $this->withHeaders([
-            'Authorization' => "Bearer {$adminToken}",
-        ])->postJson('http://imp.test/api/v1/impersonation', [
-            'user_id' => $lecturer->id,
-            'ticket' => 'INC-1092',
-            'reason' => 'Troubleshooting timetable view',
-        ]);
-
-        $response->assertStatus(201);
-        $token = (string) $response->json('data.token');
-        expect($token)->not->toBeEmpty()
-            ->and($response->json('data.read_only'))->toBeFalse();
-
-        // Audit log verified
-        $this->tenantContext->setTenant($tenant);
-        $log = Activity::where('log_name', 'security')->first();
-        expect($log)->not->toBeNull()
-            ->and($log->causer_id)->toBe($superAdmin->id)
-            ->and($log->subject_id)->toBe($lecturer->id);
-
-        // Conclude impersonation
-        $this->app['auth']->forgetGuards();
-        $stopResponse = $this->withHeaders([
-            'Authorization' => "Bearer {$token}",
-        ])->postJson('http://imp.test/api/v1/impersonation/stop');
-
-        $stopResponse->assertStatus(200);
-    } finally {
-        $this->tenantContext->forget();
-    }
-});
-
-it('enforces read-only restrictions when impersonating academic approval roles (ADR-0004)', function () {
+it('enforces read-only restrictions and allows safe GET and stop for all 20 target roles', function (string $roleKey) {
     config(['app_profile.deploy_profile' => 'cloud']);
 
     $tenant = $this->provisioner->provision('tenant_imp_ro', 'Imp RO Poly', 'impro.test', 'cloud');
@@ -132,57 +76,495 @@ it('enforces read-only restrictions when impersonating academic approval roles (
             'is_active' => true,
         ]);
 
-        // Target user is CE HOD (Academic Authority)
-        $hodUser = User::create([
-            'type' => 'staff',
-            'name' => 'HOD Civil',
-            'email' => 'hod@impro.test',
+        $targetUser = User::create([
+            'type' => in_array($roleKey, ['student', 'parent']) ? $roleKey : 'staff',
+            'name' => "Target User {$roleKey}",
+            'email' => "user_{$roleKey}@impro.test",
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $hodRole = Role::where('key', 'hod')->firstOrFail();
+
+        $role = Role::where('key', $roleKey)->firstOrFail();
         RoleAssignment::create([
-            'user_id' => $hodUser->id,
-            'role_id' => $hodRole->id,
-            'scope_type' => 'department',
-            'scope_label' => 'd_ce',
-            'is_singleton' => true,
+            'user_id' => $targetUser->id,
+            'role_id' => $role->id,
+            'scope_type' => $role->scope_type === 'institution' ? 'institution' : 'department',
+            'scope_label' => $role->scope_type === 'institution' ? 'i_carmel' : 'd_ce',
+            'is_singleton' => false,
             'is_active' => true,
         ]);
 
         $adminToken = $superAdmin->createToken('admin_token')->plainTextToken;
 
+        // Initiate impersonation
         $response = $this->withHeaders([
             'Authorization' => "Bearer {$adminToken}",
         ])->postJson('http://impro.test/api/v1/impersonation', [
-            'user_id' => $hodUser->id,
-            'ticket' => 'SEC-2041',
-            'reason' => 'Verifying attendance consolidation view',
+            'user_id' => $targetUser->id,
+            'ticket' => "TICKET-{$roleKey}",
+            'reason' => "Audited administrative investigation for {$roleKey}",
         ]);
 
         $response->assertStatus(201);
         expect($response->json('data.read_only'))->toBeTrue();
 
-        $impersonationToken = (string) $response->json('data.token');
+        $impToken = (string) $response->json('data.token');
 
-        // Flush cached auth guard to simulate fresh HTTP request with new Bearer token
+        // Flush guard cache for fresh request
         $this->app['auth']->forgetGuards();
 
-        // GET requests succeed during read-only impersonation
+        // 1. GET requests work
         $getResponse = $this->withHeaders([
-            'Authorization' => "Bearer {$impersonationToken}",
-        ])->getJson('http://impro.test/api/v1/batches');
+            'Authorization' => "Bearer {$impToken}",
+        ])->getJson('http://impro.test/api/v1/me');
         $getResponse->assertStatus(200);
 
-        // State-mutating POST requests are strictly blocked with 403 Forbidden
+        // 2. POST requests are blocked with 403 Forbidden
         $postResponse = $this->withHeaders([
-            'Authorization' => "Bearer {$impersonationToken}",
+            'Authorization' => "Bearer {$impToken}",
         ])->postJson('http://impro.test/api/v1/batches', [
-            'name' => 'Unauthorized Batch Attempt',
+            'name' => 'Illegal Batch',
         ]);
         $postResponse->assertStatus(403);
         expect($postResponse->json('title'))->toBe('Read-Only Impersonation Session');
+
+        // 3. PUT requests are blocked with 403 Forbidden
+        $putResponse = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->putJson("http://impro.test/api/v1/users/{$targetUser->id}", [
+            'name' => 'Illegal User Update',
+        ]);
+        $putResponse->assertStatus(403);
+
+        // 4. DELETE requests are blocked with 403 Forbidden
+        $deleteResponse = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->deleteJson('http://impro.test/api/v1/role-assignments/non_existent_id');
+        $deleteResponse->assertStatus(403);
+
+        // 5. POST /impersonation/stop works
+        $stopResponse = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->postJson('http://impro.test/api/v1/impersonation/stop');
+        $stopResponse->assertStatus(200);
+    } finally {
+        $this->tenantContext->forget();
+    }
+})->with('impersonatable_target_roles');
+
+it('enforces reason minimum length when starting impersonation', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_reason', 'Imp Reason Poly', 'reason.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head',
+            'email' => 'ithead@reason.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Target Lecturer',
+            'email' => 'lecturer@reason.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $token = $superAdmin->createToken('admin_token')->plainTextToken;
+
+        // Missing reason fails validation (422)
+        $resMissing = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->postJson('http://reason.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-100',
+        ]);
+        $resMissing->assertStatus(422)->assertJsonValidationErrors(['reason']);
+
+        // Reason < 10 characters fails validation (422)
+        $resShort = $this->withHeaders([
+            'Authorization' => "Bearer {$token}",
+        ])->postJson('http://reason.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-100',
+            'reason' => 'Too short',
+        ]);
+        $resShort->assertStatus(422)->assertJsonValidationErrors(['reason']);
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('rejects impersonating another super administrator or self', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_super', 'Imp Super Poly', 'super.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin1 = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head 1',
+            'email' => 'ithead1@super.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdmin2 = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head 2',
+            'email' => 'ithead2@super.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin1->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+        RoleAssignment::create([
+            'user_id' => $superAdmin2->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $token1 = $superAdmin1->createToken('admin1_token')->plainTextToken;
+
+        // Impersonating self rejected
+        $resSelf = $this->withHeaders([
+            'Authorization' => "Bearer {$token1}",
+        ])->postJson('http://super.test/api/v1/impersonation', [
+            'user_id' => $superAdmin1->id,
+            'ticket' => 'INC-101',
+            'reason' => 'Legitimate administrative reason',
+        ]);
+        $resSelf->assertStatus(403);
+
+        // Impersonating another Super Admin rejected
+        $resOther = $this->withHeaders([
+            'Authorization' => "Bearer {$token1}",
+        ])->postJson('http://super.test/api/v1/impersonation', [
+            'user_id' => $superAdmin2->id,
+            'ticket' => 'INC-102',
+            'reason' => 'Legitimate administrative reason',
+        ]);
+        $resOther->assertStatus(403);
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('rejects nested impersonation attempts', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_nest', 'Imp Nest Poly', 'nest.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head',
+            'email' => 'ithead@nest.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer A',
+            'email' => 'lecturera@nest.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $student = User::create([
+            'type' => 'student',
+            'name' => 'Student B',
+            'email' => 'studentb@nest.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $adminToken = $superAdmin->createToken('admin_token')->plainTextToken;
+
+        // Super Admin impersonates Lecturer
+        $res = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->postJson('http://nest.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-NEST-1',
+            'reason' => 'Initial valid impersonation session',
+        ]);
+        $res->assertStatus(201);
+        $impToken = (string) $res->json('data.token');
+
+        $this->app['auth']->forgetGuards();
+
+        // While impersonating, attempt to start another impersonation (nested impersonation)
+        $resNested = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->postJson('http://nest.test/api/v1/impersonation', [
+            'user_id' => $student->id,
+            'ticket' => 'INC-NEST-2',
+            'reason' => 'Secondary nested impersonation attempt',
+        ]);
+
+        $resNested->assertStatus(403);
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('blocks routes flagged with side effects on GET while impersonating', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_side', 'Imp Side Poly', 'side.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head',
+            'email' => 'ithead@side.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer Bob',
+            'email' => 'bob@side.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $adminRole = Role::where('key', 'admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $lecturer->id,
+            'role_id' => $adminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $adminToken = $superAdmin->createToken('admin_token')->plainTextToken;
+        $directLecturerToken = $lecturer->createToken('direct_token')->plainTextToken;
+
+        $res = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->postJson('http://side.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-SIDE',
+            'reason' => 'Testing side-effect route restriction',
+        ]);
+        $res->assertStatus(201);
+        $impToken = (string) $res->json('data.token');
+
+        $this->app['auth']->forgetGuards();
+
+        // Normal authenticated user calling GET on side-effect route succeeds
+        $directRes = $this->withHeaders([
+            'Authorization' => "Bearer {$directLecturerToken}",
+        ])->getJson('http://side.test/api/v1/test/side-effect-action');
+        $directRes->assertStatus(200);
+
+        $this->app['auth']->forgetGuards();
+
+        // Impersonated session calling GET on side-effect route is blocked with 403
+        $impRes = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->getJson('http://side.test/api/v1/test/side-effect-action');
+        $impRes->assertStatus(403);
+        expect($impRes->json('title'))->toBe('Impersonation Prohibited');
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('expires impersonation tokens after 30 minutes', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_exp', 'Imp Exp Poly', 'exp.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head',
+            'email' => 'ithead@exp.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer Bob',
+            'email' => 'bob@exp.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $adminToken = $superAdmin->createToken('admin_token')->plainTextToken;
+
+        $res = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->postJson('http://exp.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-EXP',
+            'reason' => 'Testing time-to-live expiration',
+        ]);
+        $res->assertStatus(201);
+        $impToken = (string) $res->json('data.token');
+
+        $this->app['auth']->forgetGuards();
+
+        // Immediate request succeeds
+        $resBefore = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->getJson('http://exp.test/api/v1/me');
+        $resBefore->assertStatus(200);
+
+        // Travel 31 minutes into the future
+        $this->travel(31)->minutes();
+
+        $this->app['auth']->forgetGuards();
+
+        // Expired request fails with 401 Unauthenticated
+        $resAfter = $this->withHeaders([
+            'Authorization' => "Bearer {$impToken}",
+        ])->getJson('http://exp.test/api/v1/me');
+        $resAfter->assertStatus(401);
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('verifies audit logging and security log entries for impersonation', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_imp_audit', 'Imp Audit Poly', 'audit.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+
+    try {
+        app(KeralaPolytechnicProfileSeeder::class)->run();
+
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'IT Head',
+            'email' => 'ithead@audit.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'i_carmel',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer Bob',
+            'email' => 'bob@audit.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+
+        $adminToken = $superAdmin->createToken('admin_token')->plainTextToken;
+
+        $res = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->postJson('http://audit.test/api/v1/impersonation', [
+            'user_id' => $lecturer->id,
+            'ticket' => 'INC-AUDIT-1',
+            'reason' => 'Verifying audit and security log records',
+        ]);
+        $res->assertStatus(201);
+
+        // Security log audit query
+        $this->tenantContext->setTenant($tenant);
+        $securityLog = Activity::where('log_name', 'security')
+            ->where('subject_id', $lecturer->id)
+            ->first();
+
+        expect($securityLog)->not->toBeNull()
+            ->and($securityLog->causer_id)->toBe($superAdmin->id)
+            ->and($securityLog->description)->toContain('INC-AUDIT-1')
+            ->and($securityLog->properties['read_only'])->toBeTrue();
     } finally {
         $this->tenantContext->forget();
     }

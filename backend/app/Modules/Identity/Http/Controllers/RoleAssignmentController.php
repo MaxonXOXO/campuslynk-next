@@ -12,6 +12,7 @@ use App\Modules\Identity\Models\Role;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -37,6 +38,78 @@ class RoleAssignmentController
         ]);
     }
 
+    public function listAssignments(Request $request): JsonResponse
+    {
+        $query = RoleAssignment::query()->with('role');
+
+        if ($request->has('user_id')) {
+            $query->where('user_id', (string) $request->query('user_id'));
+        }
+
+        if ($request->has('role_key')) {
+            $roleKey = (string) $request->query('role_key');
+            $query->whereHas('role', fn ($q) => $q->where('key', $roleKey));
+        }
+
+        if ($request->has('scope_label')) {
+            $query->where('scope_label', (string) $request->query('scope_label'));
+        }
+
+        if ($request->boolean('active_only', true)) {
+            $query->whereRaw('is_active is true');
+        }
+
+        $assignments = $query->orderByDesc('created_at')->paginate(25);
+
+        return response()->json([
+            'data' => collect($assignments->items())->map(fn (RoleAssignment $a) => [
+                'id' => $a->id,
+                'user_id' => $a->user_id,
+                'role_key' => $a->role->key,
+                'role_name' => $a->role->name,
+                'scope_type' => $a->scope_type,
+                'scope_label' => $a->scope_label,
+                'is_singleton' => (bool) $a->is_singleton,
+                'valid_from' => $a->valid_from?->toIso8601String(),
+                'valid_to' => $a->valid_to?->toIso8601String(),
+                'is_active' => (bool) $a->is_active,
+            ]),
+            'meta' => [
+                'current_page' => $assignments->currentPage(),
+                'last_page' => $assignments->lastPage(),
+                'per_page' => $assignments->perPage(),
+                'total' => $assignments->total(),
+            ],
+            'links' => [
+                'self' => $request->fullUrl(),
+            ],
+        ]);
+    }
+
+    public function destroy(Request $request, string $id, RevokeRoleAction $action): JsonResponse
+    {
+        /** @var User $revoker */
+        $revoker = $request->user();
+
+        /** @var RoleAssignment $assignment */
+        $assignment = RoleAssignment::findOrFail($id);
+
+        $action->execute(
+            revoker: $revoker,
+            assignment: $assignment
+        );
+
+        return response()->json([
+            'data' => [
+                'message' => 'Role assignment revoked successfully.',
+                'assignment_id' => $assignment->id,
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+        ]);
+    }
+
     public function assign(AssignRoleRequest $request, AssignRoleAction $action): JsonResponse
     {
         /** @var User $assigner */
@@ -56,17 +129,26 @@ class RoleAssignmentController
             ? Carbon::parse((string) $request->validated('valid_to'))
             : null;
 
-        $assignment = $action->execute(
-            assigner: $assigner,
-            targetUser: $targetUser,
-            targetRole: $role,
-            scopeType: (string) $request->validated('scope_type'),
-            scopeLabel: (string) $request->validated('scope_label'),
-            scopeId: $request->validated('scope_id') ? (string) $request->validated('scope_id') : null,
-            validFrom: $validFrom,
-            validTo: $validTo,
-            orderRecord: $request->validated('order_record') ? (string) $request->validated('order_record') : null
-        );
+        try {
+            $assignment = $action->execute(
+                assigner: $assigner,
+                targetUser: $targetUser,
+                targetRole: $role,
+                scopeType: (string) $request->validated('scope_type'),
+                scopeLabel: (string) $request->validated('scope_label'),
+                scopeId: $request->validated('scope_id') ? (string) $request->validated('scope_id') : null,
+                validFrom: $validFrom,
+                validTo: $validTo,
+                orderRecord: $request->validated('order_record') ? (string) $request->validated('order_record') : null
+            );
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'type' => 'https://api.academic-suite.com/errors/unprocessable',
+                'title' => 'Unprocessable Content',
+                'status' => Response::HTTP_UNPROCESSABLE_ENTITY,
+                'detail' => $e->getMessage(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY, ['Content-Type' => 'application/problem+json']);
+        }
 
         return response()->json([
             'data' => [
@@ -76,7 +158,7 @@ class RoleAssignmentController
                 'scope_type' => $assignment->scope_type,
                 'scope_label' => $assignment->scope_label,
                 'is_singleton' => $assignment->is_singleton,
-                'valid_from' => $assignment->valid_from->toIso8601String(),
+                'valid_from' => $assignment->valid_from?->toIso8601String(),
                 'valid_to' => $assignment->valid_to?->toIso8601String(),
                 'is_active' => $assignment->is_active,
             ],

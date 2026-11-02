@@ -54,8 +54,15 @@ class ScopeAuthorizer
     /**
      * Determine whether the user has the permission directly at or above the given scope label.
      */
-    public function canAtScope(Authenticatable $user, string $permission, string $scopeLabel): bool
-    {
+    public function canAtScope(
+        Authenticatable $user,
+        string $permission,
+        string $scopeLabel,
+        ?string $scopeType = null,
+        ?string $scopeId = null
+    ): bool {
+        self::validateScopeLabel($scopeLabel);
+
         $scopeLabels = $this->getActiveScopeLabelsForPermission($user, $permission);
 
         if (empty($scopeLabels)) {
@@ -66,7 +73,45 @@ class ScopeAuthorizer
             return true;
         }
 
-        return in_array($scopeLabel, $scopeLabels, true);
+        if (in_array($scopeLabel, $scopeLabels, true)) {
+            return true;
+        }
+
+        foreach ($scopeLabels as $label) {
+            self::validateScopeLabel($label);
+        }
+
+        $lquery = '*.'.implode('|', $scopeLabels).'.*';
+
+        if ($scopeType === 'batch' || str_starts_with($scopeLabel, 'b_')) {
+            $query = DB::connection('tenant')
+                ->table('batches')
+                ->whereRaw('managing_path ~ ?::lquery', [$lquery]);
+
+            if ($scopeId !== null) {
+                $query->where('id', $scopeId);
+            } else {
+                $query->where('scope_label', $scopeLabel);
+            }
+
+            return $query->exists();
+        }
+
+        if ($scopeType === 'sub_batch' || str_starts_with($scopeLabel, 'sb_')) {
+            $query = DB::connection('tenant')
+                ->table('sub_batches')
+                ->whereRaw('managing_path ~ ?::lquery', [$lquery]);
+
+            if ($scopeId !== null) {
+                $query->where('id', $scopeId);
+            } else {
+                $query->where('scope_label', $scopeLabel);
+            }
+
+            return $query->exists();
+        }
+
+        return false;
     }
 
     /**
@@ -95,12 +140,13 @@ class ScopeAuthorizer
             return $query;
         }
 
-        // Build lquery pattern: *.(label1|label2|...).*
-        $sanitizedLabels = array_map(function (string $label) {
-            return preg_replace('/[^a-zA-Z0-9_]/', '', $label);
-        }, $scopeLabels);
+        // Validate all scope labels against strict identifier pattern
+        foreach ($scopeLabels as $label) {
+            self::validateScopeLabel($label);
+        }
 
-        $lquery = '*.'.implode('|', $sanitizedLabels).'.*';
+        // Build lquery pattern: *.(label1|label2|...).* bound strictly via parameter
+        $lquery = '*.'.implode('|', $scopeLabels).'.*';
 
         if ($this->isReadPermission($permission)) {
             return $query->where(function (Builder $sub) use ($managingPathCol, $homePathCol, $lquery) {
@@ -110,6 +156,19 @@ class ScopeAuthorizer
         }
 
         return $query->whereRaw("{$managingPathCol} ~ ?::lquery", [$lquery]);
+    }
+
+    /**
+     * Strict validation of PostgreSQL ltree scope labels (ADR-0013).
+     * Must be a 1-63 character ASCII alphanumeric identifier with underscores only.
+     *
+     * @throws \InvalidArgumentException
+     */
+    public static function validateScopeLabel(string $label): void
+    {
+        if ($label === '' || ! preg_match('/^[a-zA-Z0-9_]{1,63}$/', $label)) {
+            throw new \InvalidArgumentException("Invalid scope label [{$label}]. Scope labels must match /^[a-zA-Z0-9_]{1,63}$/.");
+        }
     }
 
     /**

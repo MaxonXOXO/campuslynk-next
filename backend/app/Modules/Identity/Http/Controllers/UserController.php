@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Http\Requests\CreateUserRequest;
 use App\Modules\Identity\Http\Requests\UpdateUserRequest;
 use App\Modules\Identity\Http\Resources\UserResource;
+use App\Modules\Identity\Models\Role;
+use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserIdentifier;
+use App\Modules\Identity\Services\LoginRateLimiter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -77,36 +81,6 @@ class UserController
             'status' => 'active',
         ]);
 
-        if ($user->email !== null) {
-            UserIdentifier::create([
-                'user_id' => $user->id,
-                'kind' => 'email',
-                'value' => $user->email,
-                'value_normalised' => UserIdentifier::normalise('email', $user->email),
-                'is_primary' => true,
-            ]);
-        }
-
-        if ($user->mobile !== null) {
-            UserIdentifier::create([
-                'user_id' => $user->id,
-                'kind' => 'mobile',
-                'value' => $user->mobile,
-                'value_normalised' => UserIdentifier::normalise('mobile', $user->mobile),
-                'is_primary' => true,
-            ]);
-        }
-
-        if ($user->registration_number !== null) {
-            UserIdentifier::create([
-                'user_id' => $user->id,
-                'kind' => 'registration_number',
-                'value' => $user->registration_number,
-                'value_normalised' => UserIdentifier::normalise('registration_number', $user->registration_number),
-                'is_primary' => true,
-            ]);
-        }
-
         activity('identity')
             ->performedOn($user)
             ->causedBy($request->user())
@@ -143,6 +117,123 @@ class UserController
             ],
             'links' => [
                 'self' => url("/api/v1/users/{$user->id}"),
+            ],
+        ]);
+    }
+
+    public function unlock(Request $request, string $id, LoginRateLimiter $rateLimiter, TenantContext $tenantContext): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        // Authorization check: Super Admin, Principal, Admin, or Tutor (for student)
+        $callerRoleKeys = Role::whereIn(
+            'id',
+            RoleAssignment::where('user_id', $caller->id)->whereRaw('is_active is true')->pluck('role_id')
+        )->pluck('key')->all();
+
+        $allowedRoles = ['super_admin', 'principal', 'admin'];
+        $canUnlock = ! empty(array_intersect($allowedRoles, $callerRoleKeys));
+
+        if (! $canUnlock) {
+            if (in_array('tutor', $callerRoleKeys, true) && $targetUser->type === 'student') {
+                $canUnlock = true;
+            }
+        }
+
+        if (! $canUnlock) {
+            return response()->json([
+                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => 'You do not have authority to unlock this user account.',
+            ], 403, ['Content-Type' => 'application/problem+json']);
+        }
+
+        $tenant = $tenantContext->getTenant() ?? abort(404, 'Tenant context not resolved.');
+        $identifiers = array_filter([$targetUser->email, $targetUser->mobile, $targetUser->registration_number]);
+
+        foreach ($identifiers as $val) {
+            $normalised = UserIdentifier::normalise((string) $val);
+            $rateLimiter->unlock($tenant->id, $normalised, (string) $request->ip());
+        }
+
+        activity('security')
+            ->performedOn($targetUser)
+            ->causedBy($caller)
+            ->log("Administratively unlocked user account [{$targetUser->name}].");
+
+        return response()->json([
+            'data' => [
+                'message' => 'User account unlocked successfully.',
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}/unlock"),
+            ],
+        ]);
+    }
+
+    public function suspend(Request $request, string $id): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        $targetUser->status = 'suspended';
+        $targetUser->save();
+
+        // Revoke all existing access tokens immediately
+        $targetUser->tokens()->delete();
+
+        activity('security')
+            ->performedOn($targetUser)
+            ->causedBy($caller)
+            ->log("Suspended user account [{$targetUser->name}].");
+
+        return response()->json([
+            'data' => new UserResource($targetUser),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+                'message' => 'User suspended successfully.',
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}"),
+            ],
+        ]);
+    }
+
+    public function reactivate(Request $request, string $id): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        $targetUser->status = 'active';
+        $targetUser->save();
+
+        activity('security')
+            ->performedOn($targetUser)
+            ->causedBy($caller)
+            ->log("Reactivated user account [{$targetUser->name}].");
+
+        return response()->json([
+            'data' => new UserResource($targetUser),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+                'message' => 'User reactivated successfully.',
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}"),
             ],
         ]);
     }

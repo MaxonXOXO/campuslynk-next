@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $scope_id
  * @property string $scope_label
  * @property bool $is_singleton
- * @property Carbon $valid_from
+ * @property Carbon|null $valid_from
  * @property Carbon|null $valid_to
  * @property bool $is_active
  * @property string|null $assigned_by_user_id
@@ -59,6 +59,15 @@ class RoleAssignment extends Model
         'valid_from' => 'datetime',
         'valid_to' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (RoleAssignment $assignment): void {
+            if ($assignment->valid_from === null) {
+                $assignment->valid_from = Carbon::now();
+            }
+        });
+    }
 
     /**
      * @return BelongsTo<User, $this>

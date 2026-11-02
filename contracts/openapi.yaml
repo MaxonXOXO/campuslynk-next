@@ -485,6 +485,238 @@ paths:
         '403':
           $ref: '#/components/responses/ProblemDetails'
 
+  /users/{id}/unlock:
+    post:
+      operationId: unlockUserAccount
+      summary: Administratively unlock a locked-out user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User unlocked successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/suspend:
+    post:
+      operationId: suspendUserAccount
+      summary: Suspend a user account and revoke all access tokens immediately
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User suspended successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/reactivate:
+    post:
+      operationId: reactivateUserAccount
+      summary: Reactivate a previously suspended user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User reactivated successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /role-assignments:
+    get:
+      operationId: listRoleAssignments
+      summary: List role assignments with optional filtering by user, role, or scope
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Role assignments list
+    post:
+      operationId: createRoleAssignment
+      summary: Assign a role to a user within a specific scope
+      security:
+        - bearerAuth: []
+      responses:
+        '201':
+          description: Role assigned successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /role-assignments/{id}:
+    delete:
+      operationId: deleteRoleAssignment
+      summary: Revoke an existing role assignment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Role assignment revoked successfully
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /programs:
+    get:
+      operationId: listPrograms
+      summary: List academic programs
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Programs list
+
+  /academic-years:
+    get:
+      operationId: listAcademicYears
+      summary: List academic years
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Academic years list
+
+  /regulations:
+    get:
+      operationId: listRegulations
+      summary: List academic regulations (REV2021, REV2026)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Regulations list
+
+  /workshop-sections:
+    get:
+      operationId: listWorkshopSections
+      summary: List central workshop trade sections
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Workshop sections list
+
+  /governance-rules:
+    get:
+      operationId: listGovernanceRules
+      summary: List department semester governance rules
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Governance rules list
+
+  /governance-rules/{id}:
+    put:
+      operationId: updateGovernanceRule
+      summary: Update department semester governance rule
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Governance rule updated
+
+  /batches/{batchId}/sub-batches:
+    get:
+      operationId: listBatchSubBatches
+      summary: List sub-batches for a batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batches list
+    post:
+      operationId: createBatchSubBatch
+      summary: Create a typed sub-batch (lab, mentoring, workshop) for a batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: batchId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '201':
+          description: Sub-batch created
+
+  /sub-batches/{id}:
+    get:
+      operationId: getSubBatch
+      summary: View sub-batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch details
+    put:
+      operationId: updateSubBatch
+      summary: Update sub-batch details
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch updated
+    delete:
+      operationId: deleteSubBatch
+      summary: Delete sub-batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Sub-batch deleted
+
 components:
   securitySchemes:
     bearerAuth:

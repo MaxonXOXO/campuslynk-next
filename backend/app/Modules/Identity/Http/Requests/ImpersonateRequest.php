@@ -21,7 +21,7 @@ class ImpersonateRequest extends FormRequest
         return [
             'user_id' => ['required', 'string'],
             'ticket' => ['required', 'string', 'min:3', 'max:64'],
-            'reason' => ['required', 'string', 'min:5', 'max:255'],
+            'reason' => ['required', 'string', 'min:10', 'max:255'],
         ];
     }
 }

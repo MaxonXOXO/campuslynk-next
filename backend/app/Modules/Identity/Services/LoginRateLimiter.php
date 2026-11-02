@@ -98,11 +98,17 @@ class LoginRateLimiter
     }
 
     /**
-     * Administratively unlock an account across all IPs.
+     * Administratively unlock an account across all IPs (and optionally a specific IP).
      */
-    public function unlock(string $tenantId, string $identifier): void
+    public function unlock(string $tenantId, string $identifier, ?string $ip = null): void
     {
         $hash = hash('sha256', strtolower(trim($identifier)));
         RateLimiter::clear("auth:throttle:account:{$tenantId}:{$hash}");
+        RateLimiter::clear($this->identifierThrottleKey($tenantId, $identifier));
+
+        if ($ip !== null && trim($ip) !== '') {
+            RateLimiter::clear($this->throttleKey($tenantId, $identifier, $ip));
+            RateLimiter::clear($this->ipThrottleKey($tenantId, $ip));
+        }
     }
 }
