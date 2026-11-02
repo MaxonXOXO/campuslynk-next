@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Database\Seeders;
 
+use App\Modules\Identity\Commands\PermissionsSyncCommand;
+use App\Modules\Identity\Database\Seeders\RbacBaselineSeeder;
 use App\Modules\Organisation\Models\Regulation;
 use App\Modules\Organisation\Models\Stream;
 use App\Modules\Organisation\Models\WorkshopSection;
@@ -13,6 +15,10 @@ class TenantBaselineSeeder extends Seeder
 {
     public function run(): void
     {
+        // 0. RBAC Roles, Permissions, and Delegation Rules
+        $this->call(RbacBaselineSeeder::class);
+        app(PermissionsSyncCommand::class)->syncCurrentTenant();
+
         // 1. Streams
         $streams = [
             [
@@ -98,4 +104,3 @@ class TenantBaselineSeeder extends Seeder
         }
     }
 }
-

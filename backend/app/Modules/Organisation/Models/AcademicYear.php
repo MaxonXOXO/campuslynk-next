@@ -44,4 +44,3 @@ class AcademicYear extends Model
         'is_current' => 'boolean',
     ];
 }
-

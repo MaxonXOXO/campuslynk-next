@@ -43,4 +43,3 @@ class Regulation extends Model
         'config_json' => 'array',
     ];
 }
-

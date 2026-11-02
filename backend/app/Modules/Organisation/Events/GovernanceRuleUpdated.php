@@ -17,4 +17,3 @@ class GovernanceRuleUpdated
         public DepartmentSemesterGovernance $rule
     ) {}
 }
-

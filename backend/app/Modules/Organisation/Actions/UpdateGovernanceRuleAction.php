@@ -86,4 +86,3 @@ class UpdateGovernanceRuleAction
         return $rule;
     }
 }
-

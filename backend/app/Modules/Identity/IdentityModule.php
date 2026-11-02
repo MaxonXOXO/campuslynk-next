@@ -6,9 +6,13 @@ namespace App\Modules\Identity;
 
 use App\Modules\Identity\Actions\ChangePasswordAction;
 use App\Modules\Identity\Actions\LoginAction;
+use App\Modules\Identity\Commands\PermissionsSyncCommand;
 use App\Modules\Identity\Commands\UsersUnlockCommand;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Contracts\ChangesPasswordContract;
+use App\Modules\Identity\Listeners\ArchiveFirstYearBatchAssignmentsListener;
+use App\Modules\Organisation\Events\BatchSemesterPromoted;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class IdentityModule extends ServiceProvider
@@ -100,9 +104,15 @@ class IdentityModule extends ServiceProvider
 
     public function boot(): void
     {
+        Event::listen(
+            BatchSemesterPromoted::class,
+            ArchiveFirstYearBatchAssignmentsListener::class
+        );
+
         if ($this->app->runningInConsole()) {
             $this->commands([
                 UsersUnlockCommand::class,
+                PermissionsSyncCommand::class,
             ]);
         }
     }

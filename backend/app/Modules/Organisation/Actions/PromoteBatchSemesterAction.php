@@ -79,4 +79,3 @@ class PromoteBatchSemesterAction
         return $batch;
     }
 }
-

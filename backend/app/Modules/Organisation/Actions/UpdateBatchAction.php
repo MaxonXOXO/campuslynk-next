@@ -83,4 +83,3 @@ class UpdateBatchAction
         return $batch;
     }
 }
-

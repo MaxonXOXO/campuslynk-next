@@ -17,4 +17,3 @@ class BatchCreated
         public Batch $batch
     ) {}
 }
-

@@ -124,6 +124,14 @@ class User extends Authenticatable
         return $this->hasMany(UserIdentifier::class);
     }
 
+    /**
+     * @return HasMany<RoleAssignment, $this>
+     */
+    public function roleAssignments(): HasMany
+    {
+        return $this->hasMany(RoleAssignment::class, 'user_id');
+    }
+
     protected static function booted(): void
     {
         static::saved(function (User $user): void {

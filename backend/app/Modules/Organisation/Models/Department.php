@@ -67,4 +67,3 @@ class Department extends Model
         return $this->hasMany(Program::class);
     }
 }
-

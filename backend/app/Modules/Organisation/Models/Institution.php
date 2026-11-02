@@ -33,4 +33,3 @@ class Institution extends Model
         'scope_label',
     ];
 }
-

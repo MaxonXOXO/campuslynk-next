@@ -26,4 +26,3 @@ return new class extends Migration
         DB::statement('DROP EXTENSION IF EXISTS "ltree"');
     }
 };
-

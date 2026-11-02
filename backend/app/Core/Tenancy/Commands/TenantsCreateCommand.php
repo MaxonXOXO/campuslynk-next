@@ -124,10 +124,10 @@ class TenantsCreateCommand extends Command
                 try {
                     if ($seedProfile === 'kerala-polytechnic') {
                         $this->info('Seeding Kerala Polytechnic profile...');
-                        app(\App\Modules\Organisation\Database\Seeders\KeralaPolytechnicProfileSeeder::class)->run();
+                        app(KeralaPolytechnicProfileSeeder::class)->run();
                     } elseif ($seedProfile === 'baseline') {
                         $this->info('Seeding tenant baseline profile...');
-                        app(\App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder::class)->run();
+                        app(TenantBaselineSeeder::class)->run();
                     }
                 } finally {
                     $tenantContext->forget();

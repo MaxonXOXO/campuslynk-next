@@ -21,4 +21,3 @@ interface ScopeTreeContract
      */
     public function buildSubBatchPath(string $parentBatchPath, string $subBatchUlid): string;
 }
-

@@ -21,4 +21,3 @@ class BatchSemesterPromoted
         public string $newManagingDepartmentId
     ) {}
 }
-

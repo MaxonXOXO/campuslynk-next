@@ -62,4 +62,3 @@ class DepartmentSemesterGovernance extends Model
         return $this->belongsTo(Department::class, 'managing_department_id');
     }
 }
-

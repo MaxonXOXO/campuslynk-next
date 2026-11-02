@@ -63,4 +63,3 @@ class Program extends Model
         return $this->hasMany(Batch::class);
     }
 }
-

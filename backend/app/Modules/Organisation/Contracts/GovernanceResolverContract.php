@@ -11,4 +11,3 @@ interface GovernanceResolverContract
      */
     public function resolveManagingDepartmentId(string $homeDepartmentId, int $semester): string;
 }
-

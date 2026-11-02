@@ -33,4 +33,3 @@ class WorkshopSection extends Model
         'scope_label',
     ];
 }
-

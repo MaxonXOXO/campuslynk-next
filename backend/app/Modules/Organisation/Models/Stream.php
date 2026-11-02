@@ -42,4 +42,3 @@ class Stream extends Model
         return $this->hasMany(Department::class);
     }
 }
-

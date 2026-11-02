@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Organisation\Models;
 
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
+use App\Modules\Identity\Concerns\HasScopedVisibility;
+use App\Modules\Identity\Contracts\ScopedResource;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,10 +25,21 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Batch $batch
  */
-class SubBatch extends Model
+class SubBatch extends Model implements ScopedResource
 {
+    use HasScopedVisibility;
     use HasUlids;
     use UsesTenantConnection;
+
+    public function getManagingScopePath(): string
+    {
+        return $this->managing_path;
+    }
+
+    public function getHomeScopePath(): string
+    {
+        return $this->home_path;
+    }
 
     protected $table = 'sub_batches';
 
@@ -51,4 +64,3 @@ class SubBatch extends Model
         return $this->belongsTo(Batch::class);
     }
 }
-
