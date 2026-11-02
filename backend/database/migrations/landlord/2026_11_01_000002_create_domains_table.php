@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,7 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('landlord')->create('domains', function (Blueprint $table): void {
+        $conn = $this->getConnection() ?? 'landlord';
+
+        Schema::connection($conn)->create('domains', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('tenant_id')->constrained('tenants')->cascadeOnDelete();
             $table->string('domain', 255)->unique();
@@ -20,6 +23,10 @@ return new class extends Migration
 
             $table->index('tenant_id');
         });
+
+        DB::connection($conn)->statement(
+            'CREATE UNIQUE INDEX unique_tenant_primary_domain ON domains (tenant_id) WHERE is_primary = true'
+        );
     }
 
     /**
@@ -27,6 +34,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('landlord')->dropIfExists('domains');
+        $conn = $this->getConnection() ?? 'landlord';
+        Schema::connection($conn)->dropIfExists('domains');
     }
 };

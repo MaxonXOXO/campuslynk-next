@@ -18,6 +18,11 @@ The legacy app used a universal default password (`carmel2026`), plaintext passw
 8. **Passkeys:** use `laragear/webauthn` with full cryptographic FIDO2 verification (`rpId` bound to tenant domain, e.g. `app.carmelpoly.in`, dynamic `challenge`, `sign_count` tracking) for staff and optionally students.
 9. **Second factor (MFA):** TOTP (`pragmarx/google2fa`) or Passkey. Mandatory for `super_admin`; optional or tenant-enforced for `principal`, `hod`, and staff.
 
+10. **Unified Login Identifiers & Collision Resolution ([ADR-0011](./0011-token-lifetimes-and-login-throttling.md)):**
+    - Identifiers (`email`, `mobile`, `registration_number`) are stored in `user_identifiers` with a database-level `UNIQUE (value_normalised)` constraint across all kinds.
+    - Zero precedence heuristics: authentication resolves the normalized handle directly without guessing or collision between registration numbers and phone numbers.
+    - If a phone is shared between parent and student (common in rural colleges), it cannot be a shared login handle: the student logs in via their official registration number or email, while the parent logs in via their own designated handle. The phone number remains recorded in profile contact details.
+
 ## Consequences
 - Works out of the box on Carmel's on-prem server (`app.carmelpoly.in`) via temporary password / email / In-App + FCM without blocking on India DLT SMS registration.
 - Firebase (`FCM` for web/React Native push notifications + optional `Firebase Auth` for phone OTP) is integrated behind clean contracts so on-prem local-only operation never breaks if internet drops.

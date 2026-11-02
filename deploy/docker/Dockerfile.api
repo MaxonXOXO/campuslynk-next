@@ -40,7 +40,10 @@ RUN install-php-extensions \
     bcmath \
     intl \
     zip \
-    opcache
+    opcache \
+    pcntl \
+    && apt-get update && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set environment defaults (production profile)
 ENV SERVER_NAME=":8000"
@@ -48,6 +51,8 @@ ENV COMPOSER_ALLOW_SUPERUSER=1
 ENV APP_ENV=production
 ENV APP_DEBUG=false
 ENV DEPLOY_PROFILE=onprem
+ENV APP_BASE_PATH="/app"
+ENV FRANKENPHP_CONFIG="worker ./vendor/laravel/octane/bin/frankenphp-worker.php"
 
 # Copy application source and vendor dependencies
 COPY . /app
@@ -63,5 +68,6 @@ HEALTHCHECK --interval=10s --timeout=5s --start-period=15s --retries=3 \
 
 EXPOSE 8000
 
+# Worker mode: Laravel Octane powered by FrankenPHP worker loop (ADR-0010, A2)
 CMD ["frankenphp", "run", "--config", "/etc/caddy/Caddyfile"]
 

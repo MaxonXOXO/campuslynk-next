@@ -79,40 +79,37 @@ We **adopt Option B: A purpose-built custom tenancy core in `app/Core/Tenancy`**
 ### Architectural Specification
 
 #### 1. Landlord Schema (`database/migrations/landlord/`)
-Uses ULID public IDs across all tables:
-- `tenants`: `id` (ULID char 26 PK), `slug` (varchar 40 unique), `name` (varchar 255), `status` (`provisioning|active|suspended|failed`), `deploy_profile` (`onprem|cloud`), timestamps.
-- `domains`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `domain` (varchar 255 unique), `is_primary` (boolean default false), timestamps. Multiple domains per tenant are supported (e.g., `app.carmelpoly.in`, `portal.carmelpoly.in`).
-- `tenant_databases`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `host` (varchar 255), `port` (integer), `database` (varchar 63), `username` (varchar 63), `password` (text, encrypted via `Crypt::encryptString`), timestamps. Supports moving tenants across database hosts.
-- `licenses`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `plan` (varchar 50), `modules` (json), `valid_until` (timestamp), `signature` (text nullable), timestamps.
-- `schema_versions`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `version` (varchar 50), `migrated_at` (timestamp), timestamps.
-- `platform_users`: `id` (ULID char 26 PK), `email` (unique), `password_hash`, `name`, timestamps (table only, no auth logic in Sprint 0).
+Uses ULID public IDs and strict PostgreSQL database-level constraints:
+- `tenants`: `id` (ULID char 26 PK), `slug` (varchar 40 unique), `name` (varchar 255), `status` (`provisioning|active|suspended|failed` with DB `CHECK` constraint), `deploy_profile` (`onprem|cloud` with DB `CHECK` constraint), timestamps.
+- `domains`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `domain` (varchar 255 unique), `is_primary` (boolean default false), timestamps. Enforces a **partial unique index** (`CREATE UNIQUE INDEX unique_tenant_primary_domain ON domains (tenant_id) WHERE is_primary = true`) ensuring at most one primary domain per tenant.
+- `tenant_databases`: `id` (ULID char 26 PK), `tenant_id` (`UNIQUE`, FK `tenants.id` on delete cascade), `host` (varchar 255), `port` (integer), `database` (varchar 63), `username` (varchar 63), `password` (text, encrypted via `Crypt::encryptString`), timestamps.
+- `licenses`: `id` (ULID char 26 PK), `tenant_id` (`UNIQUE`, FK `tenants.id` on delete cascade), `plan` (varchar 50), `modules` (json), `valid_until` (timestamp), `signature` (text nullable), timestamps.
+- `schema_versions`: `id` (ULID char 26 PK), `tenant_id` (FK `tenants.id` on delete cascade), `version` (varchar 50), `migrated_at` (timestamp), timestamps. Enforces composite `UNIQUE (tenant_id, version)`.
+- `platform_users`: `id` (ULID char 26 PK), `email` (unique), `password_hash`, `name`, timestamps.
 
-#### 2. Connection Topology & Runtime Role Isolation
-- **`landlord`**: Application connection to the landlord database via PgBouncer.
-- **`tenant`**: Dynamic runtime connection configured per request using credentials from `tenant_databases`. A fresh config array is created per request, and `DB::purge('tenant')` is invoked on both set and teardown to prevent stale connection reuse.
-- **`pgsql_admin`**: Privileged direct connection to PostgreSQL (port 5432, `CREATEDB` + `CREATEROLE`) used **only** by `app/Core/Tenancy` provisioning code.
-- **"No default tenant" rule**: Default connection throws `UnconfiguredDefaultConnectionException` if queried before a tenant context is established. Models must explicitly declare their connection or use the `UsesTenantConnection` trait.
+#### 2. Connection Topology & Runtime Role Isolation (Prompt 04b)
+- **Superuser (`academic_admin`)**: Used solely by the PostgreSQL container initialization script (`postgres-init.sql`). Never exposed to any application container, PgBouncer, or Ops runtime.
+- **`landlord_app`**: Public API & queue runtime connection role to the landlord database via PgBouncer (`LANDLORD_DB_USERNAME=landlord_app`, port 6432). Configured with `LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION`. Has DML-only permissions (`SELECT, INSERT, UPDATE, DELETE`) on the landlord schema and is strictly prohibited from connecting to any tenant database.
+- **`pgbouncer_auth`**: Dedicated PgBouncer `auth_user` (`LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE`). Only permitted to execute the `SECURITY DEFINER` function `user_search(uname text)` to authenticate clients against `pg_shadow`. Cannot read application tables or tenant databases.
+- **`provisioner` (`pgsql_admin`)**: Privileged direct connection to PostgreSQL (`ADMIN_DB_USERNAME=provisioner`, port 5432). Configured with `NOSUPERUSER CREATEDB CREATEROLE NOREPLICATION` and `pg_signal_backend`. **Isolation requirement (A7):** The public `api` container runtime environment never receives `ADMIN_DB_*` credentials; administrative operations and DDL provisioning are restricted to the dedicated `ops` compose service profile (`docker compose run --rm ops php artisan ...`). When creating tenant roles, `provisioner` adds `ROLE provisioner` so it retains membership to set database ownership in compliance with PostgreSQL 16/17 `CREATEROLE` semantics.
+- **`tenant`**: Dynamic runtime connection configured per request using credentials from `tenant_databases`. A fresh config array is created per request, and `DB::purge('tenant')` is invoked on both set and teardown to prevent stale connection reuse. Configured with `PDO::ATTR_EMULATE_PREPARES => true` to safely interoperate with PgBouncer transaction pooling (ADR-0009).
+- **"No default tenant" rule (A1):** Default connection `unconfigured` throws `UnconfiguredDefaultConnectionException` if queried before a tenant context is established. Models must explicitly extend `LandlordModel` or use the `UsesTenantConnection` trait.
 
 #### 3. Strict Resolver (`ResolveTenant` Middleware)
-- **Domain lookup**: Resolves tenant by querying the `domains` table (e.g., `app.carmelpoly.in`).
+- **Domain lookup**: Resolves tenant by querying the `domains` table (default: `app.carmelpoly.in`).
 - **On-Premise Profile (`onprem`)**: Accepts **only the registered domains of the single tenant**. Unknown hosts receive HTTP **404**.
 - **Host and Header Agreement**: When both host domain and `X-Tenant` header are present, both must resolve to the identical tenant; otherwise the request is rejected with HTTP 400.
-- **Redis Caching**: Lookups cached in Redis for 5 minutes (`tenant:domain:{domain}`), invalidated on tenant or domain mutation.
-- **Status Handling**: Unknown tenant → **404** (RFC 7807 problem details); `suspended` or expired license → **403**; `provisioning` → **503**; `failed` → **500**.
+- **Redis Caching**: Lookups cached in Redis for 5 minutes (`tenant:domain:{domain}` and `tenant:entity:{tenantId}`), invalidated immediately on tenant, domain, or license mutations.
+- **Status Handling**: Unknown tenant → **404** (RFC 7807 problem details); `suspended` or expired/missing license → **403**; `provisioning` → **503**; `failed` → **500**.
 - **Exempt Routes**: `/up` and `/api/v1/health` require no tenant context.
-- **Meta Probe**: `GET /api/v1/meta` (tenant-resolved, unauthenticated) returning `server_version`, `api_version`, `min_client_version`, `capabilities: []`, `deprecations: []` in the standard envelope.
+- **Meta Probe**: `GET /api/v1/meta` (tenant-resolved, unauthenticated) returning `server_version`, `api_version`, `min_client_version`, `capabilities: []`, `deprecations: []`, and `meta.tenant: { slug, name }` in the standard envelope.
 
-#### 4. Exception-Safe Teardown & Worker Safety
-- `ResolveTenant` executes:
-  ```php
-  try {
-      $this->tenantContext->setTenant($tenant);
-      return $next($request);
-  } finally {
-      $this->tenantContext->forget();
-  }
-  ```
-- Additionally, an application-level request termination hook (`app()->terminating(...)` and FrankenPHP/Octane worker hook) guarantees teardown even on fatal errors.
+#### 4. Exception-Safe Teardown & Worker Safety (A2)
+- FrankenPHP runtime operates in **worker mode (Laravel Octane)** across on-prem and cloud Docker images (`php artisan octane:start --server=frankenphp`).
+- Three layers of defense-in-depth teardown:
+  1. `ResolveTenant` middleware wraps execution in `try { ... } finally { $this->tenantContext->forget(); }`.
+  2. Octane `RequestTerminated` event listener invokes `$context->forget()`.
+  3. Laravel application `terminating()` hook invokes `$context->forget()`.
 - Teardown resets:
   1. Purges `tenant` connection (`DB::purge('tenant')`) and clears dynamic connection config.
   2. Resets cache prefix to landlord default.
@@ -120,21 +117,21 @@ Uses ULID public IDs across all tables:
   4. Flushes tenant keys from log context.
   5. Clears `TenantContext` singleton state.
 
-#### 5. Queue Fail-Closed
-- Tenant-scoped queued jobs carry `tenant_id` in their payload.
-- Queue worker re-initializes `TenantContext` upon `JobProcessing`.
-- If a job has no `tenant_id` and does not implement `LandlordJobContract`, it **fails closed** immediately (`MissingTenantContextException`), preventing cross-tenant or unauthenticated queue execution.
+#### 5. Queue Fail-Closed (A3)
+- Active tenant context automatically injects `tenant_id` into all queued work payloads via `Queue::createPayloadUsing(...)` (covering plain jobs without traits, queued listeners, queued notifications, queued mail, and broadcast events).
+- Queue worker restores `TenantContext` upon `JobProcessing`.
+- If a queued job lacks `tenant_id` and does not implement `LandlordJobContract`, it **fails closed** immediately (`MissingTenantContextException`).
 
-#### 6. DDL Safety & Role Hardening
+#### 6. DDL Safety & Role Hardening (A9)
 - Slugs validated with strict regex: `^[a-z][a-z0-9_]{2,40}$`.
-- All DDL statements construct identifiers using PostgreSQL `quote_ident()` / `format('%I')` and literal quoting `format('%L')` for passwords:
+- All DDL statements construct identifiers using PostgreSQL `quote_ident()` / `format('%I')` and literal quoting `format('%L')` for passwords.
+- Tenant login roles are created with explicit least-privilege hygiene flags:
   ```sql
+  CREATE ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOINHERIT PASSWORD %L;
   CREATE DATABASE %I OWNER %I;
-  CREATE ROLE %I WITH LOGIN PASSWORD %L;
   REVOKE CONNECT ON DATABASE %I FROM PUBLIC;
   GRANT CONNECT ON DATABASE %I TO %I;
   ```
-- Hostile slug attempts (quotes, semicolons, reserved words, uppercase) are rejected at validation before reaching PostgreSQL.
 
 #### 7. PgBouncer Transaction Pooling Constraints
 - Under PgBouncer transaction pooling (`pool_mode = transaction`), tenant connections must never issue session-level commands (`SET`, `SET ROLE`, temporary tables, `LISTEN/NOTIFY`, or multi-transaction advisory locks).
@@ -142,7 +139,8 @@ Uses ULID public IDs across all tables:
 
 #### 8. Commands
 - `app:install`: On-premise appliance installer; fails if `DEPLOY_PROFILE != onprem` or a tenant exists; runs landlord migrations, then provisions the Carmel institution tenant (`carmel`).
-- `tenants:create {name} {slug} {domain}`: Cloud profile tenant provisioning; refuses second tenant when `onprem`.
+- `landlord:migrate`: Explicit landlord schema migration command executed via `ops`; applies migrations from `database/migrations/landlord` to the landlord database.
+- `tenants:create {name} {slug} {domain} {--profile=}`: Cloud profile tenant provisioning; requires the landlord schema to be migrated first (fails with explicit instruction if missing); refuses second tenant when `onprem`.
 - `tenants:migrate {--tenant=}`: Runs tenant migrations across tenants, updates `schema_versions`, continues past failing tenants, and outputs a summary table with non-zero exit code on failure.
 
 ---

@@ -42,7 +42,8 @@ it('cleans up created database and role upon mid-way provisioning failure withou
         $roleName = 'tenant_fail_test_u';
 
         // Pre-create role and db to simulate mid-way state
-        $admin->statement("CREATE ROLE \"{$roleName}\" WITH LOGIN PASSWORD 'secret'");
+        $adminRole = config('database.connections.pgsql_admin.username', 'provisioner');
+        $admin->statement("CREATE ROLE \"{$roleName}\" WITH LOGIN PASSWORD 'secret' ROLE {$adminRole}");
         $admin->statement("CREATE DATABASE \"{$dbName}\" OWNER \"{$roleName}\"");
 
         $tenant = Tenant::create([

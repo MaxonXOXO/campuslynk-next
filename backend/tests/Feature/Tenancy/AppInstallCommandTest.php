@@ -25,7 +25,7 @@ it('installs on-premise appliance and provisions carmel tenant', function () {
         ->and($tenant->status)->toEqual('active')
         ->and($tenant->name)->toEqual('Carmel Polytechnic College');
 
-    $domain = Domain::where('domain', 'carmelpoly.in')->first();
+    $domain = Domain::where('domain', 'app.carmelpoly.in')->first();
     expect($domain)->not->toBeNull()
         ->and($domain->tenant_id)->toEqual($tenant->id);
 

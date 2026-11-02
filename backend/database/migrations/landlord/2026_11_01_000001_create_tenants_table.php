@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -11,7 +12,9 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('landlord')->create('tenants', function (Blueprint $table): void {
+        $conn = $this->getConnection() ?? 'landlord';
+
+        Schema::connection($conn)->create('tenants', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->string('slug', 40)->unique();
             $table->string('name', 255);
@@ -19,6 +22,13 @@ return new class extends Migration
             $table->string('deploy_profile', 20)->default('onprem'); // onprem, cloud
             $table->timestamps();
         });
+
+        DB::connection($conn)->statement(
+            "ALTER TABLE tenants ADD CONSTRAINT tenants_status_check CHECK (status IN ('provisioning', 'active', 'suspended', 'failed'))"
+        );
+        DB::connection($conn)->statement(
+            "ALTER TABLE tenants ADD CONSTRAINT tenants_deploy_profile_check CHECK (deploy_profile IN ('onprem', 'cloud'))"
+        );
     }
 
     /**
@@ -26,6 +36,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('landlord')->dropIfExists('tenants');
+        $conn = $this->getConnection() ?? 'landlord';
+        Schema::connection($conn)->dropIfExists('tenants');
     }
 };

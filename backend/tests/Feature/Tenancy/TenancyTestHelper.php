@@ -12,15 +12,19 @@ use Illuminate\Support\Facades\DB;
 trait TenancyTestHelper
 {
     /**
-     * Ensure landlord schema is migrated.
+     * Ensure landlord schema is migrated via ops/provisioner connection.
      */
     protected function migrateLandlord(): void
     {
         Artisan::call('migrate', [
-            '--database' => 'landlord',
+            '--database' => 'pgsql_admin',
             '--path' => 'database/migrations/landlord',
             '--force' => true,
         ]);
+
+        $admin = DB::connection('pgsql_admin');
+        $admin->statement('GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO landlord_app');
+        $admin->statement('GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO landlord_app');
     }
 
     /**
@@ -51,8 +55,18 @@ trait TenancyTestHelper
         $dbs = $admin->select("SELECT datname FROM pg_database WHERE datname LIKE 'tenant_%'");
         foreach ($dbs as $db) {
             $name = $db->datname;
-            $admin->statement("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid()");
-            $admin->statement("DROP DATABASE IF EXISTS \"{$name}\"");
+            try {
+                $admin->statement(
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid() AND usename NOT IN (SELECT rolname FROM pg_roles WHERE rolsuper = true)"
+                );
+            } catch (\Throwable) {
+                // Ignore if process cannot be signalled or already exited
+            }
+            try {
+                $admin->statement("DROP DATABASE IF EXISTS \"{$name}\"");
+            } catch (\Throwable) {
+                // Ignore
+            }
         }
 
         /** @var array<int, object{rolname: string}> $roles */

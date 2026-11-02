@@ -18,7 +18,11 @@ jobs:
       run:
         working-directory: backend
     env:
+      APP_ENV: testing
       DEPLOY_PROFILE: onprem
+      CACHE_STORE: array
+      QUEUE_CONNECTION: sync
+      SESSION_DRIVER: array
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -50,9 +54,11 @@ jobs:
       - name: Run Larastan (level 8 static analysis)
         run: composer analyse
 
+      - name: Verify OpenAPI contract is clean (diff check)
+        run: git diff --exit-code ../contracts/openapi.yaml
+
   backend-tests:
     name: 2. Backend Feature & Architecture Tests
-    needs: backend-lint-and-analyse
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -76,7 +82,7 @@ jobs:
         env:
           DB_HOST: postgres
           DB_PORT: 5432
-          DB_USER: academic_suite
+          DB_USER: pgbouncer_auth
           DB_PASSWORD: secret
           LISTEN_PORT: 6432
           POOL_MODE: transaction
@@ -84,15 +90,15 @@ jobs:
           DEFAULT_POOL_SIZE: 20
           MAX_PREPARED_STATEMENTS: 100
           AUTH_TYPE: scram-sha-256
-          AUTH_USER: academic_suite
-          AUTH_QUERY: "SELECT usename, passwd FROM pg_shadow WHERE usename=$1"
+          AUTH_USER: pgbouncer_auth
+          AUTH_QUERY: "SELECT usename, passwd FROM user_search($1)"
           AUTH_DBNAME: landlord
           SERVER_LOGIN_RETRY: 0
-          ADMIN_USERS: academic_suite
+          ADMIN_USERS: pgbouncer_auth
         ports:
           - 6432:6432
         options: >-
-          --health-cmd "pg_isready -h 127.0.0.1 -p 6432 -U academic_suite"
+          --health-cmd "pg_isready -h 127.0.0.1 -p 6432 -U pgbouncer_auth"
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
@@ -123,6 +129,18 @@ jobs:
       - name: Install dependencies
         run: composer install --no-interaction --prefer-dist --optimize-autoloader
 
+      - name: Run Landlord Migrations as Ops Provisioner
+        env:
+          APP_ENV: testing
+          DEPLOY_PROFILE: onprem
+          DB_CONNECTION: unconfigured
+          LANDLORD_DB_HOST: 127.0.0.1
+          LANDLORD_DB_PORT: 5432
+          LANDLORD_DB_DATABASE: landlord
+          LANDLORD_DB_USERNAME: provisioner
+          LANDLORD_DB_PASSWORD: secret
+        run: php artisan landlord:migrate
+
       - name: Run Pest Tests (Feature & Architecture)
         env:
           APP_ENV: testing
@@ -131,20 +149,19 @@ jobs:
           LANDLORD_DB_HOST: 127.0.0.1
           LANDLORD_DB_PORT: 6432
           LANDLORD_DB_DATABASE: landlord
-          LANDLORD_DB_USERNAME: academic_suite
+          LANDLORD_DB_USERNAME: landlord_app
           LANDLORD_DB_PASSWORD: secret
           TENANT_DB_HOST: 127.0.0.1
           TENANT_DB_PORT: 6432
           ADMIN_DB_HOST: 127.0.0.1
           ADMIN_DB_PORT: 5432
           ADMIN_DB_DATABASE: landlord
-          ADMIN_DB_USERNAME: academic_suite
+          ADMIN_DB_USERNAME: provisioner
           ADMIN_DB_PASSWORD: secret
         run: composer test
 
   frontend-checks:
     name: 3. Frontend Quality Checks & Build
-    needs: backend-tests
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -185,8 +202,13 @@ jobs:
 
   compose-smoke:
     name: 4. Docker Compose Smoke Test
-    needs: frontend-checks
+    needs: [backend-tests, frontend-checks]
     runs-on: ubuntu-latest
+    env:
+      # CI-only throwaway secrets (never used in production)
+      APP_KEY: base64:c6K7LzN5yVq8D2wT9X1uJ4mP7sR0vE3bA5hY8kM2tQ0=
+      DB_PASSWORD: secret
+      POSTGRES_ADMIN_PASSWORD: supersecret
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -204,31 +226,110 @@ jobs:
           for i in {1..30}; do
             if curl -sf http://localhost:8000/api/v1/health | grep '"status":"ok"'; then
               echo "API health check passed!"
-              exit 0
+              break
             fi
             echo "Waiting for API... ($i/30)"
             sleep 2
+            if [ $i -eq 30 ]; then
+              echo "API health check timed out!"
+              docker compose -f deploy/compose/onprem/docker-compose.yml logs api
+              exit 1
+            fi
           done
-          echo "API health check timed out!"
-          docker compose -f deploy/compose/onprem/docker-compose.yml logs api
-          exit 1
+
+      - name: Verify Public API Container Role Hygiene (No Admin Credentials)
+        run: |
+          if docker compose -f deploy/compose/onprem/docker-compose.yml exec -T api env | grep -i 'ADMIN_DB'; then
+            echo "CRITICAL: ADMIN_DB credentials found in public api container!"
+            exit 1
+          fi
+          echo "Verified: public api container has no admin credentials."
+
+      - name: Provision Tenant via Ops Service and Verify Isolation
+        run: |
+          docker compose -f deploy/compose/onprem/docker-compose.yml run --rm ops php artisan app:install --slug=carmel --name="Carmel Polytechnic College" --domain=app.carmelpoly.in
+          curl -sf -H "Host: app.carmelpoly.in" http://localhost:8000/api/v1/meta | grep '"slug":"carmel"'
+          echo "Tenant provisioned and verified through ops profile."
 
       - name: Verify Web Frontend Server Component Status Display
         run: |
           for i in {1..30}; do
             if curl -sf http://localhost:3000/ | grep -i 'Academic Suite'; then
               echo "Web page health check passed!"
-              exit 0
+              break
             fi
             echo "Waiting for Web client... ($i/30)"
             sleep 2
+            if [ $i -eq 30 ]; then
+              echo "Web client check timed out!"
+              docker compose -f deploy/compose/onprem/docker-compose.yml logs web
+              exit 1
+            fi
           done
-          echo "Web client check timed out!"
-          docker compose -f deploy/compose/onprem/docker-compose.yml logs web
-          exit 1
 
       - name: Tear down Compose Stack
         if: always()
         run: |
           docker compose -f deploy/compose/onprem/docker-compose.yml down -v --remove-orphans
+
+  octane-worker-leak-test:
+    name: 5. Octane Worker Mode Leak Test
+    needs: backend-tests
+    runs-on: ubuntu-latest
+    env:
+      # CI-only throwaway secrets (never used in production)
+      APP_KEY: base64:c6K7LzN5yVq8D2wT9X1uJ4mP7sR0vE3bA5hY8kM2tQ0=
+      DB_PASSWORD: secret
+      POSTGRES_ADMIN_PASSWORD: supersecret
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: curl
+          coverage: none
+
+      - name: Build and Start Compose Stack (Cloud Profile with Octane Worker Mode)
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml up -d --build --wait api
+
+      - name: Prove FrankenPHP Octane Worker Mode is Running
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml ps
+          echo "Process inspection in API container:"
+          docker compose -f deploy/compose/cloud/docker-compose.yml exec -T api ps aux
+          echo "Inspecting FrankenPHP worker threads in container startup log:"
+          docker compose -f deploy/compose/cloud/docker-compose.yml logs api | grep -E '"worker_threads":[1-9][0-9]*'
+          echo "Asserting public endpoints do not expose worker_mode:"
+          if curl -sf http://localhost:8000/api/v1/health | grep -i "worker_mode"; then
+            echo "ERROR: worker_mode leaked in /api/v1/health"
+            exit 1
+          fi
+          echo "FrankenPHP Octane worker mode confirmed running and isolated!"
+
+      - name: Run Landlord Migrations via Ops Profile
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan landlord:migrate
+
+      - name: Provision Two Independent Tenants via Ops Profile
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create "Carmel Polytechnic College" carmel carmel.test --profile=cloud --admin-name="Admin A" --admin-email="admin@carmel.test"
+          docker compose -f deploy/compose/cloud/docker-compose.yml run --rm ops php artisan tenants:create "St. Marys Polytechnic" stmarys stmarys.test --profile=cloud --admin-name="Admin B" --admin-email="admin@stmarys.test"
+
+      - name: Execute 500+ Keep-Alive Persistent Requests with Parallelism & Interleaved Error Paths
+        run: |
+          php deploy/scripts/octane-leak-test.php http://127.0.0.1:8000 500
+
+      - name: Dump API logs on failure
+        if: failure()
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml logs api
+
+      - name: Tear down Compose Stack
+        if: always()
+        run: |
+          docker compose -f deploy/compose/cloud/docker-compose.yml down -v --remove-orphans
 

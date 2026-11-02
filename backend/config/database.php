@@ -50,7 +50,7 @@ return [
             'host' => env('LANDLORD_DB_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => (int) env('LANDLORD_DB_PORT', env('DB_PORT', '6432')),
             'database' => env('LANDLORD_DB_DATABASE', 'landlord'),
-            'username' => env('LANDLORD_DB_USERNAME', env('DB_USERNAME', 'academic_suite')),
+            'username' => env('LANDLORD_DB_USERNAME', 'landlord_app'),
             'password' => env('LANDLORD_DB_PASSWORD', env('DB_PASSWORD', 'secret')),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',
@@ -64,8 +64,8 @@ return [
 
         'tenant' => [
             'driver' => 'pgsql',
-            'host' => env('TENANT_DB_HOST', '127.0.0.1'),
-            'port' => (int) env('TENANT_DB_PORT', '6432'),
+            'host' => env('TENANT_DB_HOST', env('LANDLORD_DB_HOST', '127.0.0.1')),
+            'port' => (int) env('TENANT_DB_PORT', env('LANDLORD_DB_PORT', 6432)),
             'database' => env('TENANT_DB_DATABASE', 'unconfigured_tenant'),
             'username' => env('TENANT_DB_USERNAME', 'unconfigured_user'),
             'password' => env('TENANT_DB_PASSWORD', ''),
@@ -85,7 +85,7 @@ return [
             'host' => env('ADMIN_DB_HOST', env('DB_HOST', '127.0.0.1')),
             'port' => (int) env('ADMIN_DB_PORT', 5432),
             'database' => env('ADMIN_DB_DATABASE', 'landlord'),
-            'username' => env('ADMIN_DB_USERNAME', env('DB_USERNAME', 'academic_suite')),
+            'username' => env('ADMIN_DB_USERNAME', 'provisioner'),
             'password' => env('ADMIN_DB_PASSWORD', env('DB_PASSWORD', 'secret')),
             'charset' => env('DB_CHARSET', 'utf8'),
             'prefix' => '',

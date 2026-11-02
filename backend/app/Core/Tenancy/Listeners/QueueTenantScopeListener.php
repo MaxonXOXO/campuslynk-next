@@ -44,10 +44,18 @@ class QueueTenantScopeListener
             return;
         }
 
-        // 2. Tenant aware jobs must provide a valid tenant context
+        // 2. Check if tenant_id is available on the command or in payload
+        $tenantId = null;
         if ($command instanceof TenantAwareJobContract) {
             $tenantId = $command->getTenantId();
+        }
 
+        if ($tenantId === null) {
+            $payload = $event->job->payload();
+            $tenantId = $payload['tenant_id'] ?? $payload['data']['tenant_id'] ?? null;
+        }
+
+        if (is_string($tenantId) && $tenantId !== '') {
             $tenant = Tenant::with(['database', 'license'])->find($tenantId);
 
             if ($tenant === null) {
@@ -64,7 +72,7 @@ class QueueTenantScopeListener
 
         // 3. Fail closed on any unrecognized job without tenant context
         throw new MissingTenantContextException(sprintf(
-            'Queued job [%s] does not implement LandlordJobContract or TenantAwareJobContract.',
+            'Queued job [%s] was dispatched without tenant context and does not implement LandlordJobContract.',
             $event->job->resolveName()
         ));
     }

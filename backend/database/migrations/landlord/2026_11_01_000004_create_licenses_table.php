@@ -11,16 +11,16 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::connection('landlord')->create('licenses', function (Blueprint $table): void {
+        $conn = $this->getConnection() ?? 'landlord';
+
+        Schema::connection($conn)->create('licenses', function (Blueprint $table): void {
             $table->ulid('id')->primary();
-            $table->foreignUlid('tenant_id')->constrained('tenants')->cascadeOnDelete();
+            $table->foreignUlid('tenant_id')->unique()->constrained('tenants')->cascadeOnDelete();
             $table->string('plan', 50);
             $table->json('modules');
             $table->timestamp('valid_until');
             $table->text('signature')->nullable();
             $table->timestamps();
-
-            $table->index('tenant_id');
         });
     }
 
@@ -29,6 +29,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('landlord')->dropIfExists('licenses');
+        $conn = $this->getConnection() ?? 'landlord';
+        Schema::connection($conn)->dropIfExists('licenses');
     }
 };

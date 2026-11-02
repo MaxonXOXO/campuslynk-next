@@ -109,10 +109,18 @@ class ResolveTenant
             );
         }
 
-        if ($tenant->license !== null && $tenant->license->isExpired()) {
+        if ($tenant->license === null) {
+            return ProblemDetails::response(
+                title: 'License Required',
+                detail: 'No active license found for this institution.',
+                status: Response::HTTP_FORBIDDEN
+            );
+        }
+
+        if ($tenant->license->isPastGrace()) {
             return ProblemDetails::response(
                 title: 'License Expired',
-                detail: 'The license for this institution has expired.',
+                detail: 'The license and grace period for this institution have expired.',
                 status: Response::HTTP_FORBIDDEN
             );
         }
@@ -142,10 +150,11 @@ class ResolveTenant
      */
     protected function resolveTenantByDomain(string $host): ?Tenant
     {
+        $ttl = (int) config('tenancy.cache.resolver_ttl_seconds', 300);
         $cacheKey = 'tenant:domain:'.$host;
 
         /** @var string|null $tenantId */
-        $tenantId = Cache::remember($cacheKey, 300, function () use ($host): ?string {
+        $tenantId = Cache::remember($cacheKey, $ttl, function () use ($host): ?string {
             $domain = Domain::where('domain', $host)->first();
 
             return $domain?->tenant_id;
@@ -155,7 +164,11 @@ class ResolveTenant
             return null;
         }
 
-        return Tenant::with(['database', 'license'])->find($tenantId);
+        $tenantCacheKey = 'tenant:entity:'.$tenantId;
+
+        return Cache::remember($tenantCacheKey, $ttl, function () use ($tenantId): ?Tenant {
+            return Tenant::with(['database', 'license'])->find($tenantId);
+        });
     }
 
     /**
