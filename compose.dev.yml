@@ -94,6 +94,8 @@ services:
       LANDLORD_DB_DATABASE: landlord
       LANDLORD_DB_USERNAME: ${LANDLORD_DB_USER:-landlord_app}
       LANDLORD_DB_PASSWORD: ${DB_PASSWORD:-secret}
+      TENANT_DB_HOST: pgbouncer
+      TENANT_DB_PORT: 6432
       REDIS_HOST: redis
       REDIS_PORT: 6379
     ports:
@@ -141,6 +143,8 @@ services:
       ADMIN_DB_DATABASE: landlord
       ADMIN_DB_USERNAME: ${ADMIN_DB_USER:-provisioner}
       ADMIN_DB_PASSWORD: ${ADMIN_DB_PASSWORD:-secret}
+      TENANT_DB_HOST: pgbouncer
+      TENANT_DB_PORT: 6432
       REDIS_HOST: redis
       REDIS_PORT: 6379
     depends_on:

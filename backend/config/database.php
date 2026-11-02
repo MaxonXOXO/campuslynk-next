@@ -64,8 +64,8 @@ return [
 
         'tenant' => [
             'driver' => 'pgsql',
-            'host' => env('TENANT_DB_HOST', '127.0.0.1'),
-            'port' => (int) env('TENANT_DB_PORT', '6432'),
+            'host' => env('TENANT_DB_HOST', env('LANDLORD_DB_HOST', '127.0.0.1')),
+            'port' => (int) env('TENANT_DB_PORT', env('LANDLORD_DB_PORT', 6432)),
             'database' => env('TENANT_DB_DATABASE', 'unconfigured_tenant'),
             'username' => env('TENANT_DB_USERNAME', 'unconfigured_user'),
             'password' => env('TENANT_DB_PASSWORD', ''),
