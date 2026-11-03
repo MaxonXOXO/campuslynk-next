@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Modules\Middleware\EnforceModuleLicense;
 use App\Core\Tenancy\Middleware\ResolveTenant;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
@@ -23,10 +24,13 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'without_impersonation' => WithoutImpersonation::class,
             'require_permission' => RequirePermission::class,
+            'module' => EnforceModuleLicense::class,
+            'require_module' => EnforceModuleLicense::class,
         ]);
 
         $middleware->priority([
             ResolveTenant::class,
+            EnforceModuleLicense::class,
             EnsurePasswordNotMustChange::class,
             EnforceImpersonationRestrictions::class,
             RequirePermission::class,

@@ -7,7 +7,7 @@ namespace App\Modules\Organisation\Actions;
 use App\Modules\Organisation\Models\AcademicYear;
 use Carbon\Carbon;
 
-class UpdateAcademicYearAction
+final class UpdateAcademicYearAction
 {
     /**
      * @param array{

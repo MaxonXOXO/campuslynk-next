@@ -4,12 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Commands;
 
+use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\TenantContext;
-use App\Modules\Identity\IdentityModule;
 use App\Modules\Identity\Models\Permission;
 use App\Modules\Identity\Models\Role;
-use App\Modules\Organisation\OrganisationModule;
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
 
@@ -31,7 +30,7 @@ class PermissionsSyncCommand extends Command
      */
     protected $description = 'Synchronize module declared permissions and role mappings into the tenant database';
 
-    public function handle(TenantContext $tenantContext): int
+    public function handle(TenantContext $tenantContext, ModuleRegistry $moduleRegistry): int
     {
         if ($this->option('all')) {
             $tenants = Tenant::where('status', 'active')->get();
@@ -41,7 +40,7 @@ class PermissionsSyncCommand extends Command
                 $this->line(sprintf('Syncing tenant [%s]...', $tenant->slug));
                 $tenantContext->setTenant($tenant);
                 try {
-                    $this->syncCurrentTenant();
+                    $this->syncCurrentTenant($moduleRegistry);
                 } finally {
                     $tenantContext->forget();
                 }
@@ -58,7 +57,7 @@ class PermissionsSyncCommand extends Command
             $tenant = Tenant::where('slug', trim($tenantSlug))->firstOrFail();
             $tenantContext->setTenant($tenant);
             try {
-                $this->syncCurrentTenant();
+                $this->syncCurrentTenant($moduleRegistry);
             } finally {
                 $tenantContext->forget();
             }
@@ -72,7 +71,7 @@ class PermissionsSyncCommand extends Command
             return self::FAILURE;
         }
 
-        $this->syncCurrentTenant();
+        $this->syncCurrentTenant($moduleRegistry);
 
         return self::SUCCESS;
     }
@@ -80,13 +79,9 @@ class PermissionsSyncCommand extends Command
     /**
      * Synchronize permissions and role mappings for the currently active tenant.
      */
-    public function syncCurrentTenant(): void
+    public function syncCurrentTenant(?ModuleRegistry $moduleRegistry = null): void
     {
-        /** @var list<class-string> $moduleProviders */
-        $moduleProviders = [
-            IdentityModule::class,
-            OrganisationModule::class,
-        ];
+        $registry = $moduleRegistry ?? app(ModuleRegistry::class);
 
         $totalPermissions = 0;
         $totalBindings = 0;
@@ -94,18 +89,14 @@ class PermissionsSyncCommand extends Command
         /** @var array<string, list<string>> $allRolePermissions */
         $allRolePermissions = [];
 
-        foreach ($moduleProviders as $providerClass) {
-            if (! method_exists($providerClass, 'permissions')) {
-                continue;
-            }
-
+        foreach ($registry->all() as $module) {
             /** @var list<string> $declaredPermissions */
-            $declaredPermissions = $providerClass::permissions();
+            $declaredPermissions = $module->permissions();
 
             foreach ($declaredPermissions as $permKey) {
                 // Parse module from key (e.g. identity.user.view => module: identity)
                 $parts = explode('.', $permKey);
-                $module = $parts[0];
+                $moduleSlug = $parts[0];
                 $action = implode(' ', array_slice($parts, 1));
                 $name = Str::headline($action);
 
@@ -113,16 +104,16 @@ class PermissionsSyncCommand extends Command
                     ['key' => $permKey],
                     [
                         'name' => $name,
-                        'module' => $module,
-                        'description' => "Permission to {$action} in {$module}",
+                        'module' => $moduleSlug,
+                        'description' => "Permission to {$action} in {$moduleSlug}",
                     ]
                 );
                 $totalPermissions++;
             }
 
-            if (method_exists($providerClass, 'rolePermissions')) {
+            if (method_exists($module, 'rolePermissions')) {
                 /** @var array<string, list<string>> $roleMap */
-                $roleMap = $providerClass::rolePermissions();
+                $roleMap = $module->rolePermissions();
                 foreach ($roleMap as $roleKey => $perms) {
                     if (! isset($allRolePermissions[$roleKey])) {
                         $allRolePermissions[$roleKey] = [];

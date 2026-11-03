@@ -6,7 +6,7 @@ namespace App\Modules\Organisation\Actions;
 
 use App\Modules\Organisation\Models\Program;
 
-class UpdateProgramAction
+final class UpdateProgramAction
 {
     /**
      * @param array{

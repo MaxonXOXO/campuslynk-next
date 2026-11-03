@@ -6,7 +6,7 @@ namespace App\Modules\Identity\Actions;
 
 use App\Modules\Identity\Models\User;
 
-class SuspendUserAction
+final class SuspendUserAction
 {
     public function execute(User $suspender, User $user): User
     {

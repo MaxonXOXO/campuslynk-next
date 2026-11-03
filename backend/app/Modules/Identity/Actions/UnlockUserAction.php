@@ -9,7 +9,7 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserIdentifier;
 use App\Modules\Identity\Services\LoginRateLimiter;
 
-class UnlockUserAction
+final class UnlockUserAction
 {
     public function __construct(
         protected LoginRateLimiter $rateLimiter,

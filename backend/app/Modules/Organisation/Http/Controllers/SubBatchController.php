@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Http\Controllers;
 
-use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Core\Contracts\ScopeAuthorizerContract;
 use App\Modules\Organisation\Actions\CreateSubBatchAction;
 use App\Modules\Organisation\Actions\DeleteSubBatchAction;
 use App\Modules\Organisation\Actions\UpdateSubBatchAction;
@@ -18,7 +18,7 @@ use Symfony\Component\HttpFoundation\Response;
 class SubBatchController
 {
     public function __construct(
-        protected ScopeAuthorizer $authorizer
+        protected ScopeAuthorizerContract $authorizer
     ) {}
 
     public function index(Request $request, string $batchId): JsonResponse

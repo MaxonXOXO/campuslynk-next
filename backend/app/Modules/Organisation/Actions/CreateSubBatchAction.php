@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Actions;
 
-use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Core\Authorization\ScopeLabelValidator;
 use App\Modules\Organisation\Models\Batch;
 use App\Modules\Organisation\Models\SubBatch;
 use Illuminate\Support\Str;
 
-class CreateSubBatchAction
+final class CreateSubBatchAction
 {
     public function execute(
         Batch $batch,
@@ -20,7 +20,7 @@ class CreateSubBatchAction
         $randomSuffix = strtolower(Str::random(6));
         $cleanName = (string) preg_replace('/[^a-zA-Z0-9_]/', '_', strtolower($name));
         $scopeLabel = 'sb_'.substr($cleanName, 0, 20).'_'.$randomSuffix;
-        ScopeAuthorizer::validateScopeLabel($scopeLabel);
+        ScopeLabelValidator::validate($scopeLabel);
 
         $homePath = "{$batch->home_path}.{$scopeLabel}";
         $managingPath = "{$batch->managing_path}.{$scopeLabel}";

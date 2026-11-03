@@ -16,7 +16,7 @@ use App\Modules\Identity\Services\LoginRateLimiter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Hash;
 
-class LoginAction implements AuthenticatesUserContract
+final class LoginAction implements AuthenticatesUserContract
 {
     /**
      * Dummy Argon2id hash for constant-time verification when identifier does not exist.

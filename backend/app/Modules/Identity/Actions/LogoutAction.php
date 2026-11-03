@@ -9,7 +9,7 @@ use App\Modules\Identity\Events\TokenRevoked;
 use App\Modules\Identity\Models\User;
 use Laravel\Sanctum\PersonalAccessToken;
 
-class LogoutAction
+final class LogoutAction
 {
     public function __construct(
         protected TenantContext $tenantContext

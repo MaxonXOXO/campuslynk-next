@@ -57,6 +57,9 @@ jobs:
       - name: Verify OpenAPI contract is clean (diff check)
         run: git diff --exit-code ../contracts/openapi.yaml
 
+      - name: Run OpenAPI contract sync check
+        run: composer contract
+
   backend-tests:
     name: 2. Backend Feature & Architecture Tests
     runs-on: ubuntu-latest
@@ -184,6 +187,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate API client from OpenAPI contract
+        run: pnpm --filter @academic-suite/api-client generate
+
+      - name: Verify generated API client code is committed and in sync
+        run: git diff --exit-code packages/api-client/src/generated/
 
       - name: Run pnpm security audit
         run: pnpm audit --audit-level=high

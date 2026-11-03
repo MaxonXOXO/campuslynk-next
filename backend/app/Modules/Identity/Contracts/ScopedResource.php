@@ -4,15 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Contracts;
 
-interface ScopedResource
-{
-    /**
-     * Get the managing scope path for governance/write authorization.
-     */
-    public function getManagingScopePath(): string;
+use App\Core\Contracts\ScopedResource as CoreScopedResource;
 
-    /**
-     * Get the home scope path for read/directory authorization.
-     */
-    public function getHomeScopePath(): string;
-}
+interface ScopedResource extends CoreScopedResource {}

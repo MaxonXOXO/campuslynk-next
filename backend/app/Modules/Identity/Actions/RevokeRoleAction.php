@@ -11,7 +11,7 @@ use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ScopeAuthorizer;
 use Illuminate\Support\Carbon;
 
-class RevokeRoleAction
+final class RevokeRoleAction
 {
     public function __construct(
         protected ScopeAuthorizer $authorizer

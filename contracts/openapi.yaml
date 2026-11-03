@@ -169,41 +169,6 @@ paths:
         '403':
           $ref: '#/components/responses/ProblemDetails'
 
-  /notifications:
-    get:
-      operationId: listNotifications
-      summary: List in-app notifications for the authenticated user (Web Notification Center + React Native)
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: Paginated notifications
-
-  /notifications/push-tokens:
-    post:
-      operationId: registerFcmPushToken
-      summary: Register a Firebase Cloud Messaging (FCM) device token for web or React Native push notifications
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [platform, fcm_token]
-              properties:
-                platform:
-                  type: string
-                  enum: [web, android, ios]
-                fcm_token:
-                  type: string
-                device_name:
-                  type: string
-      responses:
-        '200':
-          description: Token registered
-
   /impersonation:
     post:
       operationId: startImpersonation

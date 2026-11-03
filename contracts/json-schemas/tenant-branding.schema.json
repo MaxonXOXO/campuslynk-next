@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.academic-suite.com/json-schemas/tenant-branding.schema.json",
+  "title": "TenantBranding",
+  "description": "Strict schema for tenant branding attributes (colors, logos, typography) preventing arbitrary injection.",
+  "type": "object",
+  "properties": {
+    "primary_color": {
+      "type": "string",
+      "description": "Primary brand color in 3 or 6 hex digit CSS format",
+      "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+    },
+    "secondary_color": {
+      "type": "string",
+      "description": "Secondary brand color in 3 or 6 hex digit CSS format",
+      "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+    },
+    "logo_url": {
+      "type": "string",
+      "description": "Absolute URL to the tenant institutional logo (HTTPS preferred)",
+      "format": "uri",
+      "pattern": "^https?:\\/\\/[^\\s$.?#].[^\\s]*$"
+    },
+    "favicon_url": {
+      "type": "string",
+      "description": "Absolute URL to the tenant favicon",
+      "format": "uri",
+      "pattern": "^https?:\\/\\/[^\\s$.?#].[^\\s]*$"
+    },
+    "font_family": {
+      "type": "string",
+      "description": "Sanitized typography font family identifier",
+      "pattern": "^[a-zA-Z0-9\\s\\-',]+$",
+      "maxLength": 100
+    }
+  },
+  "required": [
+    "primary_color",
+    "secondary_color"
+  ],
+  "additionalProperties": false
+}

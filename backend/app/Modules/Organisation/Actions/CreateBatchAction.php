@@ -15,7 +15,7 @@ use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
 use Illuminate\Support\Str;
 
-class CreateBatchAction
+final class CreateBatchAction
 {
     public function __construct(
         protected GovernanceResolver $governanceResolver,

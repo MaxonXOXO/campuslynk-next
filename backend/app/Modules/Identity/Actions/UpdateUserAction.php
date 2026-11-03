@@ -6,7 +6,7 @@ namespace App\Modules\Identity\Actions;
 
 use App\Modules\Identity\Models\User;
 
-class UpdateUserAction
+final class UpdateUserAction
 {
     /**
      * @param  array<string, mixed>  $attributes

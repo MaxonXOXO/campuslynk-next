@@ -4,21 +4,48 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation;
 
+use App\Core\Modules\Contracts\ModuleManifestContract;
 use App\Modules\Organisation\Contracts\GovernanceResolverContract;
 use App\Modules\Organisation\Contracts\ScopeTreeContract;
 use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
-class OrganisationModule extends ServiceProvider
+class OrganisationModule extends ServiceProvider implements ModuleManifestContract
 {
+    public function slug(): string
+    {
+        return 'organisation';
+    }
+
+    public function name(): string
+    {
+        return 'Organisation';
+    }
+
+    public function isCore(): bool
+    {
+        return true;
+    }
+
+    public function registerRoutes(): void
+    {
+        $routesPath = __DIR__.'/Routes/api.php';
+        if (file_exists($routesPath)) {
+            Route::prefix('api/v1')
+                ->middleware('api')
+                ->group($routesPath);
+        }
+    }
+
     /**
      * All permissions declared by the Organisation module.
      * Pattern: organisation.<resource>.<action>
      *
      * @return list<string>
      */
-    public static function permissions(): array
+    public function permissions(): array
     {
         return [
             'organisation.department.manage',
@@ -44,7 +71,7 @@ class OrganisationModule extends ServiceProvider
      *
      * @return array<string, list<string>>
      */
-    public static function rolePermissions(): array
+    public function rolePermissions(): array
     {
         return [
             'super_admin' => [

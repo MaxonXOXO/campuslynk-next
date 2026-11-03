@@ -14,7 +14,7 @@ use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
 use InvalidArgumentException;
 
-class PromoteBatchSemesterAction
+final class PromoteBatchSemesterAction
 {
     public function __construct(
         protected GovernanceResolver $governanceResolver,

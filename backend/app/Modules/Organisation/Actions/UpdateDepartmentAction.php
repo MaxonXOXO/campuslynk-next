@@ -6,7 +6,7 @@ namespace App\Modules\Organisation\Actions;
 
 use App\Modules\Organisation\Models\Department;
 
-class UpdateDepartmentAction
+final class UpdateDepartmentAction
 {
     /**
      * @param array{

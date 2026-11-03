@@ -16,7 +16,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
-class AssignRoleAction
+final class AssignRoleAction
 {
     public function __construct(
         protected ScopeAuthorizer $authorizer

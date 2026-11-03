@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Actions;
 
-use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Core\Authorization\ScopeLabelValidator;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Program;
 
-class CreateProgramAction
+final class CreateProgramAction
 {
     public function execute(
         string $departmentId,
@@ -20,7 +20,7 @@ class CreateProgramAction
 
         $cleanCode = strtoupper(trim($code));
         $scopeLabel = 'p_'.strtolower((string) preg_replace('/[^a-zA-Z0-9_]/', '_', $cleanCode));
-        ScopeAuthorizer::validateScopeLabel($scopeLabel);
+        ScopeLabelValidator::validate($scopeLabel);
 
         /** @var Program $program */
         $program = Program::create([

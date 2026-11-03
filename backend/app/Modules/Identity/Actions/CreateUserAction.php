@@ -8,7 +8,7 @@ use App\Modules\Identity\Models\User;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
-class CreateUserAction
+final class CreateUserAction
 {
     /**
      * @param array{

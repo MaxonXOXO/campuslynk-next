@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Actions;
 
-use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Core\Authorization\ScopeLabelValidator;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Stream;
 
-class CreateDepartmentAction
+final class CreateDepartmentAction
 {
     public function execute(
         string $code,
@@ -19,7 +19,7 @@ class CreateDepartmentAction
     ): Department {
         $cleanCode = strtoupper(trim($code));
         $scopeLabel = 'd_'.strtolower((string) preg_replace('/[^a-zA-Z0-9_]/', '_', $cleanCode));
-        ScopeAuthorizer::validateScopeLabel($scopeLabel);
+        ScopeLabelValidator::validate($scopeLabel);
 
         // Ensure stream exists
         Stream::findOrFail($streamId);

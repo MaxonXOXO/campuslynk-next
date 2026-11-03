@@ -6,7 +6,7 @@ namespace App\Modules\Organisation\Actions;
 
 use App\Modules\Organisation\Models\SubBatch;
 
-class DeleteSubBatchAction
+final class DeleteSubBatchAction
 {
     public function execute(SubBatch $subBatch): void
     {
