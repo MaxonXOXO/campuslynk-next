@@ -7,10 +7,9 @@ namespace App\Core\Tenancy\Commands;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
-use App\Modules\Identity\Models\User;
-use App\Modules\Organisation\Database\Seeders\KeralaPolytechnicProfileSeeder;
-use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
 use Illuminate\Console\Command;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -126,17 +125,24 @@ class AppInstallCommand extends Command
             $tenantContext->setTenant($tenant);
             try {
                 $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
-                if ($seedProfile === 'kerala-polytechnic') {
-                    $this->info('Seeding Kerala Polytechnic profile...');
-                    app(KeralaPolytechnicProfileSeeder::class)->run();
-                } elseif ($seedProfile === 'baseline') {
-                    $this->info('Seeding tenant baseline profile...');
-                    app(TenantBaselineSeeder::class)->run();
+                $seederClass = match ($seedProfile) {
+                    'kerala-polytechnic' => 'App\\Modules\\Organisation\\Database\\Seeders\\KeralaPolytechnicProfileSeeder',
+                    'baseline' => 'App\\Modules\\Organisation\\Database\\Seeders\\TenantBaselineSeeder',
+                    default => null,
+                };
+
+                if ($seederClass !== null && class_exists($seederClass)) {
+                    $this->info(sprintf('Seeding %s profile...', $seedProfile));
+                    /** @var Seeder $seeder */
+                    $seeder = app($seederClass);
+                    $seeder->__invoke();
                 }
 
-                if (User::where('type', 'staff')->count() === 0) {
+                /** @var class-string<Model> $userModel */
+                $userModel = (string) config('auth.providers.users.model');
+                if (class_exists($userModel) && $userModel::query()->where('type', 'staff')->count() === 0) {
                     $oneTimePassword = Str::password(16, symbols: false);
-                    User::create([
+                    $userModel::query()->create([
                         'type' => 'staff',
                         'name' => $adminName,
                         'email' => strtolower($adminEmail),

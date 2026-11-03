@@ -54,10 +54,14 @@
   - Synchronize permissions across modules using `php artisan permissions:sync`.
   - Validate scope labels via `App\Core\Authorization\ScopeLabelValidator::validateScopeLabel(...)`.
 
-- **Managing vs. Home Path Scoping (ADR-0005)**:
+- **Managing vs. Home Path Scoping (ADR-0005, ADR-0014)**:
   - Governance and write operations (`.create`, `.update`, `.delete`, `.manage`, `.promote_semester`) match **only** `managing_department` (`managing_path`).
   - Read and directory operations (`.view`, `.view_own`, `.audit_report`, `.export`) match **either** `managing_department` **or** `home_department` (`home_path`).
   - Scoped models implement `App\Core\Contracts\ScopedResource`, use `App\Core\Concerns\HasScopedVisibility`, and expose the `visibleTo` Eloquent query scope for PostgreSQL `ltree` matching.
+
+- **Resilient Role Scoping (ADR-0014)**:
+  - Role assignments store atomic `scope_label` values without static full paths.
+  - Batch semester promotion dynamically recomputes `managing_path` with zero mutating writes to `role_assignments`.
 
 - **Singleton Exclusion & Concurrency (ADR-0013)**:
   - Singleton roles (`principal`, `hod`) are constrained to exactly one active assignment per scope using PostgreSQL `btree_gist` exclusion constraints.

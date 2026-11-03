@@ -192,7 +192,12 @@ jobs:
         run: pnpm --filter @academic-suite/api-client generate
 
       - name: Verify generated API client code is committed and in sync
-        run: git diff --exit-code packages/api-client
+        run: |
+          if [ -n "$(git status --porcelain packages/api-client)" ]; then
+            echo "API client drift detected! Generated files are out of sync or untracked:"
+            git status --porcelain packages/api-client
+            exit 1
+          fi
 
       - name: Run pnpm security audit
         run: pnpm audit --audit-level=high

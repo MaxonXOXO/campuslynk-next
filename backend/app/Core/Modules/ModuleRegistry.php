@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Core\Modules;
 
 use App\Core\Modules\Contracts\ModuleManifestContract;
-use App\Modules\Identity\IdentityModule;
-use App\Modules\Organisation\OrganisationModule;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\Facades\File;
 
@@ -19,11 +17,7 @@ class ModuleRegistry
 
     public function __construct(protected Application $app)
     {
-        // 1. Core modules registered by default
-        $this->register(new IdentityModule($this->app));
-        $this->register(new OrganisationModule($this->app));
-
-        // 2. Discover any additional installed modules under app/Modules/
+        // Discover installed modules dynamically under app/Modules/
         $this->discover();
     }
 

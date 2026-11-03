@@ -1,6 +1,6 @@
 # ADR-0014: Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping
 
-**Status:** Proposed  
+**Status:** Decided  
 **Date:** 2026-11-02  
 **Deciders:** Core Engineering Team  
 **Consulted:** ADR-0001, ADR-0004, ADR-0005, `docs/role_and_permission_spec.md` (§2 Scope Tree)
@@ -51,7 +51,7 @@ Every organizational node carries a stable, unique string label formatted as `<t
 - *(Future)* **`co_<ulid>`**: Course offering
 
 **PostgreSQL `ltree` Label Syntax:**  
-PostgreSQL `ltree` labels consist of alphanumeric characters and underscores (`[A-Za-z0-9_]`), up to 256 characters. Since ULIDs are 26 base32 characters, lowercasing the ULID and prefixing with `<type>_` creates valid, compact, human-distinguishable labels (e.g., `d_01h7x...`).
+PostgreSQL `ltree` labels consist of alphanumeric characters and underscores (`[A-Za-z0-9_]`). While PostgreSQL allows up to 256 bytes per label, CampusLynk enforces a strict 63-character ceiling (`^[a-zA-Z0-9_]{1,63}$`) via `ScopeLabelValidator` to conform with PostgreSQL identifier standards. Since ULIDs are 26 base32 characters, prefixing with `<type>_` creates valid, compact, human-distinguishable labels (e.g., `d_ce`, `i_carmel`).
 
 ### 2. Dual Path Architecture (`home_path` & `managing_path`)
 

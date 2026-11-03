@@ -10,6 +10,11 @@ use Illuminate\Database\Eloquent\Model;
 $moduleDirs = glob(__DIR__.'/../../app/Modules/*', GLOB_ONLYDIR) ?: [];
 $modules = array_values(array_filter(array_map('basename', $moduleDirs), fn (string $name) => $name !== ''));
 
+// Core never depends on Modules
+arch('app Core does not import module internals')
+    ->expect('App\Core')
+    ->not->toUse('App\Modules');
+
 // Cross-module rule: For every ordered pair (A, B), where A !== B:
 // Module A may NOT import or use B's Models, Actions, Http\Controllers, Http\Requests, or Policies.
 // Only B's Contracts and Events are permitted.
