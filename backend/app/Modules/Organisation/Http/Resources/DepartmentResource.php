@@ -23,7 +23,7 @@ class DepartmentResource extends JsonResource
             'code' => $this->resource->code,
             'name' => $this->resource->name,
             'stream_id' => $this->resource->stream_id,
-            'funding_stream' => $this->resource->funding_stream,
+            'stream' => $this->resource->stream->code,
             'kind' => $this->resource->kind,
             'scope_label' => $this->resource->scope_label,
             'is_active' => $this->resource->is_active,

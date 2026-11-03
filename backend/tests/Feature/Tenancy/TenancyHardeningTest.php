@@ -132,9 +132,11 @@ it('safely handles bound parameters with quotes, backslashes, null bytes and mul
         'mixed' => "Special: ';\nDROP TABLE students;-- \\ \0 മലയാളം 🌟",
     ];
 
-    TenantSetting::create([
+    DB::connection('tenant')->table('tenant_settings')->insert([
         'key' => 'security_payload_test',
-        'value' => $testPayload,
+        'value' => json_encode($testPayload, JSON_THROW_ON_ERROR),
+        'created_at' => now(),
+        'updated_at' => now(),
     ]);
 
     // Query back using parameter bindings

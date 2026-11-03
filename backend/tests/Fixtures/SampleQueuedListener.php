@@ -12,8 +12,8 @@ class SampleQueuedListener implements ShouldQueue
     public function handle(SampleEvent $event): void
     {
         TenantSetting::updateOrCreate(
-            ['key' => 'queued_listener_test'],
-            ['value' => ['payload' => $event->payload]]
+            ['key' => 'auth.token_lifetime_web_hours'],
+            ['value' => ['hours' => 3]]
         );
     }
 }

@@ -16,10 +16,13 @@ class DepartmentController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Department::query();
+        $query = Department::query()->with('stream');
 
         if ($request->has('stream')) {
-            $query->where('funding_stream', (string) $request->query('stream'));
+            $stream = (string) $request->query('stream');
+            $query->whereHas('stream', function ($q) use ($stream): void {
+                $q->where('code', $stream)->orWhere('id', $stream);
+            });
         }
 
         if ($request->has('kind')) {
@@ -41,7 +44,7 @@ class DepartmentController
 
     public function show(string $id): JsonResponse
     {
-        $dept = Department::findOrFail($id);
+        $dept = Department::with('stream')->findOrFail($id);
 
         return response()->json([
             'data' => new DepartmentResource($dept),
@@ -57,7 +60,6 @@ class DepartmentController
             'code' => ['required', 'string', 'max:16'],
             'name' => ['required', 'string', 'max:255'],
             'stream_id' => ['required', 'string', 'max:36'],
-            'funding_stream' => ['required', 'string', 'in:AIDED,SF,SHARED'],
             'kind' => ['nullable', 'string', 'in:academic,general,administrative'],
         ]);
 
@@ -65,9 +67,10 @@ class DepartmentController
             code: (string) $validated['code'],
             name: (string) $validated['name'],
             streamId: (string) $validated['stream_id'],
-            fundingStream: (string) $validated['funding_stream'],
             kind: (string) ($validated['kind'] ?? 'academic')
         );
+
+        $dept->load('stream');
 
         return response()->json([
             'data' => new DepartmentResource($dept),
@@ -80,7 +83,7 @@ class DepartmentController
     public function update(Request $request, string $id, UpdateDepartmentAction $action): JsonResponse
     {
         /** @var Department $dept */
-        $dept = Department::findOrFail($id);
+        $dept = Department::with('stream')->findOrFail($id);
 
         $validated = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -89,6 +92,7 @@ class DepartmentController
         ]);
 
         $updated = $action->execute($dept, $validated);
+        $updated->load('stream');
 
         return response()->json([
             'data' => new DepartmentResource($updated),

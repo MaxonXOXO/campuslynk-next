@@ -26,9 +26,9 @@ class SampleTenantJob implements ShouldQueue, TenantAwareJobContract
 
     public function handle(): void
     {
-        TenantSetting::create([
-            'key' => 'queue_job_test',
-            'value' => ['executed' => true],
-        ]);
+        TenantSetting::updateOrCreate(
+            ['key' => 'auth.token_lifetime_web_hours'],
+            ['value' => ['hours' => 1]]
+        );
     }
 }

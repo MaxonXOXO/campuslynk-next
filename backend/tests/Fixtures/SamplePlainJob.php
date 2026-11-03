@@ -15,8 +15,8 @@ class SamplePlainJob implements ShouldQueue
     public function handle(): void
     {
         TenantSetting::updateOrCreate(
-            ['key' => 'plain_job_test'],
-            ['value' => ['executed' => true]]
+            ['key' => 'auth.token_lifetime_web_hours'],
+            ['value' => ['hours' => 2]]
         );
     }
 }

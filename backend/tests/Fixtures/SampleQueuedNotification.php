@@ -25,8 +25,8 @@ class SampleQueuedNotification extends Notification implements ShouldQueue
     public function toMail(mixed $notifiable): MailMessage
     {
         TenantSetting::updateOrCreate(
-            ['key' => 'queued_notification_test'],
-            ['value' => ['notified' => true]]
+            ['key' => 'auth.token_lifetime_web_hours'],
+            ['value' => ['hours' => 4]]
         );
 
         return (new MailMessage)

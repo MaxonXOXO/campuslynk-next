@@ -51,9 +51,9 @@ it('initializes correct tenant context for TenantAwareJob', function () {
 
     // Verify row was written into tenant database
     $this->context->setTenant($tenant);
-    $setting = TenantSetting::find('queue_job_test');
+    $setting = TenantSetting::find('auth.token_lifetime_web_hours');
     expect($setting)->not->toBeNull()
-        ->and($setting->value)->toEqual(['executed' => true]);
+        ->and($setting->value)->toEqual(['hours' => 1]);
     $this->context->forget();
 });
 
@@ -66,9 +66,9 @@ it('automatically scopes plain queued jobs without the trait when dispatched fro
 
     // Verify record was written to tenant database
     $this->context->setTenant($tenant);
-    $setting = TenantSetting::find('plain_job_test');
+    $setting = TenantSetting::find('auth.token_lifetime_web_hours');
     expect($setting)->not->toBeNull()
-        ->and($setting->value)->toEqual(['executed' => true]);
+        ->and($setting->value)->toEqual(['hours' => 2]);
     $this->context->forget();
 });
 
@@ -82,9 +82,9 @@ it('automatically scopes queued event listeners dispatched from tenant context',
     $this->context->forget();
 
     $this->context->setTenant($tenant);
-    $setting = TenantSetting::find('queued_listener_test');
+    $setting = TenantSetting::find('auth.token_lifetime_web_hours');
     expect($setting)->not->toBeNull()
-        ->and($setting->value)->toEqual(['payload' => 'hello-tenant-event']);
+        ->and($setting->value)->toEqual(['hours' => 3]);
     $this->context->forget();
 });
 
@@ -97,9 +97,9 @@ it('automatically scopes queued notifications dispatched from tenant context', f
     $this->context->forget();
 
     $this->context->setTenant($tenant);
-    $setting = TenantSetting::find('queued_notification_test');
+    $setting = TenantSetting::find('auth.token_lifetime_web_hours');
     expect($setting)->not->toBeNull()
-        ->and($setting->value)->toEqual(['notified' => true]);
+        ->and($setting->value)->toEqual(['hours' => 4]);
     $this->context->forget();
 });
 
@@ -111,9 +111,9 @@ it('automatically scopes queued mailables dispatched from tenant context', funct
     $this->context->forget();
 
     $this->context->setTenant($tenant);
-    $setting = TenantSetting::find('queued_mail_test');
+    $setting = TenantSetting::find('auth.token_lifetime_web_hours');
     expect($setting)->not->toBeNull()
-        ->and($setting->value)->toEqual(['mailed' => true]);
+        ->and($setting->value)->toEqual(['hours' => 5]);
     $this->context->forget();
 });
 

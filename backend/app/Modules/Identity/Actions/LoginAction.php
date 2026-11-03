@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Actions;
 
+use App\Core\Tenancy\Models\TenantSetting;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Events\LoginFailed;
@@ -59,10 +60,7 @@ final class LoginAction implements AuthenticatesUserContract
             throw new LockoutException($seconds);
         }
 
-        // 2. Query user following strict precedence (ADR-0011, Prompt 04b):
-        //    (1) contains '@' -> email
-        //    (2) normalizes to valid E.164 mobile -> mobile
-        //    (3) otherwise -> registration number
+        // 2. Query user from unified user_identifiers table
         /** @var User|null $user */
         $user = $this->resolveUser($trimmedIdentifier);
 
@@ -91,10 +89,8 @@ final class LoginAction implements AuthenticatesUserContract
         // 5. Successful login: clear throttle attempts
         $this->rateLimiter->clear($tenant->id, $trimmedIdentifier, $ip);
 
-        // 6. Token lifetime per client type (ADR-0011)
-        $expiresAt = $client === 'mobile'
-            ? Carbon::now()->addDays(30)
-            : Carbon::now()->addHours(12);
+        // 6. Token lifetime per client type (ADR-0011 with tenant_settings override)
+        $expiresAt = $this->resolveTokenExpiresAt($client);
 
         // 7. Token abilities: if must_change_password is true, restrict to password:change and auth:logout
         $abilities = $user->must_change_password
@@ -130,5 +126,48 @@ final class LoginAction implements AuthenticatesUserContract
             ->first();
 
         return $record?->user;
+    }
+
+    /**
+     * Resolve personal access token expiration based on client type and tenant_settings.
+     */
+    protected function resolveTokenExpiresAt(string $client): Carbon
+    {
+        if ($client === 'mobile') {
+            $defaultDays = 30;
+            try {
+                /** @var TenantSetting|null $setting */
+                $setting = TenantSetting::where('key', 'auth.token_lifetime_mobile_days')->first();
+                if ($setting !== null && is_array($setting->value)) {
+                    $days = $setting->value['days'] ?? $setting->value['value'] ?? $defaultDays;
+                } elseif ($setting !== null && is_numeric($setting->value)) {
+                    $days = (int) $setting->value;
+                } else {
+                    $days = $defaultDays;
+                }
+            } catch (\Throwable) {
+                $days = $defaultDays;
+            }
+
+            return Carbon::now()->addDays((int) $days);
+        }
+
+        // Web client
+        $defaultHours = 12;
+        try {
+            /** @var TenantSetting|null $setting */
+            $setting = TenantSetting::where('key', 'auth.token_lifetime_web_hours')->first();
+            if ($setting !== null && is_array($setting->value)) {
+                $hours = $setting->value['hours'] ?? $setting->value['value'] ?? $defaultHours;
+            } elseif ($setting !== null && is_numeric($setting->value)) {
+                $hours = (int) $setting->value;
+            } else {
+                $hours = $defaultHours;
+            }
+        } catch (\Throwable) {
+            $hours = $defaultHours;
+        }
+
+        return Carbon::now()->addHours((int) $hours);
     }
 }

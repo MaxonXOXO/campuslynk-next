@@ -545,7 +545,6 @@ it('supports full CRUD lifecycle for departments (allowed, unauthorized, cross-t
             'name' => 'Chemical Engineering',
             'code' => 'CH',
             'stream_id' => $stream->id,
-            'funding_stream' => 'AIDED',
             'kind' => 'academic',
         ]);
 
@@ -581,7 +580,6 @@ it('supports full CRUD lifecycle for departments (allowed, unauthorized, cross-t
             'name' => 'Rogue Dept',
             'code' => 'RG',
             'stream_id' => $stream->id,
-            'funding_stream' => 'AIDED',
             'kind' => 'academic',
         ]);
         $unauthRes->assertStatus(403);

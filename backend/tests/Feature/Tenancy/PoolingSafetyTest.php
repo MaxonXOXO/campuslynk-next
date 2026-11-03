@@ -22,26 +22,26 @@ it('prevents cross-tenant data leakage across rapid alternating connection switc
 
     // Seed data into Tenant A
     $this->context->setTenant($tenantA);
-    TenantSetting::create(['key' => 'test_key', 'value' => ['name' => 'Data from A']]);
+    TenantSetting::create(['key' => 'auth.token_lifetime_web_hours', 'value' => ['hours' => 10]]);
     $this->context->forget();
 
     // Seed data into Tenant B
     $this->context->setTenant($tenantB);
-    TenantSetting::create(['key' => 'test_key', 'value' => ['name' => 'Data from B']]);
+    TenantSetting::create(['key' => 'auth.token_lifetime_web_hours', 'value' => ['hours' => 20]]);
     $this->context->forget();
 
     // Alternating switching cycle 20 times
     for ($i = 0; $i < 20; $i++) {
         $this->context->setTenant($tenantA);
-        $settingA = TenantSetting::find('test_key');
+        $settingA = TenantSetting::find('auth.token_lifetime_web_hours');
         expect($settingA)->not->toBeNull()
-            ->and($settingA->value)->toEqual(['name' => 'Data from A']);
+            ->and($settingA->value)->toEqual(['hours' => 10]);
         $this->context->forget();
 
         $this->context->setTenant($tenantB);
-        $settingB = TenantSetting::find('test_key');
+        $settingB = TenantSetting::find('auth.token_lifetime_web_hours');
         expect($settingB)->not->toBeNull()
-            ->and($settingB->value)->toEqual(['name' => 'Data from B']);
+            ->and($settingB->value)->toEqual(['hours' => 20]);
         $this->context->forget();
     }
 });

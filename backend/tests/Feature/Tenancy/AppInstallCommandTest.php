@@ -15,8 +15,12 @@ afterEach(function () {
     $this->purgeAllTenantDatabases();
 });
 
-it('installs on-premise appliance and provisions carmel tenant', function () {
-    $exitCode = Artisan::call('app:install');
+it('installs on-premise appliance and provisions tenant when options are explicitly provided', function () {
+    $exitCode = Artisan::call('app:install', [
+        '--slug' => 'carmel',
+        '--name' => 'Carmel Polytechnic College',
+        '--domain' => 'app.carmelpoly.in',
+    ]);
 
     expect($exitCode)->toBe(0);
 
@@ -30,14 +34,28 @@ it('installs on-premise appliance and provisions carmel tenant', function () {
         ->and($domain->tenant_id)->toEqual($tenant->id);
 
     // 2. Executing twice fails safely
-    $secondRun = Artisan::call('app:install');
+    $secondRun = Artisan::call('app:install', [
+        '--slug' => 'carmel',
+        '--name' => 'Carmel Polytechnic College',
+        '--domain' => 'app.carmelpoly.in',
+    ]);
     expect($secondRun)->toBe(1);
+});
+
+it('refuses app:install without explicit slug, name, or domain in non-interactive mode', function () {
+    $exitCode = Artisan::call('app:install');
+
+    expect($exitCode)->toBe(1);
 });
 
 it('refuses app:install in cloud profile', function () {
     config(['app_profile.deploy_profile' => 'cloud']);
 
-    $exitCode = Artisan::call('app:install');
+    $exitCode = Artisan::call('app:install', [
+        '--slug' => 'carmel',
+        '--name' => 'Carmel Polytechnic College',
+        '--domain' => 'app.carmelpoly.in',
+    ]);
 
     expect($exitCode)->toBe(1);
 });
@@ -45,7 +63,11 @@ it('refuses app:install in cloud profile', function () {
 it('refuses app:install when APP_KEY is missing or invalid', function () {
     config(['app.key' => '']);
 
-    $exitCode = Artisan::call('app:install');
+    $exitCode = Artisan::call('app:install', [
+        '--slug' => 'carmel',
+        '--name' => 'Carmel Polytechnic College',
+        '--domain' => 'app.carmelpoly.in',
+    ]);
 
     expect($exitCode)->toBe(1);
 });
