@@ -14,7 +14,7 @@ use App\Modules\Organisation\Models\SubBatch;
 use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
 
-class UpdateGovernanceRuleAction
+final class UpdateGovernanceRuleAction
 {
     public function __construct(
         protected GovernanceResolver $governanceResolver,

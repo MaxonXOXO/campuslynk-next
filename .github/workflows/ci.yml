@@ -57,6 +57,9 @@ jobs:
       - name: Verify OpenAPI contract is clean (diff check)
         run: git diff --exit-code ../contracts/openapi.yaml
 
+      - name: Run OpenAPI contract sync check
+        run: composer contract
+
   backend-tests:
     name: 2. Backend Feature & Architecture Tests
     runs-on: ubuntu-latest
@@ -184,6 +187,17 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Generate API client from OpenAPI contract
+        run: pnpm --filter @academic-suite/api-client generate
+
+      - name: Verify generated API client code is committed and in sync
+        run: |
+          if [ -n "$(git status --porcelain packages/api-client)" ]; then
+            echo "API client drift detected! Generated files are out of sync or untracked:"
+            git status --porcelain packages/api-client
+            exit 1
+          fi
 
       - name: Run pnpm security audit
         run: pnpm audit --audit-level=high

@@ -7,7 +7,7 @@ namespace App\Modules\Organisation\Actions;
 use App\Modules\Organisation\Models\AcademicYear;
 use Carbon\Carbon;
 
-class CreateAcademicYearAction
+final class CreateAcademicYearAction
 {
     public function execute(
         string $label,

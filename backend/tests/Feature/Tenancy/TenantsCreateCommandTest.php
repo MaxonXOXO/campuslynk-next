@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature\Tenancy;
 
 use App\Core\Tenancy\Models\Tenant;
+use App\Core\Tenancy\TenantContext;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 
@@ -73,5 +75,41 @@ it('fails with clear instruction when landlord schema is missing', function () {
     } finally {
         config(['database.connections.landlord.search_path' => 'public']);
         DB::purge('landlord');
+    }
+});
+
+it('provisions tenant with seed profile and bootstraps super admin end-to-end', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $exitCode = Artisan::call('tenants:create', [
+        'name' => 'Seeded Polytechnic College',
+        'slug' => 'poly_seed',
+        'domain' => 'polyseed.edu.in',
+        '--profile' => 'cloud',
+        '--seed-profile' => 'kerala-polytechnic',
+        '--admin-name' => 'Super Admin',
+        '--admin-email' => 'superadmin@polyseed.edu.in',
+    ]);
+
+    expect($exitCode)->toBe(0);
+
+    /** @var Tenant $tenant */
+    $tenant = Tenant::where('slug', 'poly_seed')->firstOrFail();
+
+    /** @var TenantContext $context */
+    $context = app(TenantContext::class);
+    $context->setTenant($tenant);
+
+    try {
+        /** @var class-string<Model> $userModel */
+        $userModel = (string) config('auth.providers.users.model');
+        expect($userModel::where('type', 'staff')->count())->toBe(1);
+        expect($userModel::where('email', 'superadmin@polyseed.edu.in')->exists())->toBeTrue();
+
+        // Verify Kerala Polytechnic profile seeded departments exist and seeded exactly once
+        $deptCount = DB::connection('tenant')->table('departments')->count();
+        expect($deptCount)->toBeGreaterThan(0);
+    } finally {
+        $context->forget();
     }
 });

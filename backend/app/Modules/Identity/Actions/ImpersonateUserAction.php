@@ -10,7 +10,7 @@ use App\Modules\Identity\Models\User;
 use Illuminate\Support\Carbon;
 use InvalidArgumentException;
 
-class ImpersonateUserAction
+final class ImpersonateUserAction
 {
     /**
      * @return array{

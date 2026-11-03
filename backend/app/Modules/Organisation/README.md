@@ -3,7 +3,7 @@
 ## 1. Purpose
 The Organisation module manages the academic and structural spine of an institution tenant. It defines streams, institution identity, academic and administrative departments, diploma/degree programs, academic regulations, academic calendar years, batches, mentoring sub-batches, and central workshop trade sections.
 
-Crucially, it implements **ADR-0005** (Department Governance Matrix) and **ADR-0013** (Scope Tree LTREE Labels and Dual Paths). It maintains dual `ltree` scope paths (`home_path` and `managing_path`) on batches and sub-batches, enabling dynamic governance routing (such as First-Year S1/S2 students being managed by General Department while belonging to their parent academic branch).
+Crucially, it implements **ADR-0005** (Department Governance Matrix), **ADR-0013** (Scope Labels in PostgreSQL LTree), and **ADR-0014** (Dual Paths & Resilient Role Scoping). It maintains dual `ltree` scope paths (`home_path` and `managing_path`) on batches and sub-batches, enabling dynamic governance routing (such as First-Year S1/S2 students being managed by General Department while belonging to their parent academic branch).
 
 ## 2. Public Contracts (`Contracts/`)
 - `ScopeTreeContract`: Resolves scope paths, ancestor/descendant relationships, and node hierarchy.

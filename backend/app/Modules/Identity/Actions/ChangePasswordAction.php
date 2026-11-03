@@ -12,7 +12,7 @@ use App\Modules\Identity\Models\PersonalAccessToken;
 use App\Modules\Identity\Models\User;
 use Illuminate\Support\Facades\Hash;
 
-class ChangePasswordAction implements ChangesPasswordContract
+final class ChangePasswordAction implements ChangesPasswordContract
 {
     public function __construct(
         protected TenantContext $tenantContext

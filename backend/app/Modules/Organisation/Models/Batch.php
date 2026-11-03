@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Models;
 
+use App\Core\Concerns\HasScopedVisibility;
+use App\Core\Contracts\ScopedResource;
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
-use App\Modules\Identity\Concerns\HasScopedVisibility;
-use App\Modules\Identity\Contracts\ScopedResource;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;

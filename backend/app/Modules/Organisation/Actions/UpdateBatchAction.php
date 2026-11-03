@@ -13,7 +13,7 @@ use App\Modules\Organisation\Models\SubBatch;
 use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
 
-class UpdateBatchAction
+final class UpdateBatchAction
 {
     public function __construct(
         protected GovernanceResolver $governanceResolver,

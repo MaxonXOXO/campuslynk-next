@@ -636,7 +636,7 @@ dataset('delegation_matrix_cases', [
         'order_record' => null,
         'expected_status' => 422,
     ],
-    'Case 6: Super Admin assigns HOD with order reference' => [
+    'Case 6: Super Admin assigns HOD with order_reference' => [
         'assigner' => 'super_admin',
         'assignee' => 'candidate2',
         'role_key' => 'hod',
@@ -645,6 +645,16 @@ dataset('delegation_matrix_cases', [
         'scope_id_target' => null,
         'order_record' => 'G.O.(Rt) No. 402/2026/HEDN',
         'expected_status' => 201,
+    ],
+    'Case 6b: Super Admin assigns HOD without order_reference (explicit negative)' => [
+        'assigner' => 'super_admin',
+        'assignee' => 'candidate2',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_eee',
+        'scope_id_target' => null,
+        'order_record' => null,
+        'expected_status' => 422,
     ],
     'Case 7: HOD assigns HOD peer level' => [
         'assigner' => 'ce_hod',
@@ -894,6 +904,26 @@ it('verifies full delegation matrix and scope constraints via HTTP', function (
         ])->postJson("http://{$tenantDomain}/api/v1/role-assignments", $payload);
 
         $response->assertStatus($expected_status);
+
+        if ($expected_status === 422) {
+            $response->assertJson([
+                'type' => 'https://api.academic-suite.com/errors/unprocessable',
+                'title' => 'Unprocessable Content',
+                'status' => 422,
+            ]);
+            expect($response->json('detail'))->toBe('Assigning role [hod] requires an official order reference.');
+        }
+
+        if ($expected_status !== 201) {
+            $this->tenantContext->setTenant($tenant);
+            $role = Role::where('key', $role_key)->first();
+            if ($role !== null) {
+                $assignmentCount = RoleAssignment::where('user_id', $targetUser->id)
+                    ->where('role_id', $role->id)
+                    ->count();
+                expect($assignmentCount)->toBe(0);
+            }
+        }
     } finally {
         $this->tenantContext->forget();
     }

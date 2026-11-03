@@ -15,7 +15,8 @@
         "larastan/larastan": "^3.1",
         "laravel/pint": "^1.21",
         "pestphp/pest": "^3.7",
-        "pestphp/pest-plugin-laravel": "^3.1"
+        "pestphp/pest-plugin-laravel": "^3.1",
+        "symfony/yaml": "^8.1"
     },
     "autoload": {
         "psr-4": {
@@ -39,6 +40,7 @@
         "lint:fix": "pint",
         "analyse": "phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
         "test": "pest",
+        "contract": "pest tests/Architecture/OpenApiContractSyncTest.php",
         "check": [
             "@lint",
             "@analyse",

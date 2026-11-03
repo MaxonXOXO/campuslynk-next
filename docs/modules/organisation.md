@@ -3,7 +3,7 @@
 ## 1. Overview
 The **Organisation** module (`App\Modules\Organisation`) establishes the academic and organizational backbone of the institution. It manages:
 - **Institutional Hierarchy:** Streams (`AIDED`, `SF`), Departments (academic and administrative), Programs, Regulations, and Academic Years.
-- **Dual Scope Trees (`ltree`):** Implements ADR-0005 and ADR-0013, maintaining permanent academic roots alongside dynamic governance pathways.
+- **Dual Scope Trees (`ltree`):** Implements ADR-0005, ADR-0013, and ADR-0014, maintaining permanent academic roots alongside dynamic governance pathways.
 - **Semester Governance Resolution:** Handles split academic governance (e.g. Kerala Polytechnic S1/S2 General Department administration vs S3+ parent department administration).
 - **Batch Lifecycle & Promotion:** Automated semester transitions, dynamic re-calculation of managing departments, and event-driven cleanup of first-year assignments.
 
@@ -18,7 +18,7 @@ Following the system architecture rules:
   - `ScopeTreeContract`: Constructs standard dot-separated `ltree` paths (`inst.stream.dept.prog.batch`).
   - `BatchSemesterPromoted`: Domain event published when a batch advances a semester. Identity module listens to this event (`ArchiveFirstYearBatchAssignmentsListener`) to automatically retire S1/S2 tutors and mentors when advancing to S3.
 
-### Dual Scope Paths (ADR-0005 & ADR-0013)
+### Dual Scope Paths (ADR-0005, ADR-0013 & ADR-0014)
 Every batch maintains two native PostgreSQL `ltree` paths:
 1. `home_path`: Permanent affiliation path:
    `{institution}.{stream}.{home_department}.{program}.{batch}`

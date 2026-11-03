@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Http\Controllers;
 
-use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Core\Contracts\ScopeAuthorizerContract;
 use App\Modules\Organisation\Actions\CreateBatchAction;
 use App\Modules\Organisation\Actions\PromoteBatchSemesterAction;
 use App\Modules\Organisation\Actions\UpdateBatchAction;
@@ -19,7 +19,7 @@ use Symfony\Component\HttpFoundation\Response;
 class BatchController
 {
     public function __construct(
-        protected ScopeAuthorizer $authorizer
+        protected ScopeAuthorizerContract $authorizer
     ) {}
 
     public function index(Request $request): JsonResponse

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Core\Tenancy\Models;
 
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
+use App\Core\Validation\JsonSchemaValidator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
@@ -17,6 +18,15 @@ use Illuminate\Support\Carbon;
 class TenantSetting extends Model
 {
     use UsesTenantConnection;
+
+    /**
+     * Map of setting keys to their canonical JSON schema files.
+     *
+     * @var array<string, string>
+     */
+    public const SCHEMA_MAP = [
+        'branding' => 'tenant-branding.schema.json',
+    ];
 
     /**
      * The table associated with the model.
@@ -64,4 +74,20 @@ class TenantSetting extends Model
     protected $casts = [
         'value' => 'array',
     ];
+
+    /**
+     * Boot model hooks. Enforces JSON Schema validation prior to writing to tenant_settings.
+     */
+    protected static function booted(): void
+    {
+        static::saving(function (TenantSetting $setting): void {
+            if (isset(self::SCHEMA_MAP[$setting->key])) {
+                $schemaFile = self::SCHEMA_MAP[$setting->key];
+                /** @var JsonSchemaValidator $validator */
+                $validator = app(JsonSchemaValidator::class);
+                $value = is_array($setting->value) ? $setting->value : (array) $setting->value;
+                $validator->validateOrFail($value, $schemaFile);
+            }
+        });
+    }
 }

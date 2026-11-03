@@ -4,14 +4,16 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Services;
 
-use App\Modules\Identity\Contracts\ScopedResource;
+use App\Core\Authorization\ScopeLabelValidator;
+use App\Core\Contracts\ScopeAuthorizerContract;
+use App\Core\Contracts\ScopedResource;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
-class ScopeAuthorizer
+class ScopeAuthorizer implements ScopeAuthorizerContract
 {
     /**
      * Determine whether the given user has the specified permission for the given resource.
@@ -166,9 +168,7 @@ class ScopeAuthorizer
      */
     public static function validateScopeLabel(string $label): void
     {
-        if ($label === '' || ! preg_match('/^[a-zA-Z0-9_]{1,63}$/', $label)) {
-            throw new \InvalidArgumentException("Invalid scope label [{$label}]. Scope labels must match /^[a-zA-Z0-9_]{1,63}$/.");
-        }
+        ScopeLabelValidator::validate($label);
     }
 
     /**

@@ -6,7 +6,7 @@ namespace App\Modules\Identity\Actions;
 
 use App\Modules\Identity\Models\User;
 
-class ReactivateUserAction
+final class ReactivateUserAction
 {
     public function execute(User $actor, User $user): User
     {

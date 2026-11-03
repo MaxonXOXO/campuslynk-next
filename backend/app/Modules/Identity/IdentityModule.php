@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity;
 
+use App\Core\Contracts\ScopeAuthorizerContract;
+use App\Core\Modules\Contracts\ModuleManifestContract;
 use App\Modules\Identity\Actions\ChangePasswordAction;
 use App\Modules\Identity\Actions\LoginAction;
 use App\Modules\Identity\Commands\PermissionsSyncCommand;
@@ -11,19 +13,51 @@ use App\Modules\Identity\Commands\UsersUnlockCommand;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Contracts\ChangesPasswordContract;
 use App\Modules\Identity\Listeners\ArchiveFirstYearBatchAssignmentsListener;
+use App\Modules\Identity\Services\ScopeAuthorizer;
 use App\Modules\Organisation\Events\BatchSemesterPromoted;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
-class IdentityModule extends ServiceProvider
+class IdentityModule extends ServiceProvider implements ModuleManifestContract
 {
+    public function slug(): string
+    {
+        return 'identity';
+    }
+
+    public function name(): string
+    {
+        return 'Identity';
+    }
+
+    public function isCore(): bool
+    {
+        return true;
+    }
+
+    public function seeders(): array
+    {
+        return [];
+    }
+
+    public function registerRoutes(): void
+    {
+        $routesPath = __DIR__.'/Routes/api.php';
+        if (file_exists($routesPath)) {
+            Route::prefix('api/v1')
+                ->middleware('api')
+                ->group($routesPath);
+        }
+    }
+
     /**
      * All permissions declared by the Identity module.
      * Pattern: identity.<resource>.<action>
      *
      * @return list<string>
      */
-    public static function permissions(): array
+    public function permissions(): array
     {
         return [
             'identity.user.view',
@@ -46,7 +80,7 @@ class IdentityModule extends ServiceProvider
      *
      * @return array<string, list<string>>
      */
-    public static function rolePermissions(): array
+    public function rolePermissions(): array
     {
         return [
             'super_admin' => [
@@ -102,6 +136,7 @@ class IdentityModule extends ServiceProvider
     {
         $this->app->bind(AuthenticatesUserContract::class, LoginAction::class);
         $this->app->bind(ChangesPasswordContract::class, ChangePasswordAction::class);
+        $this->app->singleton(ScopeAuthorizerContract::class, ScopeAuthorizer::class);
     }
 
     public function boot(): void

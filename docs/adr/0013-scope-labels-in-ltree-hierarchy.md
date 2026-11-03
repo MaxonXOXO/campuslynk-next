@@ -12,7 +12,7 @@
 ADR-0005 established that the institution's organizational structure requires dual scope hierarchies to resolve split academic governance (specifically, first-year polytechnic students managed by the General Department while permanently belonging to their engineering parent department).
 
 PostgreSQL's native `ltree` extension allows hierarchical path structures to be queried with high performance using GiST indexing. However:
-1. `ltree` labels must conform to strict PostgreSQL syntax rules: words consisting of alphanumeric characters and underscores (`[A-Za-z0-9_]`), limited to 256 bytes per label.
+1. While PostgreSQL `ltree` technically permits up to 256 bytes per label, CampusLynk strictly caps individual scope labels at 63 characters (`^[a-zA-Z0-9_]{1,63}$`) to align with PostgreSQL standard identifier limits (`NAMEDATALEN - 1`) and prevent GiST index bloat.
 2. Unstandardized or ad-hoc labels across different models (e.g. using raw IDs, strings with hyphens, spaces, or raw department codes) create collisions or syntax errors in `lquery` expressions.
 3. In Scoped RBAC, a user's role assignment carries a `scope_label` (e.g. `d_ce` for HOD of Civil Engineering). The system must deterministically match this `scope_label` against the ancestor path of any target resource.
 
