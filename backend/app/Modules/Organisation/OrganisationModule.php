@@ -29,6 +29,14 @@ class OrganisationModule extends ServiceProvider implements ModuleManifestContra
         return true;
     }
 
+    public function seeders(): array
+    {
+        return [
+            'baseline' => Database\Seeders\TenantBaselineSeeder::class,
+            'kerala-polytechnic' => Database\Seeders\KeralaPolytechnicProfileSeeder::class,
+        ];
+    }
+
     public function registerRoutes(): void
     {
         $routesPath = __DIR__.'/Routes/api.php';

@@ -36,6 +36,11 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
         return true;
     }
 
+    public function seeders(): array
+    {
+        return [];
+    }
+
     public function registerRoutes(): void
     {
         $routesPath = __DIR__.'/Routes/api.php';

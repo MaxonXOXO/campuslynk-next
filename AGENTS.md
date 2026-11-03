@@ -22,6 +22,7 @@
 - **Strict Typing & Core Integrity**:
   - Every single PHP file in `app/Core` and `app/Modules` must declare `declare(strict_types=1);` as its very first statement.
   - Do **not** modify `app/Core` without an approved Architectural Decision Record (ADR) documented in `docs/adr/`.
+  - Validate all JSONB data and tenant settings against schemas in `contracts/json-schemas/` using `App\Core\Validation\JsonSchemaValidator`.
 
 ---
 

@@ -132,6 +132,14 @@ class {$name}Module extends ServiceProvider implements ModuleManifestContract
         ];
     }
 
+    /**
+     * @return array<string, class-string<\Illuminate\Database\Seeder>>
+     */
+    public function seeders(): array
+    {
+        return [];
+    }
+
     public function registerRoutes(): void
     {
         \$routesPath = __DIR__.'/Routes/api.php';

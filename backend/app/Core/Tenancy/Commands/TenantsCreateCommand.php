@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
+use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -99,24 +99,14 @@ class TenantsCreateCommand extends Command
 
             // Optional Tenant Seeding (Part 1 / Step 4)
             $seedProfileOption = $this->option('seed-profile');
-            if (is_string($seedProfileOption) && trim($seedProfileOption) !== '') {
+            if (is_string($seedProfileOption) && trim($seedProfileOption) !== '' && trim($seedProfileOption) !== 'none') {
                 $seedProfile = trim($seedProfileOption);
-                $seederClass = match ($seedProfile) {
-                    'kerala-polytechnic' => 'App\\Modules\\Organisation\\Database\\Seeders\\KeralaPolytechnicProfileSeeder',
-                    'baseline' => 'App\\Modules\\Organisation\\Database\\Seeders\\TenantBaselineSeeder',
-                    default => null,
-                };
-
-                if ($seederClass !== null && class_exists($seederClass)) {
-                    $tenantContext->setTenant($tenant);
-                    try {
-                        $this->info(sprintf('Seeding %s profile...', $seedProfile));
-                        /** @var Seeder $seeder */
-                        $seeder = app($seederClass);
-                        $seeder->__invoke();
-                    } finally {
-                        $tenantContext->forget();
-                    }
+                $tenantContext->setTenant($tenant);
+                try {
+                    $this->info(sprintf('Seeding %s profile...', $seedProfile));
+                    app(ModuleRegistry::class)->seed($seedProfile);
+                } finally {
+                    $tenantContext->forget();
                 }
             }
 

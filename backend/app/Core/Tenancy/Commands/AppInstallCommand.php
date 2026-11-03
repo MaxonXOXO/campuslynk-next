@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Core\Tenancy\Commands;
 
+use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -125,17 +125,9 @@ class AppInstallCommand extends Command
             $tenantContext->setTenant($tenant);
             try {
                 $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
-                $seederClass = match ($seedProfile) {
-                    'kerala-polytechnic' => 'App\\Modules\\Organisation\\Database\\Seeders\\KeralaPolytechnicProfileSeeder',
-                    'baseline' => 'App\\Modules\\Organisation\\Database\\Seeders\\TenantBaselineSeeder',
-                    default => null,
-                };
-
-                if ($seederClass !== null && class_exists($seederClass)) {
+                if ($seedProfile !== '' && $seedProfile !== 'none') {
                     $this->info(sprintf('Seeding %s profile...', $seedProfile));
-                    /** @var Seeder $seeder */
-                    $seeder = app($seederClass);
-                    $seeder->__invoke();
+                    app(ModuleRegistry::class)->seed($seedProfile);
                 }
 
                 /** @var class-string<Model> $userModel */

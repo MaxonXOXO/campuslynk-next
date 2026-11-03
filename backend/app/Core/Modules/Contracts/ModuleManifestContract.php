@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Core\Modules\Contracts;
 
+use Illuminate\Database\Seeder;
+
 interface ModuleManifestContract
 {
     /**
@@ -27,6 +29,13 @@ interface ModuleManifestContract
      * @return list<string>
      */
     public function permissions(): array;
+
+    /**
+     * Optional tenant seeders indexed by profile name (e.g. 'baseline', 'kerala-polytechnic').
+     *
+     * @return array<string, class-string<Seeder>>
+     */
+    public function seeders(): array;
 
     /**
      * Loads the module's Routes/api.php under /api/v1.
