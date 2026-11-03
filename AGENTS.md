@@ -127,21 +127,21 @@ When building a new domain module (e.g., `Attendance`, `Assessment`, `Leave`):
 
 ## 6. ADR Architecture Mapping
 
-| ADR | Title | Authoritative Section in AGENTS.md |
-| :--- | :--- | :--- |
-| **ADR-0001** | Database-per-Tenant Isolation | §2 Tenancy & Database Rules |
-| **ADR-0002** | Landlord Isolation & Least Privilege | §2 Tenancy & Database Rules |
-| **ADR-0003** | ULID Primary & Foreign Keys | §2 Tenancy & Database Rules |
-| **ADR-0004** | Role Delegation & Universal Impersonation | §3 Scoped RBAC & PostgreSQL ltree |
-| **ADR-0005** | Scoped RBAC with PostgreSQL ltree | §3 Scoped RBAC & PostgreSQL ltree |
-| **ADR-0006** | Action-Based Architecture Pipeline | §1 Core Architecture & Non-Negotiables |
-| **ADR-0007** | Strict Module Encapsulation | §1 Core Architecture & §4 Module Creation |
-| **ADR-0008** | Monorepo Strict Structure & UI Discipline | §5 Frontend Rules |
-| **ADR-0009** | Strongly Typed OpenAPI Client Pipeline | §5 Frontend Rules & §6 Quality Gates |
-| **ADR-0010** | Tenant Routing & Domain Resolution | §2 Tenancy & Database Rules |
-| **ADR-0011** | PgBouncer Pooling Safety & Emulated Prepares | §2 Tenancy & Database Rules |
-| **ADR-0012** | Owner vs Runtime Least-Privilege Roles | §2 Tenancy & Database Rules |
-| **ADR-0013** | Singleton Role Exclusion Constraints | §3 Scoped RBAC & PostgreSQL ltree |
+| ADR | Title in `docs/adr/` | Filename | Authoritative Section in AGENTS.md |
+| :--- | :--- | :--- | :--- |
+| **ADR-0001** | PostgreSQL with one database per college | `0001-postgresql-database-per-tenant.md` | §2 Tenancy & Database Rules |
+| **ADR-0002** | API versioning, compatibility and long-running work | `0002-api-versioning-and-compatibility.md` | §4 Module Creation Recipe & §6 OpenAPI Sync |
+| **ADR-0003** | Student, staff and parent authentication | `0003-parent-and-student-authentication.md` | §2 Tenancy & Database Rules & §3 Scoped RBAC |
+| **ADR-0004** | Super Admin (college IT head) above Principal | `0004-super-admin-vs-principal.md` | §3 Scoped RBAC & PostgreSQL ltree |
+| **ADR-0005** | Scope tree with home and managing department | `0005-scope-model-home-and-managing-department.md` | §3 Scoped RBAC & PostgreSQL ltree |
+| **ADR-0006** | Data-driven regulation & assessment engine (REV2021 & REV2026) | `0006-regulation-driven-assessment-engine.md` | §1 Core Architecture & Clean Action Pipeline |
+| **ADR-0007** | Configurable approval chains, notifications, and external AI boundary | `0007-configurable-approval-chains-and-notifications.md` | §1 Core Architecture (Domain Events & Contracts) |
+| **ADR-0008** | On-prem public reachability and TLS | `0008-onprem-public-reachability-and-tls.md` | §2 Tenancy & Database Rules |
+| **ADR-0009** | PgBouncer Pool Mode for Multi-Tenant Architecture | `0009-pgbouncer-pool-mode.md` | §2 Tenancy & Database Rules |
+| **ADR-0010** | Tenancy Core Implementation Mechanism | `0010-tenancy-mechanism.md` | §2 Tenancy & Database Rules |
+| **ADR-0011** | Token Lifetimes, Login Throttling, and Credential Policies | `0011-token-lifetimes-and-login-throttling.md` | §2 Tenancy & Database Rules |
+| **ADR-0012** | Separation of Tenant Database Owner Role and Runtime DML Role | `0012-owner-vs-runtime-role.md` | §2 Tenancy & Database Rules |
+| **ADR-0013** | Scope Labels and Deterministic Hierarchy in PostgreSQL LTree | `0013-scope-labels-in-ltree-hierarchy.md` | §3 Scoped RBAC & PostgreSQL ltree |
 
 ---
 
