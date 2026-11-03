@@ -87,7 +87,7 @@ When building a new domain module (e.g., `Attendance`, `Assessment`, `Leave`):
 
 2. **Declare Manifest**:
    - Implement `App\Core\Modules\Contracts\ModuleManifestContract`.
-   - Define `slug()`, `name()`, `isCore()`, and `permissions()`.
+   - Define `slug()`, `name()`, `isCore()`, `permissions()`, and optional tenant `seeders()`.
    - Core modules are always enabled; non-core modules are gated by `module:{slug}` middleware.
    - Run `php artisan permissions:sync` to register new permissions.
 

@@ -102,6 +102,7 @@ declare(strict_types=1);
 namespace App\Modules\\{$name};
 
 use App\Core\Modules\Contracts\ModuleManifestContract;
+use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -133,7 +134,7 @@ class {$name}Module extends ServiceProvider implements ModuleManifestContract
     }
 
     /**
-     * @return array<string, class-string<\Illuminate\Database\Seeder>>
+     * @return array<string, class-string<Seeder>>
      */
     public function seeders(): array
     {
