@@ -51,18 +51,6 @@
       ],
       "additionalProperties": false
     },
-    "primary": {
-      "type": "string",
-      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
-    },
-    "primaryForeground": {
-      "type": "string",
-      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
-    },
-    "ring": {
-      "type": "string",
-      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
-    },
     "logoUrl": {
       "type": "string",
       "format": "uri",

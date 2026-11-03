@@ -32,6 +32,68 @@ it('successfully validates compliant tenant branding payload', function () {
         ->and($validated['light']['primary'])->toBe('#1A365D');
 });
 
+it('accepts compliant nested tenant branding payload', function () {
+    $validator = new JsonSchemaValidator;
+
+    $nestedPayload = [
+        'light' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+            'ring' => '#2B6CB0',
+        ],
+        'dark' => [
+            'primary' => 'oklch(0.432 0.095 166.913)',
+            'primaryForeground' => 'oklch(0.979 0.021 166.113)',
+            'ring' => '#4A5568',
+        ],
+        'logoUrl' => 'https://carmelpoly.in/images/logo.png',
+    ];
+
+    $result = $validator->validate($nestedPayload, 'tenant-branding.schema.json');
+
+    expect($result->isValid())->toBeTrue()
+        ->and($result->errors())->toBeEmpty();
+});
+
+it('rejects flat-only branding payload without nested theme objects', function () {
+    $validator = new JsonSchemaValidator;
+
+    $flatOnlyPayload = [
+        'primary' => '#1A365D',
+        'primaryForeground' => '#FFFFFF',
+        'ring' => '#2B6CB0',
+        'logoUrl' => 'https://carmelpoly.in/images/logo.png',
+    ];
+
+    $result = $validator->validate($flatOnlyPayload, 'tenant-branding.schema.json');
+
+    expect($result->isValid())->toBeFalse()
+        ->and($result->errors())->toHaveKey('light')
+        ->and($result->errors())->toHaveKey('dark')
+        ->and($result->errors())->toHaveKey('primary');
+});
+
+it('rejects mixed payload containing both nested theme objects and flat top-level keys', function () {
+    $validator = new JsonSchemaValidator;
+
+    $mixedPayload = [
+        'light' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
+        'dark' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
+        'primary' => '#1A365D', // Forbidden flat top-level key
+    ];
+
+    $result = $validator->validate($mixedPayload, 'tenant-branding.schema.json');
+
+    expect($result->isValid())->toBeFalse()
+        ->and($result->errors())->toHaveKey('primary');
+});
+
 it('rejects missing required branding fields', function () {
     $validator = new JsonSchemaValidator;
 

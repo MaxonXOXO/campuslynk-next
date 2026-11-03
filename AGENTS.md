@@ -47,7 +47,7 @@
 
 ---
 
-## 3. Scoped RBAC & PostgreSQL ltree (ADR-0004, ADR-0005, ADR-0013)
+## 3. Scoped RBAC & PostgreSQL ltree (ADR-0004, ADR-0005, ADR-0013, ADR-0014)
 
 - **Permission Canonical Format**:
   - Permissions strictly follow the format: `<module>.<resource>.<action>` (e.g., `identity.user.create`, `organisation.batch.view`).
@@ -142,6 +142,7 @@ When building a new domain module (e.g., `Attendance`, `Assessment`, `Leave`):
 | **ADR-0011** | Token Lifetimes, Login Throttling, and Credential Policies | `0011-token-lifetimes-and-login-throttling.md` | §2 Tenancy & Database Rules |
 | **ADR-0012** | Separation of Tenant Database Owner Role and Runtime DML Role | `0012-owner-vs-runtime-role.md` | §2 Tenancy & Database Rules |
 | **ADR-0013** | Scope Labels and Deterministic Hierarchy in PostgreSQL LTree | `0013-scope-labels-in-ltree-hierarchy.md` | §3 Scoped RBAC & PostgreSQL ltree |
+| **ADR-0014** | Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping | `0014-scope-tree-ltree-labels-and-dual-paths.md` | §3 Scoped RBAC & PostgreSQL ltree |
 
 ---
 

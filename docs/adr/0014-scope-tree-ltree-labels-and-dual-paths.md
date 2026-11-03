@@ -1,4 +1,4 @@
-# ADR-0013: Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping
+# ADR-0014: Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping
 
 **Status:** Proposed  
 **Date:** 2026-11-02  
