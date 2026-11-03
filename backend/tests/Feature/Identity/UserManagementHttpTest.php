@@ -626,15 +626,15 @@ dataset('delegation_matrix_cases', [
         'order_record' => null,
         'expected_status' => 403,
     ],
-    'Case 5: Super Admin assigns Principal' => [
+    'Case 5: Super Admin assigns HOD without order reference' => [
         'assigner' => 'super_admin',
-        'assignee' => 'candidate1',
-        'role_key' => 'principal',
-        'scope_type' => 'institution',
-        'scope_label' => 'i_carmel',
+        'assignee' => 'candidate2',
+        'role_key' => 'hod',
+        'scope_type' => 'department',
+        'scope_label' => 'd_eee',
         'scope_id_target' => null,
         'order_record' => null,
-        'expected_status' => 201,
+        'expected_status' => 422,
     ],
     'Case 6: Super Admin assigns HOD with order_reference' => [
         'assigner' => 'super_admin',
@@ -646,7 +646,7 @@ dataset('delegation_matrix_cases', [
         'order_record' => 'G.O.(Rt) No. 402/2026/HEDN',
         'expected_status' => 201,
     ],
-    'Case 6b: Super Admin assigns HOD without order_reference' => [
+    'Case 6b: Super Admin assigns HOD without order_reference (explicit negative)' => [
         'assigner' => 'super_admin',
         'assignee' => 'candidate2',
         'role_key' => 'hod',
@@ -904,6 +904,15 @@ it('verifies full delegation matrix and scope constraints via HTTP', function (
         ])->postJson("http://{$tenantDomain}/api/v1/role-assignments", $payload);
 
         $response->assertStatus($expected_status);
+
+        if ($expected_status === 422) {
+            $response->assertJson([
+                'type' => 'https://api.academic-suite.com/errors/unprocessable',
+                'title' => 'Unprocessable Content',
+                'status' => 422,
+            ]);
+            expect($response->json('detail'))->toBe('Assigning role [hod] requires an official order reference.');
+        }
 
         if ($expected_status !== 201) {
             $this->tenantContext->setTenant($tenant);
