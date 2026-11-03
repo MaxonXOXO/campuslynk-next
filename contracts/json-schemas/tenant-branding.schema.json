@@ -2,41 +2,76 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://contracts.academic-suite.com/json-schemas/tenant-branding.schema.json",
   "title": "TenantBranding",
-  "description": "Strict schema for tenant branding attributes (colors, logos, typography) preventing arbitrary injection.",
+  "description": "Strict schema for tenant branding tokens matching packages/ui branding contract.",
   "type": "object",
   "properties": {
-    "primary_color": {
-      "type": "string",
-      "description": "Primary brand color in 3 or 6 hex digit CSS format",
-      "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+    "light": {
+      "type": "object",
+      "description": "Light theme color tokens",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        },
+        "primaryForeground": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        },
+        "ring": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        }
+      },
+      "required": [
+        "primary",
+        "primaryForeground"
+      ],
+      "additionalProperties": false
     },
-    "secondary_color": {
-      "type": "string",
-      "description": "Secondary brand color in 3 or 6 hex digit CSS format",
-      "pattern": "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$"
+    "dark": {
+      "type": "object",
+      "description": "Dark theme color tokens",
+      "properties": {
+        "primary": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        },
+        "primaryForeground": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        },
+        "ring": {
+          "type": "string",
+          "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+        }
+      },
+      "required": [
+        "primary",
+        "primaryForeground"
+      ],
+      "additionalProperties": false
     },
-    "logo_url": {
+    "primary": {
       "type": "string",
-      "description": "Absolute URL to the tenant institutional logo (HTTPS preferred)",
+      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+    },
+    "primaryForeground": {
+      "type": "string",
+      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+    },
+    "ring": {
+      "type": "string",
+      "pattern": "^(?:#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})|oklch\\([^;{}\\n]+\\))$"
+    },
+    "logoUrl": {
+      "type": "string",
       "format": "uri",
       "pattern": "^https?:\\/\\/[^\\s$.?#].[^\\s]*$"
-    },
-    "favicon_url": {
-      "type": "string",
-      "description": "Absolute URL to the tenant favicon",
-      "format": "uri",
-      "pattern": "^https?:\\/\\/[^\\s$.?#].[^\\s]*$"
-    },
-    "font_family": {
-      "type": "string",
-      "description": "Sanitized typography font family identifier",
-      "pattern": "^[a-zA-Z0-9\\s\\-',]+$",
-      "maxLength": 100
     }
   },
   "required": [
-    "primary_color",
-    "secondary_color"
+    "light",
+    "dark"
   ],
   "additionalProperties": false
 }

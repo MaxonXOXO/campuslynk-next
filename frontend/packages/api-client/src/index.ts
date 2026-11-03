@@ -5,11 +5,12 @@
 
 export const API_CLIENT_VERSION = '0.1.0';
 
-export { createApiClient } from './client.js';
+export { createApiClient, type ApiClient } from './client.js';
 export {
   ApiError,
   type ProblemDetails,
   type ApiResponseEnvelope,
+  type Envelope,
   type ApiClientConfig,
   type RequestOptions,
   type paths,

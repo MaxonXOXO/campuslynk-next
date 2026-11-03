@@ -106,6 +106,22 @@ it('scaffolds a complete valid module with canonical structure and manifest', fu
             ->and($module->name())->toBe('Sample Feature')
             ->and($module->isCore())->toBeFalse()
             ->and($module->permissions())->toContain("{$slug}.view");
+
+        // 6. Run php -l on every generated PHP file to verify syntax validity
+        $allGeneratedPhpFiles = array_merge(
+            File::allFiles($moduleDir),
+            File::allFiles($testDir)
+        );
+        foreach ($allGeneratedPhpFiles as $splFile) {
+            if ($splFile->getExtension() !== 'php') {
+                continue;
+            }
+            $filePath = $splFile->getRealPath();
+            $output = [];
+            $resultCode = 0;
+            exec("php -l \"{$filePath}\"", $output, $resultCode);
+            expect($resultCode)->toBe(0, "Syntax error in generated file: {$filePath} -> ".implode("\n", $output));
+        }
     } finally {
         // Clean up scaffolded test module
         if (File::isDirectory($moduleDir)) {

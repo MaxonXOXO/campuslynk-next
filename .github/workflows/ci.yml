@@ -192,7 +192,7 @@ jobs:
         run: pnpm --filter @academic-suite/api-client generate
 
       - name: Verify generated API client code is committed and in sync
-        run: git diff --exit-code packages/api-client/src/generated/
+        run: git diff --exit-code packages/api-client
 
       - name: Run pnpm security audit
         run: pnpm audit --audit-level=high

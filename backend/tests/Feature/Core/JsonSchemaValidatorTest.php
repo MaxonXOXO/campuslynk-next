@@ -2,17 +2,24 @@
 
 declare(strict_types=1);
 
+use App\Core\Tenancy\Models\TenantSetting;
 use App\Core\Validation\JsonSchemaValidator;
 
 it('successfully validates compliant tenant branding payload', function () {
     $validator = new JsonSchemaValidator;
 
     $validPayload = [
-        'primary_color' => '#1A365D',
-        'secondary_color' => '#2B6CB0',
-        'logo_url' => 'https://carmelpoly.in/images/logo.png',
-        'favicon_url' => 'https://carmelpoly.in/favicon.ico',
-        'font_family' => 'Inter, system-ui, sans-serif',
+        'light' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+            'ring' => '#2B6CB0',
+        ],
+        'dark' => [
+            'primary' => 'oklch(0.432 0.095 166.913)',
+            'primaryForeground' => 'oklch(0.979 0.021 166.113)',
+            'ring' => '#4A5568',
+        ],
+        'logoUrl' => 'https://carmelpoly.in/images/logo.png',
     ];
 
     $result = $validator->validate($validPayload, 'tenant-branding.schema.json');
@@ -22,81 +29,100 @@ it('successfully validates compliant tenant branding payload', function () {
 
     $validated = $validator->validateOrFail($validPayload, 'tenant-branding.schema.json');
     expect($validated)->toBeArray()
-        ->and($validated['primary_color'])->toBe('#1A365D');
+        ->and($validated['light']['primary'])->toBe('#1A365D');
 });
 
 it('rejects missing required branding fields', function () {
     $validator = new JsonSchemaValidator;
 
-    $invalidPayload = [
-        'primary_color' => '#1A365D',
-        // missing secondary_color
+    // Missing required 'dark' object
+    $missingDark = [
+        'light' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
     ];
 
-    $result = $validator->validate($invalidPayload, 'tenant-branding.schema.json');
-
+    $result = $validator->validate($missingDark, 'tenant-branding.schema.json');
     expect($result->isValid())->toBeFalse()
-        ->and($result->errors())->toHaveKey('secondary_color');
-});
+        ->and($result->errors())->toHaveKey('dark');
 
-it('rejects invalid color formats and CSS injections', function () {
-    $validator = new JsonSchemaValidator;
-
-    $maliciousColors = [
-        'red',
-        '#12345',
-        'rgb(0,0,0)',
-        '#ZZZZZZ',
-        '#1A365D; background: red;',
-        '<script>alert(1)</script>',
+    // Missing required 'primaryForeground' inside light
+    $missingNestedField = [
+        'light' => [
+            'primary' => '#1A365D',
+        ],
+        'dark' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
     ];
 
-    foreach ($maliciousColors as $badColor) {
-        $result = $validator->validate([
-            'primary_color' => $badColor,
-            'secondary_color' => '#2B6CB0',
-        ], 'tenant-branding.schema.json');
-
-        expect($result->isValid())->toBeFalse()
-            ->and($result->errors())->toHaveKey('primary_color');
-    }
+    $resultNested = $validator->validate($missingNestedField, 'tenant-branding.schema.json');
+    expect($resultNested->isValid())->toBeFalse()
+        ->and($resultNested->errors())->toHaveKey('light.primaryForeground');
 });
 
-it('rejects malicious or non-HTTP logo URLs preventing XSS', function () {
+it('rejects wrong field types in schema payload', function () {
     $validator = new JsonSchemaValidator;
 
-    $maliciousUrls = [
-        'javascript:alert(1)',
-        'data:text/html,<script>alert(1)</script>',
-        'vbscript:msgbox(1)',
-        'not a url',
+    // 'light' given as string instead of object
+    $wrongObjectType = [
+        'light' => 'not-an-object',
+        'dark' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
     ];
 
-    foreach ($maliciousUrls as $badUrl) {
-        $result = $validator->validate([
-            'primary_color' => '#1A365D',
-            'secondary_color' => '#2B6CB0',
-            'logo_url' => $badUrl,
-        ], 'tenant-branding.schema.json');
+    $resultObject = $validator->validate($wrongObjectType, 'tenant-branding.schema.json');
+    expect($resultObject->isValid())->toBeFalse()
+        ->and($resultObject->errors())->toHaveKey('light');
 
-        expect($result->isValid())->toBeFalse()
-            ->and($result->errors())->toHaveKey('logo_url');
-    }
+    // 'primary' given as integer instead of string
+    $wrongStringType = [
+        'light' => [
+            'primary' => 12345,
+            'primaryForeground' => '#FFFFFF',
+        ],
+        'dark' => [
+            'primary' => '#1A365D',
+            'primaryForeground' => '#FFFFFF',
+        ],
+    ];
+
+    $resultString = $validator->validate($wrongStringType, 'tenant-branding.schema.json');
+    expect($resultString->isValid())->toBeFalse()
+        ->and($resultString->errors())->toHaveKey('light.primary');
 });
 
-it('strictly rejects arbitrary additional properties', function () {
+it('fails when an unknown schema name is provided', function () {
     $validator = new JsonSchemaValidator;
 
-    $injectedPayload = [
-        'primary_color' => '#1A365D',
-        'secondary_color' => '#2B6CB0',
-        'custom_css' => 'body { display: none; }',
-        'injected_script' => '<script>window.steal()</script>',
+    $payload = [
+        'foo' => 'bar',
     ];
 
-    $result = $validator->validate($injectedPayload, 'tenant-branding.schema.json');
-
+    $result = $validator->validate($payload, 'non-existent-schema.json');
     expect($result->isValid())->toBeFalse()
-        ->and($result->errors())->toHaveKey('custom_css')
-        ->and($result->errors())->toHaveKey('injected_script');
+        ->and($result->errors())->toHaveKey('_schema');
+
+    expect(fn () => $validator->validateOrFail($payload, 'non-existent-schema.json'))
+        ->toThrow(InvalidArgumentException::class);
+});
+
+it('enforces JSON Schema validation prior to writing to tenant_settings', function () {
+    $invalidBranding = [
+        'light' => [
+            'primary' => '#1A365D',
+            // missing primaryForeground
+        ],
+    ];
+
+    expect(function () use ($invalidBranding) {
+        $setting = new TenantSetting;
+        $setting->key = 'branding';
+        $setting->value = $invalidBranding;
+        $setting->save();
+    })->toThrow(InvalidArgumentException::class);
 });

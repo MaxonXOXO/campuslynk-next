@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Core\Validation;
 
 use InvalidArgumentException;
-use RuntimeException;
 
 class JsonSchemaValidator
 {
@@ -24,7 +23,9 @@ class JsonSchemaValidator
 
         $resolvedPath = $this->resolveSchemaPath($schemaPath);
         if (! file_exists($resolvedPath)) {
-            throw new RuntimeException("Schema file not found at [{$resolvedPath}].");
+            return new JsonSchemaValidationResult(false, [
+                '_schema' => "Schema file not found: [{$schemaPath}].",
+            ]);
         }
 
         $schemaContent = (string) file_get_contents($resolvedPath);
@@ -32,7 +33,9 @@ class JsonSchemaValidator
         $schema = json_decode($schemaContent, true);
 
         if (! is_array($schema)) {
-            throw new RuntimeException("Schema file at [{$resolvedPath}] contains invalid JSON.");
+            return new JsonSchemaValidationResult(false, [
+                '_schema' => "Schema file at [{$resolvedPath}] contains invalid JSON.",
+            ]);
         }
 
         $errors = $this->validateObject($payload, $schema, '');
@@ -78,7 +81,7 @@ class JsonSchemaValidator
         if (isset($schema['required']) && is_array($schema['required'])) {
             foreach ($schema['required'] as $requiredKey) {
                 if (! array_key_exists($requiredKey, $data) || $data[$requiredKey] === null) {
-                    $keyPath = $pathPrefix ? "{$pathPrefix}.{$requiredKey}" : $requiredKey;
+                    $keyPath = $pathPrefix !== '' ? "{$pathPrefix}.{$requiredKey}" : (string) $requiredKey;
                     $errors[$keyPath] = "Field [{$keyPath}] is required.";
                 }
             }
@@ -92,7 +95,7 @@ class JsonSchemaValidator
 
             foreach (array_keys($data) as $providedKey) {
                 if (! in_array($providedKey, $allowedProperties, true)) {
-                    $keyPath = $pathPrefix ? "{$pathPrefix}.{$providedKey}" : (string) $providedKey;
+                    $keyPath = $pathPrefix !== '' ? "{$pathPrefix}.{$providedKey}" : (string) $providedKey;
                     $errors[$keyPath] = "Additional property [{$keyPath}] is not permitted.";
                 }
             }
@@ -106,7 +109,7 @@ class JsonSchemaValidator
             }
 
             $propSchema = $properties[$key];
-            $keyPath = $pathPrefix ? "{$pathPrefix}.{$key}" : (string) $key;
+            $keyPath = $pathPrefix !== '' ? "{$pathPrefix}.{$key}" : (string) $key;
 
             if ($value === null) {
                 continue;
@@ -135,8 +138,17 @@ class JsonSchemaValidator
 
                     continue;
                 }
-                if ($type === 'object' && (! is_array($value) || array_is_list($value))) {
-                    $errors[$keyPath] = "Field [{$keyPath}] must be an object.";
+                if ($type === 'object') {
+                    if (! is_array($value) || array_is_list($value)) {
+                        $errors[$keyPath] = "Field [{$keyPath}] must be an object.";
+
+                        continue;
+                    }
+
+                    // Recursive object validation
+                    /** @var array<string, mixed> $value */
+                    $nestedErrors = $this->validateObject($value, $propSchema, $keyPath);
+                    $errors = array_merge($errors, $nestedErrors);
 
                     continue;
                 }
@@ -145,7 +157,7 @@ class JsonSchemaValidator
             // String patterns and lengths
             if (is_string($value)) {
                 if (isset($propSchema['pattern'])) {
-                    $cleaned = str_replace(['\/', '#'], ['/', '\#'], $propSchema['pattern']);
+                    $cleaned = str_replace(['\/', '#'], ['/', '\#'], (string) $propSchema['pattern']);
                     $pattern = '#'.$cleaned.'#';
                     if (! preg_match($pattern, $value)) {
                         $errors[$keyPath] = "Field [{$keyPath}] does not match required pattern.";
