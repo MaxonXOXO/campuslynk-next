@@ -41,6 +41,9 @@ trait TenancyTestHelper
         Cache::flush();
 
         // 1. Clean up landlord database records
+        config(['app_profile.deploy_profile' => env('DEPLOY_PROFILE', 'onprem')]);
+        config(['app.trusted_proxies' => null]);
+
         $landlord = DB::connection('landlord');
         $landlord->statement('DELETE FROM schema_versions');
         $landlord->statement('DELETE FROM licenses');
@@ -57,13 +60,13 @@ trait TenancyTestHelper
             $name = $db->datname;
             try {
                 $admin->statement(
-                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid() AND usename NOT IN (SELECT rolname FROM pg_roles WHERE rolsuper = true)"
+                    "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{$name}' AND pid <> pg_backend_pid()"
                 );
             } catch (\Throwable) {
                 // Ignore if process cannot be signalled or already exited
             }
             try {
-                $admin->statement("DROP DATABASE IF EXISTS \"{$name}\"");
+                $admin->statement("DROP DATABASE IF EXISTS \"{$name}\" WITH (FORCE)");
             } catch (\Throwable) {
                 // Ignore
             }

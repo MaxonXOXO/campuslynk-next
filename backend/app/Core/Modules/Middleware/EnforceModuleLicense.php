@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Core\Modules\Middleware;
 
+use App\Core\Http\ProblemDetails;
 use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\TenantContext;
 use Closure;
@@ -29,7 +30,7 @@ class EnforceModuleLicense
         $tenant = $this->tenantContext->getTenant();
         if ($tenant === null) {
             return new JsonResponse([
-                'type' => 'https://academic-suite.net/errors/tenant-context-missing',
+                'type' => ProblemDetails::type('tenant-context-missing'),
                 'title' => 'Tenant Context Missing',
                 'status' => 403,
                 'detail' => 'Module access requires an active tenant context.',
@@ -45,7 +46,7 @@ class EnforceModuleLicense
 
         if (! in_array($slug, $modules, true)) {
             return new JsonResponse([
-                'type' => 'https://academic-suite.net/errors/module-not-licensed',
+                'type' => ProblemDetails::type('module-not-licensed'),
                 'title' => 'Module Not Licensed',
                 'status' => 403,
                 'detail' => sprintf('The module [%s] is not enabled under your institutional licence.', $slug),

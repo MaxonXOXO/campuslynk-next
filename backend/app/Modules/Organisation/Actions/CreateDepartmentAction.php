@@ -14,22 +14,27 @@ final class CreateDepartmentAction
         string $code,
         string $name,
         string $streamId,
-        string $fundingStream,
-        string $kind = 'academic'
+        ?string $fundingStream = null,
+        string $kind = 'academic',
+        ?string $scopeLabel = null
     ): Department {
         $cleanCode = strtoupper(trim($code));
-        $scopeLabel = 'd_'.strtolower((string) preg_replace('/[^a-zA-Z0-9_]/', '_', $cleanCode));
-        ScopeLabelValidator::validate($scopeLabel);
+        $stream = Stream::findOrFail($streamId);
 
-        // Ensure stream exists
-        Stream::findOrFail($streamId);
+        if ($scopeLabel === null) {
+            $baseLabel = 'd_'.strtolower((string) preg_replace('/[^a-zA-Z0-9_]/', '_', $cleanCode));
+            $scopeLabel = Department::where('scope_label', $baseLabel)->exists()
+                ? $baseLabel.'_'.strtolower((string) preg_replace('/[^a-zA-Z0-9_]/', '_', $stream->code))
+                : $baseLabel;
+        }
+
+        ScopeLabelValidator::validate($scopeLabel);
 
         /** @var Department $department */
         $department = Department::create([
             'code' => $cleanCode,
             'name' => $name,
             'stream_id' => $streamId,
-            'funding_stream' => strtoupper($fundingStream),
             'kind' => $kind,
             'is_active' => true,
             'scope_label' => $scopeLabel,

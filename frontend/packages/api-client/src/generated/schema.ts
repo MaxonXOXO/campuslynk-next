@@ -193,6 +193,42 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/streams": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List all streams with department counts */
+        get: operations["listStreams"];
+        put?: never;
+        /** Create a new stream */
+        post: operations["createStream"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/streams/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a stream */
+        delete: operations["deleteStream"];
+        options?: never;
+        head?: never;
+        /** Update a stream name */
+        patch: operations["updateStream"];
+        trace?: never;
+    };
     "/departments": {
         parameters: {
             query?: never;
@@ -545,10 +581,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve first-run setup wizard state and prerequisite counts */
+        get: operations["getSetupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/steps/{step}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Save or update configuration for a specific setup step and mark it complete */
+        put: operations["saveSetupStep"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Finalize first-run setup wizard verifying all steps and prerequisites */
+        post: operations["completeSetup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        Stream: {
+            /** @example 01HMG7XYZ456ABCDEF01234567 */
+            id: string;
+            /** @example AIDED */
+            code: string;
+            /** @example Aided Stream */
+            name: string;
+            /** @example s_aided */
+            scope_label: string;
+            /** @example 4 */
+            departments_count: number;
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: date-time */
+            updated_at?: string | null;
+        };
+        CreateStreamRequest: {
+            /** @example AIDED */
+            code: string;
+            /** @example Aided Stream */
+            name: string;
+        };
+        UpdateStreamRequest: {
+            /** @example Aided Stream (Updated) */
+            name: string;
+            /** @description Stream code is immutable; sending a modified code returns 422 */
+            code?: string;
+        };
         TenantMetaEnvelope: {
             data: {
                 id: string;
@@ -782,6 +897,45 @@ export interface components {
                 self?: string;
             };
         };
+        SetupStatusEnvelope: {
+            data: {
+                /** Format: date-time */
+                completed_at: string | null;
+                is_completed: boolean;
+                steps: {
+                    institution_profile: {
+                        /** Format: date-time */
+                        completed_at: string | null;
+                        is_completed: boolean;
+                        settings_exist: boolean;
+                    };
+                    calendar_basics: {
+                        /** Format: date-time */
+                        completed_at: string | null;
+                        is_completed: boolean;
+                        settings_exist: boolean;
+                    };
+                    signup_policy: {
+                        /** Format: date-time */
+                        completed_at: string | null;
+                        is_completed: boolean;
+                        settings_exist: boolean;
+                    };
+                };
+                prerequisites: {
+                    streams_count: number;
+                    departments_count: number;
+                    academic_years_count: number;
+                };
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
     };
     responses: {
         /** @description RFC 7807 Problem Details error response */
@@ -791,7 +945,10 @@ export interface components {
             };
             content: {
                 "application/problem+json": {
-                    /** @example about:blank */
+                    /**
+                     * @description URI reference identifying the problem type (non-dereferenceable identifier)
+                     * @example about:blank
+                     */
                     type: string;
                     /** @example Unauthorized */
                     title: string;
@@ -1142,6 +1299,130 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    listStreams: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description List of streams */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Stream"][];
+                        meta: {
+                            total: number;
+                        };
+                        links: {
+                            self: string;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+        };
+    };
+    createStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateStreamRequest"];
+            };
+        };
+        responses: {
+            /** @description Stream created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Stream"];
+                        links: {
+                            self: string;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    deleteStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stream deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            message: string;
+                        };
+                        meta: {
+                            timestamp: string;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+        };
+    };
+    updateStream: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateStreamRequest"];
+            };
+        };
+        responses: {
+            /** @description Stream updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: components["schemas"]["Stream"];
+                        links: {
+                            self: string;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
         };
     };
     listDepartments: {
@@ -1876,6 +2157,82 @@ export interface operations {
                 };
                 content?: never;
             };
+        };
+    };
+    getSetupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup status resolved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+        };
+    };
+    saveSetupStep: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                step: "institution_profile" | "calendar_basics" | "signup_policy";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Setup step saved successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    completeSetup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Setup successfully finalized */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
         };
     };
 }

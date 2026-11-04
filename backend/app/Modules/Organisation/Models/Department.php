@@ -16,7 +16,6 @@ use Illuminate\Support\Carbon;
  * @property string $code
  * @property string $name
  * @property string $stream_id
- * @property string $funding_stream
  * @property string $kind
  * @property bool $is_active
  * @property string $scope_label
@@ -38,7 +37,6 @@ class Department extends Model
         'code',
         'name',
         'stream_id',
-        'funding_stream',
         'kind',
         'is_active',
         'scope_label',

@@ -44,7 +44,7 @@ class UserIdentifier extends Model
 
     /**
      * Normalise an identifier value into its unique canonical form.
-     * Operates uniformly across emails, mobiles, and registration numbers / IDs
+     * Operates uniformly across emails, mobiles, registration numbers, and admission numbers
      * with zero kind-guessing at login time.
      */
     public static function normalise(string $value, ?string $kind = null): string
@@ -74,8 +74,16 @@ class UserIdentifier extends Model
             return $cleanDigits;
         }
 
-        // 3. Alphanumeric identifiers (staff IDs, registration codes, generic handles)
+        // 3. Alphanumeric identifiers (staff IDs, registration codes, admission numbers e.g. 5842/25)
         // Trimmed and lowercased for case-insensitive uniqueness across all kinds
         return strtolower($trimmed);
+    }
+
+    /**
+     * Alias for normalise() for explicit identifier normalization.
+     */
+    public static function normaliseValue(string $value, ?string $kind = null): string
+    {
+        return self::normalise($value, $kind);
     }
 }

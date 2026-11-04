@@ -10,6 +10,7 @@ use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
+use App\Modules\Identity\Middleware\EnsureSuperAdminAtInstitutionScope;
 use App\Modules\Identity\Middleware\RequirePermission;
 use App\Modules\Organisation\Http\Controllers\AcademicYearController;
 use App\Modules\Organisation\Http\Controllers\BatchController;
@@ -17,6 +18,8 @@ use App\Modules\Organisation\Http\Controllers\DepartmentController;
 use App\Modules\Organisation\Http\Controllers\GovernanceRuleController;
 use App\Modules\Organisation\Http\Controllers\ProgramController;
 use App\Modules\Organisation\Http\Controllers\RegulationController;
+use App\Modules\Organisation\Http\Controllers\SetupController;
+use App\Modules\Organisation\Http\Controllers\StreamController;
 use App\Modules\Organisation\Http\Controllers\SubBatchController;
 use App\Modules\Organisation\Http\Controllers\WorkshopSectionController;
 use Illuminate\Http\JsonResponse;
@@ -52,6 +55,13 @@ Route::prefix('v1')->group(function (): void {
         // Authenticated routes requiring must_change_password to be false and respecting impersonation safety
         Route::middleware([EnsurePasswordNotMustChange::class, EnforceImpersonationRestrictions::class])->group(function (): void {
             Route::get('/me', MeController::class)->name('api.v1.me');
+
+            // Setup Wizard (Super Admin at institution scope)
+            Route::middleware(EnsureSuperAdminAtInstitutionScope::class)->prefix('setup')->group(function (): void {
+                Route::get('/status', [SetupController::class, 'status'])->name('api.v1.setup.status');
+                Route::put('/steps/{step}', [SetupController::class, 'saveStep'])->name('api.v1.setup.steps.save');
+                Route::post('/complete', [SetupController::class, 'complete'])->name('api.v1.setup.complete');
+            });
 
             if (app()->environment('testing')) {
                 // Route flagged as having side-effects on GET (must be blocked while impersonating)
@@ -142,6 +152,20 @@ Route::prefix('v1')->group(function (): void {
             Route::get('/workshop-sections', [WorkshopSectionController::class, 'index'])
                 ->middleware(RequirePermission::class.':organisation.batch.view')
                 ->name('api.v1.workshop-sections.index');
+
+            // Organisation: Streams
+            Route::get('/streams', [StreamController::class, 'index'])
+                ->middleware(RequirePermission::class.':organisation.batch.view')
+                ->name('api.v1.streams.index');
+            Route::post('/streams', [StreamController::class, 'store'])
+                ->middleware(RequirePermission::class.':organisation.stream.manage')
+                ->name('api.v1.streams.store');
+            Route::patch('/streams/{id}', [StreamController::class, 'update'])
+                ->middleware(RequirePermission::class.':organisation.stream.manage')
+                ->name('api.v1.streams.update');
+            Route::delete('/streams/{id}', [StreamController::class, 'destroy'])
+                ->middleware(RequirePermission::class.':organisation.stream.manage')
+                ->name('api.v1.streams.destroy');
 
             // Organisation: Departments
             Route::get('/departments', [DepartmentController::class, 'index'])

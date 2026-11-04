@@ -8,9 +8,11 @@ use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 use Throwable;
@@ -23,9 +25,9 @@ class AppInstallCommand extends Command
      * @var string
      */
     protected $signature = 'app:install
-                            {--domain= : The primary domain for the institution (defaults to app.carmelpoly.in)}
-                            {--name=Carmel Polytechnic College : The institution name}
-                            {--slug=carmel : The institution tenant slug}
+                            {--domain= : The primary domain for the institution}
+                            {--name= : The institution name}
+                            {--slug= : The institution tenant slug}
                             {--seed-profile=kerala-polytechnic : Seed profile to populate on tenant creation (kerala-polytechnic, baseline, or none)}
                             {--admin-name= : First Super Admin name}
                             {--admin-email= : First Super Admin email}';
@@ -79,11 +81,49 @@ class AppInstallCommand extends Command
         }
 
         $slug = (string) $this->option('slug');
+        if (trim($slug) === '' && $this->input->isInteractive()) {
+            try {
+                $slug = (string) $this->ask('Enter the institution tenant slug');
+            } catch (Throwable) {
+                $slug = '';
+            }
+        }
+        $slug = trim($slug);
+        if ($slug === '') {
+            $this->error('The --slug option is required.');
+
+            return self::FAILURE;
+        }
+
         $name = (string) $this->option('name');
-        $domainOption = $this->option('domain');
-        $domain = is_string($domainOption) && trim($domainOption) !== ''
-            ? trim($domainOption)
-            : (string) config('tenancy.default_domain', 'app.carmelpoly.in');
+        if (trim($name) === '' && $this->input->isInteractive()) {
+            try {
+                $name = (string) $this->ask('Enter the institution name');
+            } catch (Throwable) {
+                $name = '';
+            }
+        }
+        $name = trim($name);
+        if ($name === '') {
+            $this->error('The --name option is required.');
+
+            return self::FAILURE;
+        }
+
+        $domain = (string) $this->option('domain');
+        if (trim($domain) === '' && $this->input->isInteractive()) {
+            try {
+                $domain = (string) $this->ask('Enter the primary institutional domain');
+            } catch (Throwable) {
+                $domain = '';
+            }
+        }
+        $domain = trim($domain);
+        if ($domain === '') {
+            $this->error('The --domain option is required.');
+
+            return self::FAILURE;
+        }
 
         // Validate hostname
         if (! filter_var($domain, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) || str_contains($domain, '/')) {
@@ -114,49 +154,79 @@ class AppInstallCommand extends Command
                 ]
             );
 
-            // 3. First Super Admin Bootstrap (B5)
-            $adminName = is_string($this->option('admin-name')) && trim((string) $this->option('admin-name')) !== ''
-                ? trim((string) $this->option('admin-name'))
-                : 'Carmel Administrator';
-            $adminEmail = is_string($this->option('admin-email')) && trim((string) $this->option('admin-email')) !== ''
-                ? trim((string) $this->option('admin-email'))
-                : 'admin@app.carmelpoly.in';
+            // 3. First Super Admin Bootstrap (B5 + super_admin role assignment)
+            $adminEmailOption = $this->option('admin-email');
+            if (is_string($adminEmailOption) && trim($adminEmailOption) !== '') {
+                $adminEmail = trim($adminEmailOption);
+                $adminName = is_string($this->option('admin-name')) && trim((string) $this->option('admin-name')) !== ''
+                    ? trim((string) $this->option('admin-name'))
+                    : "{$name} Administrator";
 
-            $tenantContext->setTenant($tenant);
-            try {
-                $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
-                if ($seedProfile !== '' && $seedProfile !== 'none') {
-                    $this->info(sprintf('Seeding %s profile...', $seedProfile));
-                    app(ModuleRegistry::class)->seed($seedProfile);
+                $tenantContext->setTenant($tenant);
+                try {
+                    $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
+                    if ($seedProfile !== '' && $seedProfile !== 'none') {
+                        $this->info(sprintf('Seeding %s profile...', $seedProfile));
+                        app(ModuleRegistry::class)->seed($seedProfile);
+                    }
+
+                    /** @var class-string<Model> $userModel */
+                    $userModel = (string) config('auth.providers.users.model');
+                    if (class_exists($userModel) && $userModel::query()->where('type', 'staff')->count() === 0) {
+                        $oneTimePassword = Str::password(16, symbols: false);
+
+                        DB::connection('tenant')->transaction(function () use ($userModel, $adminName, $adminEmail, $oneTimePassword, $tenant): void {
+                            /** @var Model $user */
+                            $user = $userModel::query()->create([
+                                'type' => 'staff',
+                                'name' => $adminName,
+                                'email' => strtolower($adminEmail),
+                                'password' => Hash::make($oneTimePassword),
+                                'must_change_password' => true,
+                                'status' => 'active',
+                            ]);
+
+                            /** @var object{id: string}|null $superAdminRole */
+                            $superAdminRole = DB::connection('tenant')->table('roles')->where('key', 'super_admin')->first();
+                            if ($superAdminRole !== null) {
+                                /** @var object{scope_label: string}|null $inst */
+                                $inst = DB::connection('tenant')->table('institution')->first();
+                                $scopeLabel = $inst !== null ? $inst->scope_label : 'i_'.$tenant->slug;
+
+                                DB::connection('tenant')->table('role_assignments')->insert([
+                                    'id' => (string) Str::ulid(),
+                                    'user_id' => $user->getKey(),
+                                    'role_id' => $superAdminRole->id,
+                                    'scope_type' => 'institution',
+                                    'scope_id' => null,
+                                    'scope_label' => $scopeLabel,
+                                    'is_singleton' => false,
+                                    'valid_from' => Carbon::now(),
+                                    'valid_to' => null,
+                                    'is_active' => true,
+                                    'assigned_by_user_id' => $user->getKey(),
+                                    'order_record' => 'Bootstrap Super Admin',
+                                    'created_at' => Carbon::now(),
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            }
+                        });
+
+                        $this->newLine();
+                        $this->warn('================================================================');
+                        $this->warn('   FIRST SUPER ADMIN INITIAL CREDENTIALS (SAVE IMMEDIATELY)');
+                        $this->warn('================================================================');
+                        $this->line(" Name:               {$adminName}");
+                        $this->line(" Email:              {$adminEmail}");
+                        $this->line(" One-time Password:  {$oneTimePassword}");
+                        $this->warn(' This password is printed ONCE. It is never logged or stored in plain text.');
+                        $this->warn(' The user is required to change password upon first login.');
+                        $this->warn('================================================================');
+                        $this->newLine();
+                    }
+                } finally {
+                    $tenantContext->forget();
                 }
-
-                /** @var class-string<Model> $userModel */
-                $userModel = (string) config('auth.providers.users.model');
-                if (class_exists($userModel) && $userModel::query()->where('type', 'staff')->count() === 0) {
-                    $oneTimePassword = Str::password(16, symbols: false);
-                    $userModel::query()->create([
-                        'type' => 'staff',
-                        'name' => $adminName,
-                        'email' => strtolower($adminEmail),
-                        'password' => Hash::make($oneTimePassword),
-                        'must_change_password' => true,
-                        'status' => 'active',
-                    ]);
-
-                    $this->newLine();
-                    $this->warn('================================================================');
-                    $this->warn('   FIRST SUPER ADMIN INITIAL CREDENTIALS (SAVE IMMEDIATELY)');
-                    $this->warn('================================================================');
-                    $this->line(" Name:               {$adminName}");
-                    $this->line(" Email:              {$adminEmail}");
-                    $this->line(" One-time Password:  {$oneTimePassword}");
-                    $this->warn(' This password is printed ONCE. It is never logged or stored in plain text.');
-                    $this->warn(' The user is required to change password upon first login.');
-                    $this->warn('================================================================');
-                    $this->newLine();
-                }
-            } finally {
-                $tenantContext->forget();
             }
 
             $this->info('Appliance installation completed successfully.');

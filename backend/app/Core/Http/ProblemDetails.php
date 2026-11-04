@@ -9,6 +9,17 @@ use Illuminate\Http\JsonResponse;
 class ProblemDetails
 {
     /**
+     * Resolve a problem type URI for the given slug.
+     */
+    public static function type(string $slug): string
+    {
+        $baseUrl = rtrim((string) config('errors.problem_types.base_url', 'https://errors.campuslynk.net'), '/');
+        $trimmedSlug = ltrim(trim($slug), '/');
+
+        return "{$baseUrl}/{$trimmedSlug}";
+    }
+
+    /**
      * Create an RFC 7807 problem details JSON response.
      *
      * @param  array<string, mixed>  $errors

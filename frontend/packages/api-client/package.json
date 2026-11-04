@@ -9,7 +9,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "generate": "openapi-typescript ../../../contracts/openapi.yaml -o ./src/generated/schema.ts",
+    "generate": "pnpm exec openapi-typescript ../../../contracts/openapi.yaml -o ./src/generated/schema.ts",
     "lint": "eslint . --max-warnings 0",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"

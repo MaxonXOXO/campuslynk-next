@@ -23,8 +23,8 @@ class SampleQueuedMailable extends Mailable implements ShouldQueue
     public function content(): Content
     {
         TenantSetting::updateOrCreate(
-            ['key' => 'queued_mail_test'],
-            ['value' => ['mailed' => true]]
+            ['key' => 'auth.token_lifetime_web_hours'],
+            ['value' => ['hours' => 5]]
         );
 
         return new Content(htmlString: '<p>Test email</p>');

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.academic-suite.com/json-schemas/auth-token-lifetime-web-hours.schema.json",
+  "title": "AuthTokenLifetimeWebHours",
+  "description": "Validation schema for web client personal access token lifetime in hours.",
+  "type": "object",
+  "properties": {
+    "hours": {
+      "type": "integer"
+    },
+    "value": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}
+

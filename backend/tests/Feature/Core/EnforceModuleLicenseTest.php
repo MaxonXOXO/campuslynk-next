@@ -2,12 +2,18 @@
 
 declare(strict_types=1);
 
+use App\Core\Http\ProblemDetails;
 use App\Core\Tenancy\Models\License;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use Illuminate\Support\Facades\Route;
 
-beforeEach(function () {
+$moduleRoutesSnapshot = null;
+
+beforeEach(function () use (&$moduleRoutesSnapshot) {
+    if ($moduleRoutesSnapshot === null) {
+        $moduleRoutesSnapshot = clone Route::getRoutes();
+    }
     $this->provisioner = app(TenantProvisioner::class);
     $this->tenantContext = app(TenantContext::class);
     $this->purgeAllTenantDatabases();
@@ -22,7 +28,13 @@ beforeEach(function () {
     });
 });
 
-afterEach(function () {
+afterEach(function () use (&$moduleRoutesSnapshot) {
+    if ($moduleRoutesSnapshot !== null) {
+        $restored = clone $moduleRoutesSnapshot;
+        $restored->refreshNameLookups();
+        $restored->refreshActionLookups();
+        Route::setRoutes($restored);
+    }
     $this->tenantContext->forget();
     $this->purgeAllTenantDatabases();
 });
@@ -60,7 +72,7 @@ it('rejects access to unlicensed module with 403 RFC 7807 Problem Details', func
     $response->assertStatus(403)
         ->assertHeader('Content-Type', 'application/problem+json')
         ->assertJson([
-            'type' => 'https://academic-suite.net/errors/module-not-licensed',
+            'type' => ProblemDetails::type('module-not-licensed'),
             'title' => 'Module Not Licensed',
             'status' => 403,
             'detail' => 'The module [attendance] is not enabled under your institutional licence.',

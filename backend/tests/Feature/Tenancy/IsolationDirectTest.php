@@ -40,4 +40,6 @@ it('prohibits tenant A credentials from connecting to tenant B or landlord direc
     $dsnLandlord = sprintf('pgsql:host=%s;port=%d;dbname=landlord', $host, $port);
     expect(fn () => new PDO($dsnLandlord, $dbA->username, $dbA->getDecryptedPassword()))
         ->toThrow(PDOException::class);
+
+    $pdoA = null;
 });

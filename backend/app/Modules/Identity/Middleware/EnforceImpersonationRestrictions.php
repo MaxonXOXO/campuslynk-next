@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Middleware;
 
+use App\Core\Http\ProblemDetails;
 use App\Modules\Identity\Models\User;
 use Closure;
 use Illuminate\Http\Request;
@@ -33,7 +34,7 @@ class EnforceImpersonationRestrictions
 
                     if ($hasSideEffects) {
                         return response()->json([
-                            'type' => 'https://api.academic-suite.com/errors/forbidden',
+                            'type' => ProblemDetails::type('forbidden'),
                             'title' => 'Impersonation Prohibited',
                             'status' => 403,
                             'detail' => 'Endpoints with side effects cannot be executed during an impersonation session.',
@@ -48,7 +49,7 @@ class EnforceImpersonationRestrictions
 
                 if (! $isSafeMethod && ! $isStopEndpoint) {
                     return response()->json([
-                        'type' => 'https://api.academic-suite.com/errors/forbidden',
+                        'type' => ProblemDetails::type('forbidden'),
                         'title' => 'Read-Only Impersonation Session',
                         'status' => 403,
                         'detail' => 'State-mutating operations are strictly prohibited during a read-only impersonation session.',

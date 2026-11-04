@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.academic-suite.com/json-schemas/auth-token-lifetime-mobile-days.schema.json",
+  "title": "AuthTokenLifetimeMobileDays",
+  "description": "Validation schema for mobile client personal access token lifetime in days.",
+  "type": "object",
+  "properties": {
+    "days": {
+      "type": "integer"
+    },
+    "value": {
+      "type": "integer"
+    }
+  },
+  "additionalProperties": false
+}
+

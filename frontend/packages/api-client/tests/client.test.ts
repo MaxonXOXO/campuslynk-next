@@ -31,7 +31,12 @@ describe('Academic Suite API Client', () => {
     expect(typeof client.identity.impersonation.start).toBe('function');
     expect(typeof client.identity.impersonation.stop).toBe('function');
 
-    // 3. Organisation group: departments, programs, academicYears, batches, subBatches, governanceRules
+    // 3. Organisation group: streams, departments, programs, academicYears, batches, subBatches, governanceRules
+    expect(typeof client.organisation.streams.list).toBe('function');
+    expect(typeof client.organisation.streams.create).toBe('function');
+    expect(typeof client.organisation.streams.update).toBe('function');
+    expect(typeof client.organisation.streams.delete).toBe('function');
+
     expect(typeof client.organisation.departments.list).toBe('function');
     expect(typeof client.organisation.departments.create).toBe('function');
     expect(typeof client.organisation.departments.get).toBe('function');
@@ -61,6 +66,10 @@ describe('Academic Suite API Client', () => {
 
     expect(typeof client.organisation.governanceRules.list).toBe('function');
     expect(typeof client.organisation.governanceRules.update).toBe('function');
+
+    expect(typeof client.organisation.setup.status).toBe('function');
+    expect(typeof client.organisation.setup.saveStep).toBe('function');
+    expect(typeof client.organisation.setup.complete).toBe('function');
   });
 
   it('attaches headers when token and tenant domain are provided', async () => {
@@ -305,6 +314,10 @@ describe('Academic Suite API Client', () => {
       listRoleAssignments: () => client.identity.roleAssignments.list,
       createRoleAssignment: () => client.identity.roleAssignments.create,
       deleteRoleAssignment: () => client.identity.roleAssignments.delete,
+      listStreams: () => client.organisation.streams.list,
+      createStream: () => client.organisation.streams.create,
+      updateStream: () => client.organisation.streams.update,
+      deleteStream: () => client.organisation.streams.delete,
       listDepartments: () => client.organisation.departments.list,
       createDepartment: () => client.organisation.departments.create,
       getDepartment: () => client.organisation.departments.get,
@@ -331,6 +344,9 @@ describe('Academic Suite API Client', () => {
       listWorkshopSections: () => client.organisation.workshopSections.list,
       listGovernanceRules: () => client.organisation.governanceRules.list,
       updateGovernanceRule: () => client.organisation.governanceRules.update,
+      getSetupStatus: () => client.organisation.setup.status,
+      saveSetupStep: () => client.organisation.setup.saveStep,
+      completeSetup: () => client.organisation.setup.complete,
     };
 
     const missingOperations: string[] = [];

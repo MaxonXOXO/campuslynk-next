@@ -9,6 +9,7 @@ use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\DepartmentSemesterGovernance;
 use App\Modules\Organisation\Models\Institution;
 use App\Modules\Organisation\Models\Program;
+use App\Modules\Organisation\Models\Regulation;
 use App\Modules\Organisation\Models\Stream;
 use Carbon\Carbon;
 use Illuminate\Database\Seeder;
@@ -17,8 +18,72 @@ class KeralaPolytechnicProfileSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Ensure baseline seed data is present
+        // 1. Ensure baseline RBAC & workshop seeds are present
         $this->call(TenantBaselineSeeder::class);
+
+        // 2. Streams (Kerala Polytechnic Model: Aided vs Self-Financing vs Shared)
+        $streams = [
+            [
+                'code' => 'AIDED',
+                'name' => 'Govt-Aided Management',
+                'scope_label' => 's_aided',
+            ],
+            [
+                'code' => 'SF',
+                'name' => 'Self-Financing Management',
+                'scope_label' => 's_sf',
+            ],
+            [
+                'code' => 'SHARED',
+                'name' => 'Shared / Administration',
+                'scope_label' => 's_shared',
+            ],
+        ];
+
+        foreach ($streams as $stream) {
+            Stream::updateOrCreate(
+                ['code' => $stream['code']],
+                [
+                    'name' => $stream['name'],
+                    'scope_label' => $stream['scope_label'],
+                ]
+            );
+        }
+
+        // 3. Kerala SBTE Curriculum Regulations (ADR-0006)
+        $regulations = [
+            [
+                'code' => 'REV2021',
+                'name' => 'Revision 2021',
+                'effective_from_year' => 2021,
+                'config_json' => [
+                    'active' => true,
+                    'max_theory_ese' => 75,
+                    'min_theory_cia' => 20,
+                ],
+            ],
+            [
+                'code' => 'REV2026',
+                'name' => 'Revision 2026',
+                'effective_from_year' => 2026,
+                'config_json' => [
+                    'active' => true,
+                    'max_theory_ese' => 60,
+                    'min_theory_cia' => 16,
+                ],
+            ],
+        ];
+
+        foreach ($regulations as $reg) {
+            Regulation::updateOrCreate(
+                ['code' => $reg['code']],
+                [
+                    'name' => $reg['name'],
+                    'effective_from_year' => $reg['effective_from_year'],
+                    'config_json' => $reg['config_json'],
+                ]
+            );
+        }
 
         /** @var Stream $aidedStream */
         $aidedStream = Stream::where('code', 'AIDED')->firstOrFail();
@@ -27,7 +92,7 @@ class KeralaPolytechnicProfileSeeder extends Seeder
         /** @var Stream $sharedStream */
         $sharedStream = Stream::where('code', 'SHARED')->firstOrFail();
 
-        // 2. Institution
+        // 4. Institution (Carmel Polytechnic College)
         Institution::updateOrCreate(
             ['code' => 'CARMEL'],
             [
@@ -36,14 +101,13 @@ class KeralaPolytechnicProfileSeeder extends Seeder
             ]
         );
 
-        // 3. Departments
+        // 5. Departments
         $departments = [
             // Aided Academic Branches
             [
                 'code' => 'CE',
                 'name' => 'Civil Engineering',
                 'stream_id' => $aidedStream->id,
-                'funding_stream' => 'AIDED',
                 'kind' => 'academic',
                 'scope_label' => 'd_ce',
             ],
@@ -51,7 +115,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'ME',
                 'name' => 'Mechanical Engineering',
                 'stream_id' => $aidedStream->id,
-                'funding_stream' => 'AIDED',
                 'kind' => 'academic',
                 'scope_label' => 'd_me',
             ],
@@ -59,7 +122,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'EEE',
                 'name' => 'Electrical & Electronics Engineering',
                 'stream_id' => $aidedStream->id,
-                'funding_stream' => 'AIDED',
                 'kind' => 'academic',
                 'scope_label' => 'd_eee',
             ],
@@ -68,7 +130,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'GEN_AIDED',
                 'name' => 'General Department (Aided)',
                 'stream_id' => $aidedStream->id,
-                'funding_stream' => 'AIDED',
                 'kind' => 'general',
                 'scope_label' => 'd_gen_aided',
             ],
@@ -77,7 +138,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'EL',
                 'name' => 'Electronics Engineering',
                 'stream_id' => $sfStream->id,
-                'funding_stream' => 'SF',
                 'kind' => 'academic',
                 'scope_label' => 'd_el',
             ],
@@ -85,7 +145,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'CT',
                 'name' => 'Computer Engineering',
                 'stream_id' => $sfStream->id,
-                'funding_stream' => 'SF',
                 'kind' => 'academic',
                 'scope_label' => 'd_ct',
             ],
@@ -93,7 +152,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'AU',
                 'name' => 'Automobile Engineering',
                 'stream_id' => $sfStream->id,
-                'funding_stream' => 'SF',
                 'kind' => 'academic',
                 'scope_label' => 'd_au',
             ],
@@ -102,7 +160,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'GEN_SF',
                 'name' => 'General Department (Self-Financing)',
                 'stream_id' => $sfStream->id,
-                'funding_stream' => 'SF',
                 'kind' => 'general',
                 'scope_label' => 'd_gen_sf',
             ],
@@ -111,7 +168,6 @@ class KeralaPolytechnicProfileSeeder extends Seeder
                 'code' => 'ADM',
                 'name' => 'College Administration',
                 'stream_id' => $sharedStream->id,
-                'funding_stream' => 'SHARED',
                 'kind' => 'administrative',
                 'scope_label' => 'd_adm',
             ],
@@ -120,11 +176,9 @@ class KeralaPolytechnicProfileSeeder extends Seeder
         $deptMap = [];
         foreach ($departments as $dept) {
             $record = Department::updateOrCreate(
-                ['code' => $dept['code']],
+                ['code' => $dept['code'], 'stream_id' => $dept['stream_id']],
                 [
                     'name' => $dept['name'],
-                    'stream_id' => $dept['stream_id'],
-                    'funding_stream' => $dept['funding_stream'],
                     'kind' => $dept['kind'],
                     'is_active' => true,
                     'scope_label' => $dept['scope_label'],
@@ -133,7 +187,7 @@ class KeralaPolytechnicProfileSeeder extends Seeder
             $deptMap[$dept['code']] = $record;
         }
 
-        // 4. Department Semester Governance (ADR-0005)
+        // 6. Department Semester Governance (ADR-0005)
         // Aided engineering S1/S2 governed by GEN_AIDED
         foreach (['CE', 'ME', 'EEE'] as $code) {
             DepartmentSemesterGovernance::updateOrCreate(
@@ -162,7 +216,7 @@ class KeralaPolytechnicProfileSeeder extends Seeder
             );
         }
 
-        // 5. Programs
+        // 7. Programs
         $programs = [
             ['code' => 'DCE', 'name' => 'Diploma in Civil Engineering', 'dept' => 'CE', 'scope_label' => 'p_dce'],
             ['code' => 'DME', 'name' => 'Diploma in Mechanical Engineering', 'dept' => 'ME', 'scope_label' => 'p_dme'],
@@ -184,7 +238,7 @@ class KeralaPolytechnicProfileSeeder extends Seeder
             );
         }
 
-        // 6. Academic Year
+        // 8. Academic Year
         AcademicYear::updateOrCreate(
             ['label' => '2026-27'],
             [

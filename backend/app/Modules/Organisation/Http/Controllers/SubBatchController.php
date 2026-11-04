@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Organisation\Http\Controllers;
 
 use App\Core\Contracts\ScopeAuthorizerContract;
+use App\Core\Http\ProblemDetails;
 use App\Modules\Organisation\Actions\CreateSubBatchAction;
 use App\Modules\Organisation\Actions\DeleteSubBatchAction;
 use App\Modules\Organisation\Actions\UpdateSubBatchAction;
@@ -31,7 +32,7 @@ class SubBatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.view', $batch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to view sub-batches for this batch.',
@@ -72,7 +73,7 @@ class SubBatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.create', $batch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to create sub-batches for this batch.',
@@ -127,7 +128,7 @@ class SubBatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.view', $subBatch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to view this sub-batch.',
@@ -164,7 +165,7 @@ class SubBatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.create', $subBatch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to modify this sub-batch.',
@@ -214,7 +215,7 @@ class SubBatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.create', $subBatch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to delete this sub-batch.',

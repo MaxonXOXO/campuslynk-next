@@ -108,6 +108,7 @@ it('returns 403 Forbidden when a tenant has no license row', function () {
 it('validates that app:install rejects invalid hostnames', function () {
     $exitCode = Artisan::call('app:install', [
         '--domain' => 'http://invalid-host/path',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->not->toBe(0);
@@ -132,9 +133,11 @@ it('safely handles bound parameters with quotes, backslashes, null bytes and mul
         'mixed' => "Special: ';\nDROP TABLE students;-- \\ \0 മലയാളം 🌟",
     ];
 
-    TenantSetting::create([
+    DB::connection('tenant')->table('tenant_settings')->insert([
         'key' => 'security_payload_test',
-        'value' => $testPayload,
+        'value' => json_encode($testPayload, JSON_THROW_ON_ERROR),
+        'created_at' => now(),
+        'updated_at' => now(),
     ]);
 
     // Query back using parameter bindings

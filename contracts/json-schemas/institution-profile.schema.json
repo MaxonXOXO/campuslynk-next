@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/institution-profile.schema.json",
+  "title": "InstitutionProfile",
+  "description": "Tenant institution profile and contact settings.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 255
+    },
+    "short_code": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32
+    },
+    "board": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "board_affiliation": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "affiliation": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "affiliation_code": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "board_code": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "code": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "contact_email": {
+      "type": "string",
+      "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    },
+    "email": {
+      "type": "string",
+      "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"
+    },
+    "contact_phone": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "phone": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "address_lines": {
+      "type": "array"
+    },
+    "address_line1": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "address_line2": {
+      "type": "string",
+      "maxLength": 255
+    },
+    "city": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "state": {
+      "type": "string",
+      "maxLength": 100
+    },
+    "postal_code": {
+      "type": "string",
+      "maxLength": 20
+    },
+    "website": {
+      "type": "string",
+      "pattern": "^https?:\\/\\/[^\\s$.?#].[^\\s]*$"
+    }
+  },
+  "required": [
+    "name",
+    "short_code"
+  ],
+  "additionalProperties": false
+}
+

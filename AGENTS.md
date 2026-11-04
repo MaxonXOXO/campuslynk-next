@@ -148,6 +148,8 @@ When building a new domain module (e.g., `Attendance`, `Assessment`, `Leave`):
 | **ADR-0012** | Separation of Tenant Database Owner Role and Runtime DML Role | `0012-owner-vs-runtime-role.md` | §2 Tenancy & Database Rules |
 | **ADR-0013** | Scope Labels and Deterministic Hierarchy in PostgreSQL LTree | `0013-scope-labels-in-ltree-hierarchy.md` | §3 Scoped RBAC & PostgreSQL ltree |
 | **ADR-0014** | Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping | `0014-scope-tree-ltree-labels-and-dual-paths.md` | §3 Scoped RBAC & PostgreSQL ltree |
+| **ADR-0015** | Tenant-Defined Streams, Open Regulations and Hardened Settings | `0015-tenant-defined-streams-and-open-regulations.md` | §1 Core Architecture & §2 Tenancy Rules |
+| **ADR-0016** | First-Run Setup State, Settings Schemas, and Wizard Lifecycle | `0016-first-run-setup-state.md` | §1 Core Architecture & §2 Tenancy Rules |
 
 ---
 

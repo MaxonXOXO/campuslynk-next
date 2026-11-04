@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 return [
-    'default_domain' => env('INSTITUTION_DOMAIN', 'app.carmelpoly.in'),
+    'default_domain' => env('INSTITUTION_DOMAIN', null),
     'license_default_days' => (int) env('LICENSE_DEFAULT_DAYS', 365),
     'license_grace_days' => (int) env('LICENSE_GRACE_DAYS', 30),
     'defaults' => [

@@ -8,6 +8,7 @@ use App\Core\Tenancy\Concerns\UsesTenantConnection;
 use App\Core\Validation\JsonSchemaValidator;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
+use InvalidArgumentException;
 
 /**
  * @property string $key
@@ -26,6 +27,12 @@ class TenantSetting extends Model
      */
     public const SCHEMA_MAP = [
         'branding' => 'tenant-branding.schema.json',
+        'auth.token_lifetime_web_hours' => 'auth-token-lifetime-web-hours.schema.json',
+        'auth.token_lifetime_mobile_days' => 'auth-token-lifetime-mobile-days.schema.json',
+        'institution_profile' => 'institution-profile.schema.json',
+        'calendar_basics' => 'calendar-basics.schema.json',
+        'signup_policy' => 'signup-policy.schema.json',
+        'setup' => 'setup-state.schema.json',
     ];
 
     /**
@@ -76,18 +83,31 @@ class TenantSetting extends Model
     ];
 
     /**
-     * Boot model hooks. Enforces JSON Schema validation prior to writing to tenant_settings.
+     * Boot model hooks. Enforces fail-closed JSON Schema validation prior to writing to tenant_settings.
      */
     protected static function booted(): void
     {
         static::saving(function (TenantSetting $setting): void {
-            if (isset(self::SCHEMA_MAP[$setting->key])) {
-                $schemaFile = self::SCHEMA_MAP[$setting->key];
-                /** @var JsonSchemaValidator $validator */
-                $validator = app(JsonSchemaValidator::class);
-                $value = is_array($setting->value) ? $setting->value : (array) $setting->value;
-                $validator->validateOrFail($value, $schemaFile);
+            if (! isset(self::SCHEMA_MAP[$setting->key])) {
+                throw new InvalidArgumentException(
+                    "Unknown or unregistered tenant setting key [{$setting->key}]. All tenant settings must be defined in SCHEMA_MAP."
+                );
             }
+
+            $schemaFile = self::SCHEMA_MAP[$setting->key];
+            /** @var JsonSchemaValidator $validator */
+            $validator = app(JsonSchemaValidator::class);
+
+            $raw = $setting->value;
+            if (is_int($raw) || (is_string($raw) && ctype_digit($raw))) {
+                $raw = str_ends_with($setting->key, '_hours')
+                    ? ['hours' => (int) $raw]
+                    : (str_ends_with($setting->key, '_days') ? ['days' => (int) $raw] : ['value' => (int) $raw]);
+                $setting->value = $raw;
+            }
+
+            $value = is_array($raw) ? $raw : (array) $raw;
+            $validator->validateOrFail($value, $schemaFile);
         });
     }
 }

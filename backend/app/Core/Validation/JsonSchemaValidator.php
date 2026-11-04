@@ -154,6 +154,39 @@ class JsonSchemaValidator
                 }
             }
 
+            // Numeric bounds
+            if (is_int($value)) {
+                if (isset($propSchema['minimum']) && $value < $propSchema['minimum']) {
+                    $errors[$keyPath] = "Field [{$keyPath}] must be at least {$propSchema['minimum']}.";
+                }
+                if (isset($propSchema['maximum']) && $value > $propSchema['maximum']) {
+                    $errors[$keyPath] = "Field [{$keyPath}] must not exceed {$propSchema['maximum']}.";
+                }
+            }
+
+            // Array items validation
+            if (is_array($value) && array_is_list($value) && isset($propSchema['items']) && is_array($propSchema['items'])) {
+                $itemSchema = $propSchema['items'];
+                foreach ($value as $idx => $itemVal) {
+                    $itemPath = "{$keyPath}.{$idx}";
+                    if (isset($itemSchema['type'])) {
+                        if ($itemSchema['type'] === 'object') {
+                            if (! is_array($itemVal) || array_is_list($itemVal)) {
+                                $errors[$itemPath] = "Field [{$itemPath}] must be an object.";
+                            } else {
+                                /** @var array<string, mixed> $itemVal */
+                                $nestedItemErrors = $this->validateObject($itemVal, $itemSchema, $itemPath);
+                                $errors = array_merge($errors, $nestedItemErrors);
+                            }
+                        } elseif ($itemSchema['type'] === 'string') {
+                            if (! is_string($itemVal)) {
+                                $errors[$itemPath] = "Field [{$itemPath}] must be a string.";
+                            }
+                        }
+                    }
+                }
+            }
+
             // String patterns and lengths
             if (is_string($value)) {
                 if (isset($propSchema['pattern'])) {

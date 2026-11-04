@@ -8,6 +8,7 @@ use App\Core\Modules\ModuleRegistry;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,7 @@ class TenantsCreateCommand extends Command
                 }
             }
 
-            // First Super Admin bootstrap (B5)
+            // First Super Admin bootstrap (B5 + super_admin role assignment)
             $adminEmailOption = $this->option('admin-email');
             if (is_string($adminEmailOption) && trim($adminEmailOption) !== '') {
                 $adminEmail = trim($adminEmailOption);
@@ -124,14 +125,43 @@ class TenantsCreateCommand extends Command
                     $userModel = (string) config('auth.providers.users.model');
                     if (class_exists($userModel) && $userModel::query()->where('type', 'staff')->count() === 0) {
                         $oneTimePassword = Str::password(16);
-                        $userModel::query()->create([
-                            'type' => 'staff',
-                            'name' => $adminName,
-                            'email' => strtolower($adminEmail),
-                            'password' => Hash::make($oneTimePassword),
-                            'must_change_password' => true,
-                            'status' => 'active',
-                        ]);
+
+                        DB::connection('tenant')->transaction(function () use ($userModel, $adminName, $adminEmail, $oneTimePassword, $tenant): void {
+                            /** @var Model $user */
+                            $user = $userModel::query()->create([
+                                'type' => 'staff',
+                                'name' => $adminName,
+                                'email' => strtolower($adminEmail),
+                                'password' => Hash::make($oneTimePassword),
+                                'must_change_password' => true,
+                                'status' => 'active',
+                            ]);
+
+                            /** @var object{id: string}|null $superAdminRole */
+                            $superAdminRole = DB::connection('tenant')->table('roles')->where('key', 'super_admin')->first();
+                            if ($superAdminRole !== null) {
+                                /** @var object{scope_label: string}|null $inst */
+                                $inst = DB::connection('tenant')->table('institution')->first();
+                                $scopeLabel = $inst !== null ? $inst->scope_label : 'i_'.$tenant->slug;
+
+                                DB::connection('tenant')->table('role_assignments')->insert([
+                                    'id' => (string) Str::ulid(),
+                                    'user_id' => $user->getKey(),
+                                    'role_id' => $superAdminRole->id,
+                                    'scope_type' => 'institution',
+                                    'scope_id' => null,
+                                    'scope_label' => $scopeLabel,
+                                    'is_singleton' => false,
+                                    'valid_from' => Carbon::now(),
+                                    'valid_to' => null,
+                                    'is_active' => true,
+                                    'assigned_by_user_id' => $user->getKey(),
+                                    'order_record' => 'Bootstrap Super Admin',
+                                    'created_at' => Carbon::now(),
+                                    'updated_at' => Carbon::now(),
+                                ]);
+                            }
+                        });
 
                         $this->newLine();
                         $this->warn('================================================================');

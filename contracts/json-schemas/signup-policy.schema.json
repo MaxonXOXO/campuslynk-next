@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/signup-policy.schema.json",
+  "title": "SignupPolicy",
+  "description": "Stored configuration for student and parent self-registration and approval mode. Inert until registration queue ships.",
+  "type": "object",
+  "properties": {
+    "student_self_registration_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "parent_self_registration_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "approval_mode": {
+      "type": "string",
+      "enum": [
+        "manual",
+        "auto"
+      ],
+      "default": "manual"
+    }
+  },
+  "required": [
+    "student_self_registration_enabled",
+    "parent_self_registration_enabled",
+    "approval_mode"
+  ],
+  "additionalProperties": false
+}
+

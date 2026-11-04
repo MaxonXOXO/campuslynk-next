@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Core\Http\ProblemDetails;
 use App\Modules\Identity\Actions\ImpersonateUserAction;
 use App\Modules\Identity\Http\Requests\ImpersonateRequest;
 use App\Modules\Identity\Models\User;
@@ -28,7 +29,7 @@ class ImpersonationController
             );
         } catch (\InvalidArgumentException $e) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => $e->getMessage(),
