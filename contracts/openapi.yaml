@@ -316,6 +316,148 @@ paths:
         '200':
           description: List of roles
 
+  /streams:
+    get:
+      operationId: listStreams
+      summary: List all streams with department counts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of streams
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta, links]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Stream'
+                  meta:
+                    type: object
+                    required: [total]
+                    properties:
+                      total:
+                        type: integer
+                  links:
+                    type: object
+                    required: [self]
+                    properties:
+                      self:
+                        type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+    post:
+      operationId: createStream
+      summary: Create a new stream
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateStreamRequest'
+      responses:
+        '201':
+          description: Stream created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, links]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Stream'
+                  links:
+                    type: object
+                    required: [self]
+                    properties:
+                      self:
+                        type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /streams/{id}:
+    patch:
+      operationId: updateStream
+      summary: Update a stream name
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateStreamRequest'
+      responses:
+        '200':
+          description: Stream updated
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, links]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Stream'
+                  links:
+                    type: object
+                    required: [self]
+                    properties:
+                      self:
+                        type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+    delete:
+      operationId: deleteStream
+      summary: Delete a stream
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Stream deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [message]
+                    properties:
+                      message:
+                        type: string
+                  meta:
+                    type: object
+                    required: [timestamp]
+                    properties:
+                      timestamp:
+                        type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+
   /departments:
     get:
       operationId: listDepartments
@@ -937,6 +1079,81 @@ paths:
         '200':
           description: Sub-batch deleted
 
+  /setup/status:
+    get:
+      operationId: getSetupStatus
+      summary: Retrieve first-run setup wizard state and prerequisite counts
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Setup status resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /setup/steps/{step}:
+    put:
+      operationId: saveSetupStep
+      summary: Save or update configuration for a specific setup step and mark it complete
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: step
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [institution_profile, calendar_basics, signup_policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Setup step saved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /setup/complete:
+    post:
+      operationId: completeSetup
+      summary: Finalize first-run setup wizard verifying all steps and prerequisites
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Setup successfully finalized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -955,6 +1172,7 @@ components:
             properties:
               type:
                 type: string
+                description: URI reference identifying the problem type (non-dereferenceable identifier)
                 example: about:blank
               title:
                 type: string
@@ -970,6 +1188,56 @@ components:
                 nullable: true
 
   schemas:
+    Stream:
+      type: object
+      required: [id, code, name, scope_label, departments_count]
+      properties:
+        id:
+          type: string
+          example: 01HMG7XYZ456ABCDEF01234567
+        code:
+          type: string
+          example: AIDED
+        name:
+          type: string
+          example: Aided Stream
+        scope_label:
+          type: string
+          example: s_aided
+        departments_count:
+          type: integer
+          example: 4
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    CreateStreamRequest:
+      type: object
+      required: [code, name]
+      properties:
+        code:
+          type: string
+          example: AIDED
+        name:
+          type: string
+          example: Aided Stream
+
+    UpdateStreamRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          example: Aided Stream (Updated)
+        code:
+          type: string
+          description: Stream code is immutable; sending a modified code returns 422
+
     TenantMetaEnvelope:
       type: object
       required: [data, meta, links]
@@ -1385,6 +1653,82 @@ components:
               type: string
             managing_path:
               type: string
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    SetupStatusEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [completed_at, is_completed, steps, prerequisites]
+          properties:
+            completed_at:
+              type: string
+              format: date-time
+              nullable: true
+            is_completed:
+              type: boolean
+            steps:
+              type: object
+              required: [institution_profile, calendar_basics, signup_policy]
+              properties:
+                institution_profile:
+                  type: object
+                  required: [completed_at, is_completed, settings_exist]
+                  properties:
+                    completed_at:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    is_completed:
+                      type: boolean
+                    settings_exist:
+                      type: boolean
+                calendar_basics:
+                  type: object
+                  required: [completed_at, is_completed, settings_exist]
+                  properties:
+                    completed_at:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    is_completed:
+                      type: boolean
+                    settings_exist:
+                      type: boolean
+                signup_policy:
+                  type: object
+                  required: [completed_at, is_completed, settings_exist]
+                  properties:
+                    completed_at:
+                      type: string
+                      format: date-time
+                      nullable: true
+                    is_completed:
+                      type: boolean
+                    settings_exist:
+                      type: boolean
+            prerequisites:
+              type: object
+              required: [streams_count, departments_count, academic_years_count]
+              properties:
+                streams_count:
+                  type: integer
+                departments_count:
+                  type: integer
+                academic_years_count:
+                  type: integer
         meta:
           type: object
           properties:

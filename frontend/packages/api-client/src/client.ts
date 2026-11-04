@@ -233,6 +233,31 @@ export function createApiClient(config: ApiClientConfig) {
   };
 
   // --- Organisation Sub-Helpers ---
+  const streams = {
+    list: (options?: RequestOptions) =>
+      request<OperationResponse<operations['listStreams']>>('/streams', {
+        method: 'GET',
+        ...options,
+      }),
+    create: (body: OperationRequestBody<operations['createStream']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['createStream']>>('/streams', {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+    update: (id: string, body: OperationRequestBody<operations['updateStream']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['updateStream']>>(`/streams/${id}`, {
+        method: 'PATCH',
+        body,
+        ...options,
+      }),
+    delete: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['deleteStream']>>(`/streams/${id}`, {
+        method: 'DELETE',
+        ...options,
+      }),
+  };
+
   const departments = {
     list: (options?: RequestOptions) =>
       request<OperationResponse<operations['listDepartments']>>('/departments', {
@@ -399,7 +424,31 @@ export function createApiClient(config: ApiClientConfig) {
       }),
   };
 
+  const setup = {
+    status: (options?: RequestOptions) =>
+      request<OperationResponse<operations['getSetupStatus']>>('/setup/status', {
+        method: 'GET',
+        ...options,
+      }),
+    saveStep: (
+      step: 'institution_profile' | 'calendar_basics' | 'signup_policy',
+      body: Record<string, unknown>,
+      options?: RequestOptions
+    ) =>
+      request<OperationResponse<operations['saveSetupStep']>>(`/setup/steps/${step}`, {
+        method: 'PUT',
+        body,
+        ...options,
+      }),
+    complete: (options?: RequestOptions) =>
+      request<OperationResponse<operations['completeSetup']>>('/setup/complete', {
+        method: 'POST',
+        ...options,
+      }),
+  };
+
   const organisation = {
+    streams,
     departments,
     programs,
     academicYears,
@@ -408,6 +457,7 @@ export function createApiClient(config: ApiClientConfig) {
     governanceRules,
     regulations,
     workshopSections,
+    setup,
   };
 
   return {
@@ -424,6 +474,7 @@ export function createApiClient(config: ApiClientConfig) {
     roles,
     roleAssignments,
     impersonation,
+    streams,
     departments,
     programs,
     batches,
@@ -432,6 +483,7 @@ export function createApiClient(config: ApiClientConfig) {
     governanceRules,
     regulations,
     workshopSections,
+    setup,
     me: {
       get: (options?: RequestOptions) => auth.me(options),
     },

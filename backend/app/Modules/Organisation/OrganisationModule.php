@@ -56,6 +56,7 @@ class OrganisationModule extends ServiceProvider implements ModuleManifestContra
     public function permissions(): array
     {
         return [
+            'organisation.stream.manage',
             'organisation.department.manage',
             'organisation.batch.view',
             'organisation.batch.create',
@@ -83,6 +84,8 @@ class OrganisationModule extends ServiceProvider implements ModuleManifestContra
     {
         return [
             'super_admin' => [
+                'organisation.stream.manage',
+                'organisation.department.manage',
                 'organisation.batch.view',
                 'organisation.academic_calendar.manage',
             ],
