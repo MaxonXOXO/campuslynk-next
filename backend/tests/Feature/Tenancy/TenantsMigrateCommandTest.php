@@ -20,7 +20,10 @@ it('migrates active tenants and records schema versions', function () {
     $tenantB = $this->provisioner->provision('tenant_mig_b', 'Migrate College B', 'migb.test');
 
     // Run command targeting only tenant A
-    $exitCode = Artisan::call('tenants:migrate', ['--tenant' => 'tenant_mig_a']);
+    $exitCode = Artisan::call('tenants:migrate', [
+        '--tenant' => 'tenant_mig_a',
+        '--no-interaction' => true,
+    ]);
 
     expect($exitCode)->toBe(0);
 
@@ -36,7 +39,7 @@ it('continues past failed tenants and reports non-zero exit code on failure', fu
     $tenantBroken = $this->provisioner->provision('tenant_broken', 'Broken College', 'broken.test');
     $tenantBroken->database()->update(['database' => 'non_existent_db_12345']);
 
-    $exitCode = Artisan::call('tenants:migrate');
+    $exitCode = Artisan::call('tenants:migrate', ['--no-interaction' => true]);
 
     // Should return failure exit code
     expect($exitCode)->toBe(1);

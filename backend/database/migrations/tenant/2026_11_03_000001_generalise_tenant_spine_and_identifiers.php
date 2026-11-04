@@ -40,6 +40,10 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * CAUTION: Rollback will fail with a uniqueness violation error once two or more departments
+     * share the same branch code across distinct streams (e.g. Aided CE and Self-Financing CE).
+     * This rollback is not fully reversible without manual data deduplication.
      */
     public function down(): void
     {

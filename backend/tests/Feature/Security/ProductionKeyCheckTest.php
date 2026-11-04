@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 use App\Providers\AppServiceProvider;
 
+afterEach(function () {
+    app()->detectEnvironment(fn () => 'testing');
+    config(['app.key' => env('APP_KEY')]);
+});
+
 it('refuses to boot in production when APP_KEY is empty', function () {
     app()->detectEnvironment(fn () => 'production');
     config(['app.key' => '']);

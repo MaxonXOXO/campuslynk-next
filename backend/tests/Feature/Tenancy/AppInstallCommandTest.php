@@ -12,6 +12,8 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    config(['app.key' => env('APP_KEY')]);
+    config(['app_profile.deploy_profile' => env('DEPLOY_PROFILE', 'onprem')]);
     $this->purgeAllTenantDatabases();
 });
 
@@ -20,6 +22,7 @@ it('installs on-premise appliance and provisions tenant when options are explici
         '--slug' => 'carmel',
         '--name' => 'Carmel Polytechnic College',
         '--domain' => 'app.carmelpoly.in',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(0);
@@ -38,12 +41,13 @@ it('installs on-premise appliance and provisions tenant when options are explici
         '--slug' => 'carmel',
         '--name' => 'Carmel Polytechnic College',
         '--domain' => 'app.carmelpoly.in',
+        '--no-interaction' => true,
     ]);
     expect($secondRun)->toBe(1);
 });
 
 it('refuses app:install without explicit slug, name, or domain in non-interactive mode', function () {
-    $exitCode = Artisan::call('app:install');
+    $exitCode = Artisan::call('app:install', ['--no-interaction' => true]);
 
     expect($exitCode)->toBe(1);
 });
@@ -55,6 +59,7 @@ it('refuses app:install in cloud profile', function () {
         '--slug' => 'carmel',
         '--name' => 'Carmel Polytechnic College',
         '--domain' => 'app.carmelpoly.in',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(1);
@@ -67,6 +72,7 @@ it('refuses app:install when APP_KEY is missing or invalid', function () {
         '--slug' => 'carmel',
         '--name' => 'Carmel Polytechnic College',
         '--domain' => 'app.carmelpoly.in',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(1);

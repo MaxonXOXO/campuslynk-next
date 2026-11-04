@@ -38,7 +38,13 @@ During the Sprint 0 Step 6.6 read-only architectural audit (Prompt 06e), several
    - Removed Carmel defaults from `AppInstallCommand` and `config/tenancy.php`; required options `--domain`, `--name`, and `--slug` must be explicitly provided or entered interactively.
    - `PasswordPolicyRule` derives institutional banned terms dynamically from the active tenant's name and slug rather than static hardcoded dictionary entries.
 
-6. **Known Limitation (Deferred):**
+6. **Stream Management API (Sprint 0, Step 6.6c):**
+   - Endpoints: `GET /api/v1/streams` (lists streams ordered by name with `departments_count`), `POST /api/v1/streams` (create), `PATCH /api/v1/streams/{id}` (rename only), `DELETE /api/v1/streams/{id}` (delete).
+   - **Immutable Code:** Stream `code` is immutable after creation. Attempting to change `code` via `PATCH` yields HTTP 422 problem+json. This immutability guarantees stream scope labels (`s_{code}`) and downstream department scope labels (`d_{dept}_{stream}`) remain stable, preventing corruption of PostgreSQL ltree paths and role assignments.
+   - **Delete Restriction:** A stream may be deleted only when zero departments reference it. Attempting to delete a referenced stream returns HTTP 409 problem+json with problem type `stream-in-use`.
+   - **Authorisation:** Stream mutations require `organisation.stream.manage`, granted to `super_admin` at institution scope. Listing requires `organisation.batch.view`.
+
+7. **Known Limitation (Deferred):**
    - Governance in `department_semester_governance` is keyed on `home_department_id`, not `program_id`.
    - *Rationale for Deferral:* In Kerala polytechnics and most Indian diploma institutions, all diploma programs under a home department share identical semester governance (e.g., all engineering programs under Civil Engineering are governed by the General Department for S1/S2).
    - *Trigger for Revisiting:* Adding support for multi-program departments where individual programs follow distinct semester governance paths (e.g., autonomous colleges with dual-track 3-year diploma vs 4-year degree programs under a shared engineering division).

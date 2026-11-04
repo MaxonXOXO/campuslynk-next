@@ -30,6 +30,7 @@ it('provisions tenant strictly using name, slug, and domain arguments', function
         '--profile' => 'cloud',
         '--admin-name' => 'Admin Test',
         '--admin-email' => 'admin@carmeleng.edu.in',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(0);
@@ -48,6 +49,7 @@ it('rejects tenants:create with exit code 1 when slug is invalid', function () {
         'slug' => 'INVALID-UPPERCASE-SLUG!',
         'domain' => 'invalid.test',
         '--profile' => 'cloud',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(1);
@@ -66,6 +68,7 @@ it('fails with clear instruction when landlord schema is missing', function () {
             'slug' => 'unmigrated_test',
             'domain' => 'unmigrated.test',
             '--profile' => 'cloud',
+            '--no-interaction' => true,
         ]);
 
         expect($exitCode)->toBe(1);
@@ -89,6 +92,7 @@ it('provisions tenant with seed profile and bootstraps super admin end-to-end', 
         '--seed-profile' => 'kerala-polytechnic',
         '--admin-name' => 'Super Admin',
         '--admin-email' => 'superadmin@polyseed.edu.in',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->toBe(0);

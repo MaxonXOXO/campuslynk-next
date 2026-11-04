@@ -950,6 +950,8 @@ it('enforces singleton exclusion constraint under real concurrency across two da
         expect($assignmentB->is_active)->toBeTrue();
         expect($authorizer->canAtScope($candidateB, 'organisation.batch.create', 'd_ce'))->toBeTrue();
     } finally {
+        $pdoA = null;
+        $pdoB = null;
         $this->tenantContext->forget();
     }
 });

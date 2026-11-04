@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Identity;
 
+use App\Core\Http\ProblemDetails;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Models\Role;
@@ -907,7 +908,7 @@ it('verifies full delegation matrix and scope constraints via HTTP', function (
 
         if ($expected_status === 422) {
             $response->assertJson([
-                'type' => 'https://api.academic-suite.com/errors/unprocessable',
+                'type' => ProblemDetails::type('unprocessable'),
                 'title' => 'Unprocessable Content',
                 'status' => 422,
             ]);

@@ -31,7 +31,7 @@ We require definitive operational policies for:
 Sanctum personal access tokens are stored in the tenant's `personal_access_tokens` table with ULID keys and explicit `expires_at` timestamps determined at login:
 - **Web Client (`client: "web"`)**: Default lifetime of **12 hours** (`now()->addHours(12)`). Aligns with standard academic workstation shifts without forcing unnecessary re-authentication during daily campus operations.
 - **Mobile App Client (`client: "mobile"`)**: Default lifetime of **30 days** (`now()->addDays(30)`). Provides a seamless mobile experience for faculty and students on personal smartphones while maintaining an upper bound on token validity.
-- **Tenant Settings Override**: Default durations can be tuned per tenant via `tenant_settings` (`auth.token_lifetime_web_hours`, `auth.token_lifetime_mobile_days`).
+- **Tenant Settings Override**: Default durations are read directly from `tenant_settings` (`auth.token_lifetime_web_hours`, `auth.token_lifetime_mobile_days`) as implemented in Step 6.6a, so the ADR and code agree. Failing to configure them falls back to the system defaults (12 hours web, 30 days mobile).
 
 ### 2. Forced Password Change & Token Abilities
 
@@ -85,12 +85,13 @@ To eliminate precedence heuristics and identifier collisions (e.g., 10-digit reg
 - **Identical Error Envelope**: Regardless of whether an identifier does not exist, the password is incorrect, or the account is `suspended`/`pending`, the endpoint returns identical HTTP **401 Unauthorized** responses:
   ```json
   {
-    "type": "https://errors.campuslynk.net/auth/unauthorized",
+    "type": "{base}/auth/unauthorized",
     "title": "Authentication Failed",
     "status": 401,
     "detail": "Invalid credentials provided."
   }
   ```
+  The `{base}` prefix is dynamically resolved from `config/errors.php` (`PROBLEM_TYPE_BASE_URL`, defaulting to `https://errors.campuslynk.net`). The domain is not yet registered, and problem type URIs are stable, non-dereferenceable identifiers that clients must not dereference.
 - **Constant-Time Verification**: When an unknown identifier is submitted, the backend verifies against a pre-computed dummy Argon2id hash. This ensures constant CPU processing time (~50–80ms) and prevents timing-based user enumeration.
 
 ### 6. Password Policy (No Composition Theatre)

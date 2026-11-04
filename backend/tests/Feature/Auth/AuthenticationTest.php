@@ -10,6 +10,7 @@ use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Models\PersonalAccessToken;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Models\UserIdentifier;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -600,6 +601,7 @@ it('bootstraps exactly one super admin and re-run does not duplicate or overwrit
         '--domain' => 'app.carmelpoly.in',
         '--admin-name' => 'First Admin',
         '--admin-email' => 'admin@app.carmelpoly.in',
+        '--no-interaction' => true,
     ], $output);
 
     expect($exitCode)->toBe(0);
@@ -629,6 +631,7 @@ it('bootstraps exactly one super admin and re-run does not duplicate or overwrit
         '--domain' => 'app.carmelpoly.in',
         '--admin-name' => 'Second Admin Attempt',
         '--admin-email' => 'admin2@app.carmelpoly.in',
+        '--no-interaction' => true,
     ], $rerunOutput);
 
     expect($rerunExitCode)->toBe(1);
@@ -730,6 +733,7 @@ it('enforces multi-tier throttling for rotating IPs and credential stuffing and 
         'client' => 'web',
     ]);
     expect($resp->status())->toBe(401);
+    config(['app.trusted_proxies' => null]);
 });
 
 it('enforces login identifier precedence and prevents registration number collisions by design', function () {
@@ -1085,4 +1089,87 @@ it('handles license expiration with grace period and allows renewal via tenants:
     $respRenewed = $this->getJson('http://lic-test.test/api/v1/meta');
     $respRenewed->assertStatus(200)
         ->assertJsonPath('data.license.status', 'ok');
+});
+
+it('supports slashed admission numbers in POST /api/v1/auth/login with trailing spaces and different casing', function () {
+    $tenant = $this->provisioner->provision('tenant_slashed_login', 'Slashed College', 'slashedlogin.test');
+    $this->tenantContext->setTenant($tenant);
+
+    $user = User::create([
+        'type' => 'student',
+        'name' => 'Slashed Student',
+        'email' => 'student@slashedlogin.test',
+        'password' => Hash::make('StudentPass123!'),
+        'status' => 'active',
+        'must_change_password' => false,
+    ]);
+
+    $identifier = $user->identifiers()->create([
+        'kind' => 'admission_number',
+        'value' => '5842/25',
+        'value_normalised' => UserIdentifier::normalise('5842/25'),
+    ]);
+
+    // Check stored value_normalised
+    expect($identifier->value_normalised)->toBe('5842/25');
+
+    $this->tenantContext->forget();
+
+    // 1. Exact match
+    $resp1 = $this->postJson('http://slashedlogin.test/api/v1/auth/login', [
+        'identifier' => '5842/25',
+        'password' => 'StudentPass123!',
+        'device_name' => 'Browser',
+        'client' => 'web',
+    ]);
+    $resp1->assertStatus(200)
+        ->assertJsonPath('data.user.id', $user->id);
+
+    // 2. Trailing space
+    $resp2 = $this->postJson('http://slashedlogin.test/api/v1/auth/login', [
+        'identifier' => '5842/25 ',
+        'password' => 'StudentPass123!',
+        'device_name' => 'Browser',
+        'client' => 'web',
+    ]);
+    $resp2->assertStatus(200)
+        ->assertJsonPath('data.user.id', $user->id);
+
+    // 3. Different casing with alphanumeric prefix (ADM/5842/25 vs adm/5842/25)
+    $this->tenantContext->setTenant($tenant);
+    $userAlpha = User::create([
+        'type' => 'student',
+        'name' => 'Alpha Slashed Student',
+        'email' => 'alpha@slashedlogin.test',
+        'password' => Hash::make('StudentPass123!'),
+        'status' => 'active',
+        'must_change_password' => false,
+    ]);
+    $identifierAlpha = $userAlpha->identifiers()->create([
+        'kind' => 'admission_number',
+        'value' => 'ADM/5842/25',
+        'value_normalised' => UserIdentifier::normalise('ADM/5842/25'),
+    ]);
+    expect($identifierAlpha->value_normalised)->toBe('adm/5842/25');
+    $this->tenantContext->forget();
+
+    // Log in with lowercase
+    $resp3 = $this->postJson('http://slashedlogin.test/api/v1/auth/login', [
+        'identifier' => 'adm/5842/25',
+        'password' => 'StudentPass123!',
+        'device_name' => 'Browser',
+        'client' => 'web',
+    ]);
+    $resp3->assertStatus(200)
+        ->assertJsonPath('data.user.id', $userAlpha->id);
+
+    // Log in with uppercase and trailing space
+    $resp4 = $this->postJson('http://slashedlogin.test/api/v1/auth/login', [
+        'identifier' => 'ADM/5842/25 ',
+        'password' => 'StudentPass123!',
+        'device_name' => 'Browser',
+        'client' => 'web',
+    ]);
+    $resp4->assertStatus(200)
+        ->assertJsonPath('data.user.id', $userAlpha->id);
 });

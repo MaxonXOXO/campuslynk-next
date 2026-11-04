@@ -108,6 +108,7 @@ it('returns 403 Forbidden when a tenant has no license row', function () {
 it('validates that app:install rejects invalid hostnames', function () {
     $exitCode = Artisan::call('app:install', [
         '--domain' => 'http://invalid-host/path',
+        '--no-interaction' => true,
     ]);
 
     expect($exitCode)->not->toBe(0);

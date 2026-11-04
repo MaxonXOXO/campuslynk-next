@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Core\Modules\ModuleRegistry;
+use App\Modules\Identity\Middleware\EnsureSuperAdminAtInstitutionScope;
 use App\Modules\Identity\Middleware\RequirePermission;
 use Illuminate\Routing\Route as RouteItem;
 use Illuminate\Support\Facades\Route;
@@ -11,6 +12,23 @@ use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 uses(TestCase::class);
+
+$originalRoutes = null;
+
+beforeEach(function () use (&$originalRoutes) {
+    if ($originalRoutes === null) {
+        $originalRoutes = clone Route::getRoutes();
+    }
+});
+
+afterEach(function () use (&$originalRoutes) {
+    if ($originalRoutes !== null) {
+        $restored = clone $originalRoutes;
+        $restored->refreshNameLookups();
+        $restored->refreshActionLookups();
+        Route::setRoutes($restored);
+    }
+});
 
 const PUBLIC_ALLOW_LIST = [
     '/up',
@@ -93,7 +111,12 @@ it('enforces that every authenticated feature route declares explicit permission
         $middleware = $route->gatherMiddleware();
         $hasPermission = false;
         foreach ($middleware as $m) {
-            if (is_string($m) && (str_starts_with($m, RequirePermission::class) || str_starts_with($m, 'can:') || str_starts_with($m, 'permission:'))) {
+            if (is_string($m) && (
+                str_starts_with($m, RequirePermission::class)
+                || str_starts_with($m, 'can:')
+                || str_starts_with($m, 'permission:')
+                || $m === EnsureSuperAdminAtInstitutionScope::class
+            )) {
                 $hasPermission = true;
                 break;
             }
@@ -127,7 +150,12 @@ it('fails the route audit when an authenticated feature route lacks permission m
         $middleware = $route->gatherMiddleware();
         $hasPermission = false;
         foreach ($middleware as $m) {
-            if (is_string($m) && (str_starts_with($m, RequirePermission::class) || str_starts_with($m, 'can:') || str_starts_with($m, 'permission:'))) {
+            if (is_string($m) && (
+                str_starts_with($m, RequirePermission::class)
+                || str_starts_with($m, 'can:')
+                || str_starts_with($m, 'permission:')
+                || $m === EnsureSuperAdminAtInstitutionScope::class
+            )) {
                 $hasPermission = true;
                 break;
             }

@@ -33,6 +33,7 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    Carbon::setTestNow();
     $this->tenantContext->forget();
     $this->purgeAllTenantDatabases();
 });
@@ -150,6 +151,7 @@ it('assigns super_admin role to bootstrap user on app:install and allows calling
         '--domain' => 'bootstraptest.test',
         '--admin-name' => 'IT Admin',
         '--admin-email' => 'itadmin@bootstraptest.test',
+        '--no-interaction' => true,
     ], $output);
 
     expect($exitCode)->toBe(0);

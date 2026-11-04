@@ -39,7 +39,7 @@
         "lint": "pint --test",
         "lint:fix": "pint",
         "analyse": "phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
-        "test": "pest",
+        "test": "@php -d memory_limit=512M ./vendor/bin/pest",
         "contract": "pest tests/Architecture/OpenApiContractSyncTest.php",
         "check": [
             "@lint",
