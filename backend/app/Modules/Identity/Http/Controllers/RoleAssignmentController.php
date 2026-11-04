@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Core\Http\ProblemDetails;
 use App\Modules\Identity\Actions\AssignRoleAction;
 use App\Modules\Identity\Actions\RevokeRoleAction;
 use App\Modules\Identity\Http\Requests\AssignRoleRequest;
@@ -143,7 +144,7 @@ class RoleAssignmentController
             );
         } catch (\InvalidArgumentException $e) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/unprocessable',
+                'type' => ProblemDetails::type('unprocessable'),
                 'title' => 'Unprocessable Content',
                 'status' => Response::HTTP_UNPROCESSABLE_ENTITY,
                 'detail' => $e->getMessage(),

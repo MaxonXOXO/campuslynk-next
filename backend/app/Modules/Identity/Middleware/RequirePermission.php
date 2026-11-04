@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Middleware;
 
+use App\Core\Http\ProblemDetails;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ScopeAuthorizer;
 use Closure;
@@ -22,7 +23,7 @@ class RequirePermission
 
         if (! $user instanceof User) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/unauthorized',
+                'type' => ProblemDetails::type('unauthorized'),
                 'title' => 'Unauthorized',
                 'status' => 401,
                 'detail' => 'Authentication required.',
@@ -31,7 +32,7 @@ class RequirePermission
 
         if (! $this->authorizer->can($user, $permission)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => "User does not possess the required permission [{$permission}].",

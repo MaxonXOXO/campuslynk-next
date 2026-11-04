@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Organisation\Http\Controllers;
 
 use App\Core\Contracts\ScopeAuthorizerContract;
+use App\Core\Http\ProblemDetails;
 use App\Modules\Organisation\Actions\CreateBatchAction;
 use App\Modules\Organisation\Actions\PromoteBatchSemesterAction;
 use App\Modules\Organisation\Actions\UpdateBatchAction;
@@ -78,7 +79,7 @@ class BatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.view', $batch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to view this batch.',
@@ -106,7 +107,7 @@ class BatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.create', $batch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to update this batch.',
@@ -142,7 +143,7 @@ class BatchController
 
         if (! $this->authorizer->can($user, 'organisation.batch.promote_semester', $batch)) {
             return response()->json([
-                'type' => 'https://api.academic-suite.com/errors/forbidden',
+                'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
                 'detail' => 'You do not have permission to promote this batch.',

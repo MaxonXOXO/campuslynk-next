@@ -29,6 +29,10 @@ class TenantSetting extends Model
         'branding' => 'tenant-branding.schema.json',
         'auth.token_lifetime_web_hours' => 'auth-token-lifetime-web-hours.schema.json',
         'auth.token_lifetime_mobile_days' => 'auth-token-lifetime-mobile-days.schema.json',
+        'institution_profile' => 'institution-profile.schema.json',
+        'calendar_basics' => 'calendar-basics.schema.json',
+        'signup_policy' => 'signup-policy.schema.json',
+        'setup' => 'setup-state.schema.json',
     ];
 
     /**

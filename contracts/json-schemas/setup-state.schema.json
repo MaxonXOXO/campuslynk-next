@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/setup-state.schema.json",
+  "title": "SetupState",
+  "description": "First-run setup wizard state tracking step completion and finalization timestamp.",
+  "type": "object",
+  "properties": {
+    "completed_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "steps": {
+      "type": "object",
+      "properties": {
+        "institution_profile": {
+          "type": "object",
+          "properties": {
+            "completed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false
+        },
+        "calendar_basics": {
+          "type": "object",
+          "properties": {
+            "completed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false
+        },
+        "signup_policy": {
+          "type": "object",
+          "properties": {
+            "completed_at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "steps"
+  ],
+  "additionalProperties": false
+}
+
