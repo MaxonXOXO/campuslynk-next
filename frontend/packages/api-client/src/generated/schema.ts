@@ -960,6 +960,27 @@ export interface components {
                 };
             };
         };
+        /** @description Forbidden response for setup wizard operations. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not assigned at institution scope. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+        SetupForbiddenProblemDetails: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": {
+                    /**
+                     * @description URI reference identifying the problem type
+                     * @enum {string}
+                     */
+                    type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                    /** @example Forbidden */
+                    title: string;
+                    /** @example 403 */
+                    status: number;
+                    detail: string;
+                    instance?: string | null;
+                };
+            };
+        };
     };
     parameters: never;
     requestBodies: never;
@@ -2178,7 +2199,27 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            403: components["responses"]["ProblemDetails"];
+            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /**
+                         * @description URI reference identifying the problem type
+                         * @enum {string}
+                         */
+                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        /** @example Forbidden */
+                        title: string;
+                        /** @example 403 */
+                        status: number;
+                        detail: string;
+                        instance?: string | null;
+                    };
+                };
+            };
         };
     };
     saveSetupStep: {
@@ -2206,7 +2247,27 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            403: components["responses"]["ProblemDetails"];
+            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /**
+                         * @description URI reference identifying the problem type
+                         * @enum {string}
+                         */
+                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        /** @example Forbidden */
+                        title: string;
+                        /** @example 403 */
+                        status: number;
+                        detail: string;
+                        instance?: string | null;
+                    };
+                };
+            };
             404: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
         };
@@ -2230,7 +2291,27 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            403: components["responses"]["ProblemDetails"];
+            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /**
+                         * @description URI reference identifying the problem type
+                         * @enum {string}
+                         */
+                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        /** @example Forbidden */
+                        title: string;
+                        /** @example 403 */
+                        status: number;
+                        detail: string;
+                        instance?: string | null;
+                    };
+                };
+            };
             409: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
         };

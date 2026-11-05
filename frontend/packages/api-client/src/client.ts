@@ -13,6 +13,16 @@ type OperationRequestBody<T> = T extends { requestBody: { content: { 'applicatio
     ? B
     : Record<string, unknown>;
 
+type CreateDepartmentPayload =
+  | OperationRequestBody<operations['createDepartment']>
+  | {
+      name: string;
+      code: string;
+      stream_id: string;
+      kind?: 'academic' | 'general' | 'administrative';
+      is_active?: boolean;
+    };
+
 export function createApiClient(config: ApiClientConfig) {
   const fetchFn = config.fetchFn ?? fetch;
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
@@ -264,10 +274,10 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'GET',
         ...options,
       }),
-    create: (body: OperationRequestBody<operations['createDepartment']>, options?: RequestOptions) =>
+    create: (body: CreateDepartmentPayload, options?: RequestOptions) =>
       request<OperationResponse<operations['createDepartment']>>('/departments', {
         method: 'POST',
-        body,
+        body: body as Record<string, unknown>,
         ...options,
       }),
     get: (id: string, options?: RequestOptions) =>
