@@ -44,7 +44,13 @@ During the Sprint 0 Step 6.6 read-only architectural audit (Prompt 06e), several
    - **Delete Restriction:** A stream may be deleted only when zero departments reference it. Attempting to delete a referenced stream returns HTTP 409 problem+json with problem type `stream-in-use`.
    - **Authorisation:** Stream mutations require `organisation.stream.manage`, granted to `super_admin` at institution scope. Listing requires `organisation.batch.view`.
 
-7. **Known Limitation (Deferred):**
+7. **Scope-Label Opacity:**
+   - Scope labels (e.g. `s_{stream_code}`, `d_{dept_code}`, `d_{dept_code}_{stream_code}`) are internal, backend-generated identifiers reserved for PostgreSQL `ltree` path construction and RBAC evaluation.
+   - Which department receives the plain label `d_{code}` versus the stream-disambiguated label `d_{code}_{stream_code}` depends entirely on insertion order and backend conflict resolution.
+   - Scope labels are strictly opaque: they must never be parsed, reverse-engineered, or assumed predictable by any consumer.
+   - The frontend must never display, parse, derive, or depend on scope labels. Only canonical codes (e.g. department code, stream code) and display names are user-facing.
+
+8. **Known Limitation (Deferred):**
    - Governance in `department_semester_governance` is keyed on `home_department_id`, not `program_id`.
    - *Rationale for Deferral:* In Kerala polytechnics and most Indian diploma institutions, all diploma programs under a home department share identical semester governance (e.g., all engineering programs under Civil Engineering are governed by the General Department for S1/S2).
    - *Trigger for Revisiting:* Adding support for multi-program departments where individual programs follow distinct semester governance paths (e.g., autonomous colleges with dual-track 3-year diploma vs 4-year degree programs under a shared engineering division).
