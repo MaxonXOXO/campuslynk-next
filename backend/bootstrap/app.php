@@ -4,6 +4,7 @@ use App\Core\Modules\Middleware\EnforceModuleLicense;
 use App\Core\Tenancy\Middleware\ResolveTenant;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
+use App\Modules\Identity\Middleware\EnsureSuperAdminAtInstitutionScope;
 use App\Modules\Identity\Middleware\RequirePermission;
 use App\Modules\Identity\Middleware\WithoutImpersonation;
 use Illuminate\Foundation\Application;
@@ -32,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ResolveTenant::class,
             EnforceModuleLicense::class,
             EnsurePasswordNotMustChange::class,
+            EnsureSuperAdminAtInstitutionScope::class,
             EnforceImpersonationRestrictions::class,
             RequirePermission::class,
         ]);

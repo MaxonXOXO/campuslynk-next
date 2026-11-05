@@ -31,7 +31,7 @@ class EnsureSuperAdminAtInstitutionScope
                 title: 'Forbidden',
                 detail: 'Setup endpoints cannot be accessed during an impersonation session.',
                 status: 403,
-                type: ProblemDetails::type('forbidden')
+                type: ProblemDetails::type('impersonation-not-allowed')
             );
         }
 

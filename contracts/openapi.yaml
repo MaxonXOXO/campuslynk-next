@@ -1095,7 +1095,50 @@ paths:
         '401':
           $ref: '#/components/responses/ProblemDetails'
         '403':
-          $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Forbidden error. Returned with one of two RFC 7807 problem types:
+            - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
+            - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                required: [type, title, status, detail]
+                properties:
+                  type:
+                    type: string
+                    description: URI reference identifying the problem type
+                    enum:
+                      - https://errors.campuslynk.net/forbidden
+                      - https://errors.campuslynk.net/impersonation-not-allowed
+                  title:
+                    type: string
+                    example: Forbidden
+                  status:
+                    type: integer
+                    example: 403
+                  detail:
+                    type: string
+                  instance:
+                    type: string
+                    nullable: true
+              examples:
+                forbidden:
+                  summary: Wrong role or non-institution scope
+                  description: Returned when the user lacks the super_admin role at institution scope.
+                  value:
+                    type: https://errors.campuslynk.net/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: Access requires super_admin role at institution scope.
+                impersonationNotAllowed:
+                  summary: Impersonation session active
+                  description: Returned when accessing setup endpoints during an impersonation session.
+                  value:
+                    type: https://errors.campuslynk.net/impersonation-not-allowed
+                    title: Forbidden
+                    status: 403
+                    detail: Setup endpoints cannot be accessed during an impersonation session.
 
   /setup/steps/{step}:
     put:
@@ -1126,7 +1169,50 @@ paths:
         '401':
           $ref: '#/components/responses/ProblemDetails'
         '403':
-          $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Forbidden error. Returned with one of two RFC 7807 problem types:
+            - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
+            - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                required: [type, title, status, detail]
+                properties:
+                  type:
+                    type: string
+                    description: URI reference identifying the problem type
+                    enum:
+                      - https://errors.campuslynk.net/forbidden
+                      - https://errors.campuslynk.net/impersonation-not-allowed
+                  title:
+                    type: string
+                    example: Forbidden
+                  status:
+                    type: integer
+                    example: 403
+                  detail:
+                    type: string
+                  instance:
+                    type: string
+                    nullable: true
+              examples:
+                forbidden:
+                  summary: Wrong role or non-institution scope
+                  description: Returned when the user lacks the super_admin role at institution scope.
+                  value:
+                    type: https://errors.campuslynk.net/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: Access requires super_admin role at institution scope.
+                impersonationNotAllowed:
+                  summary: Impersonation session active
+                  description: Returned when accessing setup endpoints during an impersonation session.
+                  value:
+                    type: https://errors.campuslynk.net/impersonation-not-allowed
+                    title: Forbidden
+                    status: 403
+                    detail: Setup endpoints cannot be accessed during an impersonation session.
         '404':
           $ref: '#/components/responses/ProblemDetails'
         '422':
@@ -1148,7 +1234,50 @@ paths:
         '401':
           $ref: '#/components/responses/ProblemDetails'
         '403':
-          $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Forbidden error. Returned with one of two RFC 7807 problem types:
+            - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
+            - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                required: [type, title, status, detail]
+                properties:
+                  type:
+                    type: string
+                    description: URI reference identifying the problem type
+                    enum:
+                      - https://errors.campuslynk.net/forbidden
+                      - https://errors.campuslynk.net/impersonation-not-allowed
+                  title:
+                    type: string
+                    example: Forbidden
+                  status:
+                    type: integer
+                    example: 403
+                  detail:
+                    type: string
+                  instance:
+                    type: string
+                    nullable: true
+              examples:
+                forbidden:
+                  summary: Wrong role or non-institution scope
+                  description: Returned when the user lacks the super_admin role at institution scope.
+                  value:
+                    type: https://errors.campuslynk.net/forbidden
+                    title: Forbidden
+                    status: 403
+                    detail: Access requires super_admin role at institution scope.
+                impersonationNotAllowed:
+                  summary: Impersonation session active
+                  description: Returned when accessing setup endpoints during an impersonation session.
+                  value:
+                    type: https://errors.campuslynk.net/impersonation-not-allowed
+                    title: Forbidden
+                    status: 403
+                    detail: Setup endpoints cannot be accessed during an impersonation session.
         '409':
           $ref: '#/components/responses/ProblemDetails'
         '422':
@@ -1186,6 +1315,52 @@ components:
               instance:
                 type: string
                 nullable: true
+
+    SetupForbiddenProblemDetails:
+      description: >-
+        Forbidden response for setup wizard operations. Returned with one of two RFC 7807 problem types:
+        - `forbidden`: User lacks the `super_admin` role or is not assigned at institution scope.
+        - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            required: [type, title, status, detail]
+            properties:
+              type:
+                type: string
+                description: URI reference identifying the problem type
+                enum:
+                  - https://errors.campuslynk.net/forbidden
+                  - https://errors.campuslynk.net/impersonation-not-allowed
+              title:
+                type: string
+                example: Forbidden
+              status:
+                type: integer
+                example: 403
+              detail:
+                type: string
+              instance:
+                type: string
+                nullable: true
+          examples:
+            forbidden:
+              summary: Wrong role or non-institution scope
+              description: Returned when the user lacks the super_admin role at institution scope.
+              value:
+                type: https://errors.campuslynk.net/forbidden
+                title: Forbidden
+                status: 403
+                detail: Access requires super_admin role at institution scope.
+            impersonationNotAllowed:
+              summary: Impersonation session active
+              description: Returned when accessing setup endpoints during an impersonation session.
+              value:
+                type: https://errors.campuslynk.net/impersonation-not-allowed
+                title: Forbidden
+                status: 403
+                detail: Setup endpoints cannot be accessed during an impersonation session.
 
   schemas:
     Stream:

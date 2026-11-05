@@ -119,7 +119,7 @@ it('rejects unauthenticated requests and requests from non-super_admin users wit
         $unauthRes = $this->getJson('http://setupauth.test/api/v1/setup/status');
         $unauthRes->assertStatus(401);
 
-        // B. User with no role -> 403
+        // B. User with no role -> 403 forbidden
         $this->app['auth']->forgetGuards();
         $noRoleRes = $this->withHeaders([
             'Authorization' => "Bearer {$noRoleToken}",
@@ -131,7 +131,7 @@ it('rejects unauthenticated requests and requests from non-super_admin users wit
                 'status' => 403,
             ]);
 
-        // C. Non-super_admin role at institution scope -> 403
+        // C. Non-super_admin role at institution scope -> 403 forbidden
         $this->app['auth']->forgetGuards();
         $lecturerRes = $this->withHeaders([
             'Authorization' => "Bearer {$lecturerToken}",
@@ -143,7 +143,7 @@ it('rejects unauthenticated requests and requests from non-super_admin users wit
                 'status' => 403,
             ]);
 
-        // D. Super_admin at department (non-institution) scope -> 403
+        // D. Super_admin at department (non-institution) scope -> 403 forbidden
         $this->app['auth']->forgetGuards();
         $deptAdminRes = $this->withHeaders([
             'Authorization' => "Bearer {$deptAdminToken}",
@@ -155,16 +155,70 @@ it('rejects unauthenticated requests and requests from non-super_admin users wit
                 'status' => 403,
             ]);
 
-        // E. Impersonation session attempting to reach setup endpoint -> 403
+        // D2. Confirm wrong role on saveStep and complete routes also returns forbidden
         $this->app['auth']->forgetGuards();
-        $impersonationRes = $this->withHeaders([
-            'Authorization' => "Bearer {$impersonationToken}",
-        ])->getJson('http://setupauth.test/api/v1/setup/status');
-        $impersonationRes->assertStatus(403)
+        $deptAdminStepRes = $this->withHeaders([
+            'Authorization' => "Bearer {$deptAdminToken}",
+        ])->putJson('http://setupauth.test/api/v1/setup/steps/institution_profile', ['name' => 'Test']);
+        $deptAdminStepRes->assertStatus(403)
             ->assertJson([
                 'type' => ProblemDetails::type('forbidden'),
                 'title' => 'Forbidden',
                 'status' => 403,
+            ]);
+
+        $this->app['auth']->forgetGuards();
+        $deptAdminCompleteRes = $this->withHeaders([
+            'Authorization' => "Bearer {$deptAdminToken}",
+        ])->postJson('http://setupauth.test/api/v1/setup/complete');
+        $deptAdminCompleteRes->assertStatus(403)
+            ->assertJson([
+                'type' => ProblemDetails::type('forbidden'),
+                'title' => 'Forbidden',
+                'status' => 403,
+            ]);
+
+        // E. Impersonation session on each of the three setup routes -> 403 impersonation-not-allowed
+        // E1. GET /setup/status
+        $this->app['auth']->forgetGuards();
+        $impersonationStatusRes = $this->withHeaders([
+            'Authorization' => "Bearer {$impersonationToken}",
+        ])->getJson('http://setupauth.test/api/v1/setup/status');
+        $impersonationStatusRes->assertStatus(403)
+            ->assertJson([
+                'type' => ProblemDetails::type('impersonation-not-allowed'),
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => 'Setup endpoints cannot be accessed during an impersonation session.',
+            ]);
+
+        // E2. PUT /setup/steps/{step}
+        $this->app['auth']->forgetGuards();
+        $impersonationStepRes = $this->withHeaders([
+            'Authorization' => "Bearer {$impersonationToken}",
+        ])->putJson('http://setupauth.test/api/v1/setup/steps/institution_profile', [
+            'name' => 'Impersonated Name',
+            'short_code' => 'IMP',
+        ]);
+        $impersonationStepRes->assertStatus(403)
+            ->assertJson([
+                'type' => ProblemDetails::type('impersonation-not-allowed'),
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => 'Setup endpoints cannot be accessed during an impersonation session.',
+            ]);
+
+        // E3. POST /setup/complete
+        $this->app['auth']->forgetGuards();
+        $impersonationCompleteRes = $this->withHeaders([
+            'Authorization' => "Bearer {$impersonationToken}",
+        ])->postJson('http://setupauth.test/api/v1/setup/complete');
+        $impersonationCompleteRes->assertStatus(403)
+            ->assertJson([
+                'type' => ProblemDetails::type('impersonation-not-allowed'),
+                'title' => 'Forbidden',
+                'status' => 403,
+                'detail' => 'Setup endpoints cannot be accessed during an impersonation session.',
             ]);
     } finally {
         $this->tenantContext->forget();
