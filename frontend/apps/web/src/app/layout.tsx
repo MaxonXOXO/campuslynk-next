@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono, Inter, Noto_Sans_Malayalam } from "next/font/google";
 import { ThemeProvider, TooltipProvider, Toaster, cn } from "@academic-suite/ui";
 import "./globals.css";
+import { SessionProvider } from "@/lib/auth/session-provider";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -47,10 +48,10 @@ export default function RootLayout({
         fontMalayalam.variable
       )}
     >
-      <body className="min-h-screen bg-background text-foreground">
+      <body suppressHydrationWarning className="min-h-screen bg-background text-foreground">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <TooltipProvider>
-            {children}
+            <SessionProvider>{children}</SessionProvider>
             <Toaster richColors position="top-right" />
           </TooltipProvider>
         </ThemeProvider>

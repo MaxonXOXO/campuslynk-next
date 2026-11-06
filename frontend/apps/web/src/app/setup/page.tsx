@@ -15,12 +15,13 @@ import {
 } from "@academic-suite/ui";
 import { toast } from "sonner";
 import { RiRefreshLine, RiAlertLine, RiShieldKeyholeLine } from "@remixicon/react";
-import { createApiClient } from "@academic-suite/api-client";
-import { getApiBaseUrl } from "@/lib/api";
+import { AuthGuard } from "@/lib/auth/auth-guard";
+import { useApiClient } from "@/lib/auth/session-provider";
 
 import {
   deriveCurrentStep,
   deriveStepStates,
+  isValidStepId,
   type StepId,
   type SetupStatusData,
 } from "./logic/step-derivation";
@@ -60,27 +61,13 @@ import { ImpersonationState } from "./components/ImpersonationState";
 import { ForbiddenState } from "./components/ForbiddenState";
 import { DirtyStepWarningDialog } from "./components/DirtyStepWarningDialog";
 
-export default function SetupWizardPage() {
+function SetupWizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedStepParam = searchParams.get("step");
 
   // API Client instance
-  const client = React.useMemo(() => {
-    return createApiClient({
-      baseUrl: `${getApiBaseUrl()}/api/v1`,
-      getAccessToken: async () => {
-        if (typeof window !== "undefined") {
-          return (
-            sessionStorage.getItem("auth_token") ||
-            localStorage.getItem("auth_token") ||
-            ""
-          );
-        }
-        return "";
-      },
-    });
-  }, []);
+  const client = useApiClient();
 
   // Wizard Lifecycle & Data State
   const [status, setStatus] = React.useState<SetupStatusData | null>(null);
@@ -113,54 +100,81 @@ export default function SetupWizardPage() {
   const [pendingStepNavigation, setPendingStepNavigation] = React.useState<StepId | null>(null);
   const [dirtyWarningOpen, setDirtyWarningOpen] = React.useState(false);
 
+  const initialRequestedStepRef = React.useRef<string | null>(requestedStepParam);
+
   // Fetch status and prerequisite entities
-  const loadSetupStatus = React.useCallback(async () => {
-    setIsLoadingStatus(true);
-    setGeneralError(null);
-    setSecurityBlock(null);
+  const loadSetupStatus = React.useCallback(
+    async (options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+      if (!silent) {
+        setIsLoadingStatus(true);
+        setGeneralError(null);
+        setSecurityBlock(null);
+      }
 
-    try {
-      const res = await client.setup.status();
-      const statusData = res.data as SetupStatusData;
-      setStatus(statusData);
-
-      // Fetch structural collections
       try {
-        const [streamsRes, deptsRes, yearsRes] = await Promise.all([
-          client.organisation.streams.list(),
-          client.organisation.departments.list(),
-          client.organisation.academicYears.list(),
-        ]);
-        setStreams(((streamsRes as { data?: unknown })?.data as StreamItem[]) || []);
-        setDepartments(((deptsRes as { data?: unknown })?.data as DepartmentItem[]) || []);
-        setAcademicYears(((yearsRes as { data?: unknown })?.data as AcademicYearItem[]) || []);
-      } catch {
-        // Fall back gracefully if individual entity lists fail
-      }
+        const res = await client.setup.status();
+        const statusData = res.data as SetupStatusData;
+        setStatus(statusData);
 
-      // If already completed and user didn't request an explicit step, show summary
-      if (statusData.completed_at && !requestedStepParam) {
-        setViewingSummary(true);
-      } else {
-        const derived = deriveCurrentStep(statusData, requestedStepParam);
-        setCurrentStep(derived);
+        // Fetch structural collections
+        try {
+          const [streamsRes, deptsRes, yearsRes] = await Promise.all([
+            client.organisation.streams.list(),
+            client.organisation.departments.list(),
+            client.organisation.academicYears.list(),
+          ]);
+          setStreams(((streamsRes as { data?: unknown })?.data as StreamItem[]) || []);
+          setDepartments(((deptsRes as { data?: unknown })?.data as DepartmentItem[]) || []);
+          setAcademicYears(((yearsRes as { data?: unknown })?.data as AcademicYearItem[]) || []);
+        } catch {
+          // Fall back gracefully if individual entity lists fail
+        }
+
+        if (!silent) {
+          const initialStep = initialRequestedStepRef.current;
+          // If already completed and user didn't request an explicit step, show summary
+          if (statusData.completed_at && !initialStep) {
+            setViewingSummary(true);
+          } else {
+            const derived = deriveCurrentStep(statusData, initialStep);
+            setCurrentStep(derived);
+          }
+        }
+      } catch (err: unknown) {
+        if (!silent) {
+          if (isImpersonationError(err)) {
+            setSecurityBlock("impersonation");
+          } else if (isWrongRoleForbiddenError(err)) {
+            setSecurityBlock("forbidden");
+          } else {
+            setGeneralError(getGeneralErrorMessage(err, "Failed to load institutional setup status."));
+          }
+        }
+      } finally {
+        if (!silent) {
+          setIsLoadingStatus(false);
+        }
       }
-    } catch (err: unknown) {
-      if (isImpersonationError(err)) {
-        setSecurityBlock("impersonation");
-      } else if (isWrongRoleForbiddenError(err)) {
-        setSecurityBlock("forbidden");
-      } else {
-        setGeneralError(getGeneralErrorMessage(err, "Failed to load institutional setup status."));
-      }
-    } finally {
-      setIsLoadingStatus(false);
-    }
-  }, [client, requestedStepParam]);
+    },
+    [client]
+  );
+
+  const refreshSetupStatusSilently = React.useCallback(async () => {
+    await loadSetupStatus({ silent: true });
+  }, [loadSetupStatus]);
 
   React.useEffect(() => {
     void loadSetupStatus();
   }, [loadSetupStatus]);
+
+  // Synchronize currentStep if URL ?step= query parameter changes (e.g. browser Back/Forward)
+  React.useEffect(() => {
+    if (requestedStepParam && isValidStepId(requestedStepParam)) {
+      setViewingSummary(false);
+      setCurrentStep(requestedStepParam);
+    }
+  }, [requestedStepParam]);
 
   // Handle URL step synchronization
   const navigateToStep = (targetStep: StepId, force = false) => {
@@ -221,7 +235,6 @@ export default function SetupWizardPage() {
     try {
       await client.organisation.streams.create({ code, name });
       toast.success(`Stream "${name}" created.`);
-      await loadSetupStatus();
       return true;
     } catch (err: unknown) {
       toast.error(getGeneralErrorMessage(err, "Failed to create stream."));
@@ -233,7 +246,6 @@ export default function SetupWizardPage() {
     try {
       await client.organisation.streams.update(id, { name });
       toast.success("Stream renamed successfully.");
-      await loadSetupStatus();
       return true;
     } catch (err: unknown) {
       toast.error(getGeneralErrorMessage(err, "Failed to rename stream."));
@@ -245,7 +257,6 @@ export default function SetupWizardPage() {
     try {
       await client.organisation.streams.delete(id);
       toast.success("Stream deleted successfully.");
-      await loadSetupStatus();
       return { success: true };
     } catch (err: unknown) {
       const msg = getGeneralErrorMessage(err, "Cannot delete stream in use.");
@@ -263,7 +274,6 @@ export default function SetupWizardPage() {
     try {
       await client.organisation.departments.create(data);
       toast.success(`Department "${data.name}" created.`);
-      await loadSetupStatus();
       return true;
     } catch (err: unknown) {
       toast.error(getGeneralErrorMessage(err, "Failed to create department."));
@@ -280,7 +290,6 @@ export default function SetupWizardPage() {
     try {
       await client.organisation.academicYears.create(data);
       toast.success(`Academic Year "${data.label}" created.`);
-      await loadSetupStatus();
       return true;
     } catch (err: unknown) {
       toast.error(getGeneralErrorMessage(err, "Failed to create academic year."));
@@ -376,11 +385,11 @@ export default function SetupWizardPage() {
 
   // Render Security Blocks if detected
   if (securityBlock === "impersonation") {
-    return <ImpersonationState onBackToHome={() => router.push("/")} />;
+    return <ImpersonationState onBackToHome={() => router.push("/home")} />;
   }
 
   if (securityBlock === "forbidden") {
-    return <ForbiddenState onBackToHome={() => router.push("/")} />;
+    return <ForbiddenState onBackToHome={() => router.push("/home")} />;
   }
 
   // Loading Skeleton State
@@ -504,7 +513,7 @@ export default function SetupWizardPage() {
                     streams={streams}
                     departments={departments}
                     academicYears={academicYears}
-                    onRefresh={loadSetupStatus}
+                    onRefresh={refreshSetupStatusSilently}
                     onCreateStream={handleCreateStream}
                     onRenameStream={handleRenameStream}
                     onDeleteStream={handleDeleteStream}
@@ -571,5 +580,27 @@ export default function SetupWizardPage() {
         }}
       />
     </main>
+  );
+}
+
+function SetupWizardFallback() {
+  return (
+    <main className="min-h-screen bg-background text-foreground py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto space-y-6">
+        <Skeleton className="h-10 w-64" />
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    </main>
+  );
+}
+
+export default function SetupWizardPage() {
+  return (
+    <AuthGuard>
+      <React.Suspense fallback={<SetupWizardFallback />}>
+        <SetupWizardContent />
+      </React.Suspense>
+    </AuthGuard>
   );
 }

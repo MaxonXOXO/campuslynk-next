@@ -46,10 +46,12 @@ export interface DepartmentItem {
   name: string;
   kind?: string;
   stream_id?: string;
-  stream?: {
-    id: string;
-    code: string;
-    name: string;
+  stream?:
+  | string
+  | {
+    id?: string;
+    code?: string;
+    name?: string;
   };
 }
 
@@ -86,6 +88,15 @@ interface OrganisationBasicsStepProps {
   onBack: () => void;
 }
 
+export function deriveStreamCode(name: string): string {
+  return name
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32);
+}
+
 export function OrganisationBasicsStep({
   streams,
   departments,
@@ -104,6 +115,7 @@ export function OrganisationBasicsStep({
   const [createStreamOpen, setCreateStreamOpen] = React.useState(false);
   const [streamCode, setStreamCode] = React.useState("");
   const [streamName, setStreamName] = React.useState("");
+  const [isCodeManuallyEdited, setIsCodeManuallyEdited] = React.useState(false);
   const [streamError, setStreamError] = React.useState<string | null>(null);
   const [isSubmittingStream, setIsSubmittingStream] = React.useState(false);
 
@@ -139,20 +151,56 @@ export function OrganisationBasicsStep({
   const handleOpenCreateStream = () => {
     setStreamCode("");
     setStreamName("");
+    setIsCodeManuallyEdited(false);
     setStreamError(null);
     setCreateStreamOpen(true);
   };
 
+  const handleStreamNameChange = (value: string) => {
+    setStreamName(value);
+    if (!isCodeManuallyEdited) {
+      setStreamCode(deriveStreamCode(value));
+    }
+  };
+
+  const handleStreamCodeChange = (value: string) => {
+    setIsCodeManuallyEdited(true);
+    const sanitized = value.toUpperCase().replace(/[^A-Z0-9_-]/g, "").slice(0, 32);
+    setStreamCode(sanitized);
+  };
+
+  const handleQuickFillStream = (name: string, code: string) => {
+    setStreamName(name);
+    setStreamCode(code);
+    setIsCodeManuallyEdited(false);
+  };
+
   const handleCreateStreamSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!streamCode.trim() || !streamName.trim()) {
+    const code = streamCode.trim();
+    const name = streamName.trim();
+
+    if (!code || !name) {
       setStreamError("Both stream code and stream name are required.");
       return;
     }
+    if (code.length > 32) {
+      setStreamError("Stream code cannot exceed 32 characters.");
+      return;
+    }
+    if (!/^[A-Za-z0-9]+([_-][A-Za-z0-9]+)*$/.test(code)) {
+      setStreamError("Stream code must start and end with alphanumeric characters and can contain underscores or hyphens.");
+      return;
+    }
+    if (name.length > 100) {
+      setStreamError("Stream name cannot exceed 100 characters.");
+      return;
+    }
+
     setIsSubmittingStream(true);
     setStreamError(null);
     try {
-      const ok = await onCreateStream(streamCode.trim(), streamName.trim());
+      const ok = await onCreateStream(code, name);
       if (ok) {
         setCreateStreamOpen(false);
         await onRefresh();
@@ -232,7 +280,11 @@ export function OrganisationBasicsStep({
 
     // Client-side rule: duplicate code within the same stream is an error
     const isDuplicateInStream = departments.some((d) => {
-      const dStreamId = d.stream_id || d.stream?.id;
+      const dStreamId =
+        d.stream_id ||
+        (typeof d.stream === "object" && d.stream !== null
+          ? d.stream.id
+          : streams.find((s) => s.code === d.stream)?.id);
       return (
         dStreamId === deptStreamId &&
         d.code.toLowerCase().trim() === deptCode.toLowerCase().trim()
@@ -490,10 +542,22 @@ export function OrganisationBasicsStep({
               <TableBody>
                 {departments.map((dept) => {
                   const streamObj =
-                    dept.stream || streams.find((s) => s.id === dept.stream_id);
-                  const streamDisplayName = streamObj
-                    ? `${streamObj.name} (${streamObj.code})`
-                    : "Unknown Stream";
+                    typeof dept.stream === "object" && dept.stream !== null
+                      ? dept.stream
+                      : streams.find(
+                        (s) =>
+                          s.id === dept.stream_id ||
+                          (typeof dept.stream === "string" &&
+                            (s.code === dept.stream || s.id === dept.stream))
+                      );
+                  const streamDisplayName =
+                    streamObj?.name && streamObj?.code
+                      ? `${streamObj.name} (${streamObj.code})`
+                      : streamObj?.name || streamObj?.code
+                        ? streamObj.name || streamObj.code
+                        : typeof dept.stream === "string" && dept.stream
+                          ? dept.stream
+                          : "Unknown Stream";
 
                   return (
                     <TableRow key={dept.id}>
@@ -616,30 +680,53 @@ export function OrganisationBasicsStep({
               )}
 
               <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="stream-name">Stream Name</Label>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <span>Quick-fill:</span>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickFillStream("Aided", "AIDED")}
+                      className="rounded px-1.5 py-0.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 text-xs font-medium cursor-pointer transition-colors"
+                    >
+                      Aided
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleQuickFillStream("Self-financing", "SELF_FINANCING")}
+                      className="rounded px-1.5 py-0.5 bg-secondary text-secondary-foreground hover:bg-secondary/80 text-xs font-medium cursor-pointer transition-colors"
+                    >
+                      Self-financing
+                    </button>
+                  </div>
+                </div>
+                <Input
+                  id="stream-name"
+                  value={streamName}
+                  onChange={(e) => handleStreamNameChange(e.target.value)}
+                  placeholder="Government Aided"
+                  maxLength={100}
+                  disabled={isSubmittingStream}
+                />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label htmlFor="stream-code">Stream Code</Label>
                 <Input
                   id="stream-code"
                   value={streamCode}
-                  onChange={(e) => setStreamCode(e.target.value.toUpperCase())}
+                  onChange={(e) => handleStreamCodeChange(e.target.value)}
                   placeholder="AIDED"
-                  maxLength={16}
+                  maxLength={32}
                   disabled={isSubmittingStream}
+                  className="font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Short unique uppercase identifier (e.g. AIDED, SF).
+                  Short unique uppercase identifier (e.g. AIDED, SELF_FINANCING). Max 32 characters.
                 </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="stream-name">Stream Name</Label>
-                <Input
-                  id="stream-name"
-                  value={streamName}
-                  onChange={(e) => setStreamName(e.target.value)}
-                  placeholder="Government Aided Stream"
-                  maxLength={255}
-                  disabled={isSubmittingStream}
-                />
+                <p className="text-xs font-medium text-destructive/90">
+                  Note: The stream code cannot be changed after creation.
+                </p>
               </div>
             </div>
 

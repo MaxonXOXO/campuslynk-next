@@ -1,4 +1,6 @@
 @import "@academic-suite/ui/globals.css";
+@source "../";
+@source "../../../../packages/ui/src";
 
 @theme inline {
   --font-sans: var(--font-sans), var(--font-malayalam), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
