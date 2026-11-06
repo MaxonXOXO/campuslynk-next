@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Auth;
 
+use App\Core\Http\ProblemDetails;
 use App\Core\Tenancy\Models\License;
 use App\Core\Tenancy\Models\Tenant;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Models\PersonalAccessToken;
+use App\Modules\Identity\Models\Role;
+use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Models\UserIdentifier;
+use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
@@ -278,6 +282,9 @@ it('enforces must_change_password by blocking endpoints with 403 until password 
     $tenant = $this->provisioner->provision('tenant_mcp', 'MCP College', 'mcp.test', 'cloud');
 
     $this->tenantContext->setTenant($tenant);
+    app(TenantBaselineSeeder::class)->run();
+    $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+
     $user = User::create([
         'type' => 'staff',
         'name' => 'Initial Admin',
@@ -285,6 +292,14 @@ it('enforces must_change_password by blocking endpoints with 403 until password 
         'password' => Hash::make('TemporaryPass123!'),
         'must_change_password' => true,
         'status' => 'active',
+    ]);
+    RoleAssignment::create([
+        'user_id' => $user->id,
+        'role_id' => $superAdminRole->id,
+        'scope_type' => 'institution',
+        'scope_label' => 'inst_root',
+        'is_singleton' => false,
+        'is_active' => true,
     ]);
     $this->tenantContext->forget();
 
@@ -301,15 +316,33 @@ it('enforces must_change_password by blocking endpoints with 403 until password 
 
     $token = $resp->json('data.token');
 
-    // 1. GET /me is blocked with 403 RFC 7807 problem details
+    // 1a. GET /me is blocked with 403 password-change-required RFC 7807 problem details
     $this->withHeader('Authorization', "Bearer {$token}")
         ->getJson('http://mcp.test/api/v1/me')
         ->assertStatus(403)
         ->assertHeader('Content-Type', 'application/problem+json')
-        ->assertJsonPath('title', 'Password Change Required')
-        ->assertJsonPath('status', 403);
+        ->assertJson([
+            'type' => ProblemDetails::type('password-change-required'),
+            'title' => 'Password Change Required',
+            'status' => 403,
+            'detail' => 'You must change your password before accessing other features.',
+        ]);
+
+    // 1b. Protected route GET /setup/status is also blocked with 403 password-change-required
+    auth()->forgetGuards();
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson('http://mcp.test/api/v1/setup/status')
+        ->assertStatus(403)
+        ->assertHeader('Content-Type', 'application/problem+json')
+        ->assertJson([
+            'type' => ProblemDetails::type('password-change-required'),
+            'title' => 'Password Change Required',
+            'status' => 403,
+            'detail' => 'You must change your password before accessing other features.',
+        ]);
 
     // 2. Change password succeeds
+    auth()->forgetGuards();
     $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson('http://mcp.test/api/v1/auth/password/change', [
             'current_password' => 'TemporaryPass123!',
@@ -318,12 +351,32 @@ it('enforces must_change_password by blocking endpoints with 403 until password 
         ])->assertStatus(200)
         ->assertJsonPath('data.message', 'Password changed successfully.');
 
-    // 3. Now GET /me succeeds
-    $this->withHeader('Authorization', "Bearer {$token}")
+    // 3. Fresh login with the new password
+    auth()->forgetGuards();
+    $freshLogin = $this->postJson('http://mcp.test/api/v1/auth/login', [
+        'identifier' => 'admin@mcp.test',
+        'password' => 'PermanentStrongPass123!',
+        'device_name' => 'Desktop Fresh',
+        'client' => 'web',
+    ]);
+    $freshLogin->assertStatus(200)
+        ->assertJsonPath('data.must_change_password', false);
+    $freshToken = $freshLogin->json('data.token');
+
+    // 4a. GET /me succeeds with the fresh token
+    auth()->forgetGuards();
+    $this->withHeader('Authorization', "Bearer {$freshToken}")
         ->getJson('http://mcp.test/api/v1/me')
         ->assertStatus(200)
         ->assertJsonPath('data.must_change_password', false)
         ->assertJsonPath('data.name', 'Initial Admin');
+
+    // 4b. Protected route GET /setup/status succeeds with the fresh token
+    auth()->forgetGuards();
+    $this->withHeader('Authorization', "Bearer {$freshToken}")
+        ->getJson('http://mcp.test/api/v1/setup/status')
+        ->assertStatus(200)
+        ->assertJsonPath('data.is_completed', false);
 });
 
 it('strictly isolates login throttling per tenant with anti-enumeration timing defense', function () {

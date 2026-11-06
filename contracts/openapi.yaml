@@ -167,7 +167,39 @@ paths:
         '401':
           $ref: '#/components/responses/ProblemDetails'
         '403':
-          $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Forbidden error (`password-change-required`). Returned when the user has `must_change_password = true` and must change their password before accessing protected endpoints.
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                required: [type, title, status, detail]
+                properties:
+                  type:
+                    type: string
+                    description: URI reference identifying the problem type
+                    example: https://errors.campuslynk.net/password-change-required
+                  title:
+                    type: string
+                    example: Password Change Required
+                  status:
+                    type: integer
+                    example: 403
+                  detail:
+                    type: string
+                    example: You must change your password before accessing other features.
+                  instance:
+                    type: string
+                    nullable: true
+              examples:
+                passwordChangeRequired:
+                  summary: Password change required
+                  description: Returned when the authenticated user must change their temporary password before accessing protected features.
+                  value:
+                    type: https://errors.campuslynk.net/password-change-required
+                    title: Password Change Required
+                    status: 403
+                    detail: You must change your password before accessing other features.
 
   /impersonation:
     post:
@@ -1096,7 +1128,8 @@ paths:
           $ref: '#/components/responses/ProblemDetails'
         '403':
           description: >-
-            Forbidden error. Returned with one of two RFC 7807 problem types:
+            Forbidden error. Returned with one of three RFC 7807 problem types:
+            - `password-change-required`: User has `must_change_password = true` and must change their password first.
             - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
             - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
           content:
@@ -1109,6 +1142,7 @@ paths:
                     type: string
                     description: URI reference identifying the problem type
                     enum:
+                      - https://errors.campuslynk.net/password-change-required
                       - https://errors.campuslynk.net/forbidden
                       - https://errors.campuslynk.net/impersonation-not-allowed
                   title:
@@ -1123,6 +1157,14 @@ paths:
                     type: string
                     nullable: true
               examples:
+                passwordChangeRequired:
+                  summary: Password change required
+                  description: Returned when the user must change their temporary password before accessing protected features.
+                  value:
+                    type: https://errors.campuslynk.net/password-change-required
+                    title: Password Change Required
+                    status: 403
+                    detail: You must change your password before accessing other features.
                 forbidden:
                   summary: Wrong role or non-institution scope
                   description: Returned when the user lacks the super_admin role at institution scope.
@@ -1170,7 +1212,8 @@ paths:
           $ref: '#/components/responses/ProblemDetails'
         '403':
           description: >-
-            Forbidden error. Returned with one of two RFC 7807 problem types:
+            Forbidden error. Returned with one of three RFC 7807 problem types:
+            - `password-change-required`: User has `must_change_password = true` and must change their password first.
             - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
             - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
           content:
@@ -1183,6 +1226,7 @@ paths:
                     type: string
                     description: URI reference identifying the problem type
                     enum:
+                      - https://errors.campuslynk.net/password-change-required
                       - https://errors.campuslynk.net/forbidden
                       - https://errors.campuslynk.net/impersonation-not-allowed
                   title:
@@ -1197,6 +1241,14 @@ paths:
                     type: string
                     nullable: true
               examples:
+                passwordChangeRequired:
+                  summary: Password change required
+                  description: Returned when the user must change their temporary password before accessing protected features.
+                  value:
+                    type: https://errors.campuslynk.net/password-change-required
+                    title: Password Change Required
+                    status: 403
+                    detail: You must change your password before accessing other features.
                 forbidden:
                   summary: Wrong role or non-institution scope
                   description: Returned when the user lacks the super_admin role at institution scope.
@@ -1235,7 +1287,8 @@ paths:
           $ref: '#/components/responses/ProblemDetails'
         '403':
           description: >-
-            Forbidden error. Returned with one of two RFC 7807 problem types:
+            Forbidden error. Returned with one of three RFC 7807 problem types:
+            - `password-change-required`: User has `must_change_password = true` and must change their password first.
             - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`.
             - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
           content:
@@ -1248,6 +1301,7 @@ paths:
                     type: string
                     description: URI reference identifying the problem type
                     enum:
+                      - https://errors.campuslynk.net/password-change-required
                       - https://errors.campuslynk.net/forbidden
                       - https://errors.campuslynk.net/impersonation-not-allowed
                   title:
@@ -1262,6 +1316,14 @@ paths:
                     type: string
                     nullable: true
               examples:
+                passwordChangeRequired:
+                  summary: Password change required
+                  description: Returned when the user must change their temporary password before accessing protected features.
+                  value:
+                    type: https://errors.campuslynk.net/password-change-required
+                    title: Password Change Required
+                    status: 403
+                    detail: You must change your password before accessing other features.
                 forbidden:
                   summary: Wrong role or non-institution scope
                   description: Returned when the user lacks the super_admin role at institution scope.
@@ -1292,7 +1354,8 @@ components:
 
   responses:
     ProblemDetails:
-      description: RFC 7807 Problem Details error response
+      description: >-
+        RFC 7807 Problem Details error response. For 403 Forbidden on authenticated routes behind `EnsurePasswordNotMustChange`, returns problem type `password-change-required` when `must_change_password = true`, or `forbidden` when role/permission checks fail.
       content:
         application/problem+json:
           schema:
@@ -1318,7 +1381,8 @@ components:
 
     SetupForbiddenProblemDetails:
       description: >-
-        Forbidden response for setup wizard operations. Returned with one of two RFC 7807 problem types:
+        Forbidden response for setup wizard operations. Returned with one of three RFC 7807 problem types:
+        - `password-change-required`: User has `must_change_password = true` and must change their password first.
         - `forbidden`: User lacks the `super_admin` role or is not assigned at institution scope.
         - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session.
       content:
@@ -1331,6 +1395,7 @@ components:
                 type: string
                 description: URI reference identifying the problem type
                 enum:
+                  - https://errors.campuslynk.net/password-change-required
                   - https://errors.campuslynk.net/forbidden
                   - https://errors.campuslynk.net/impersonation-not-allowed
               title:
@@ -1345,6 +1410,14 @@ components:
                 type: string
                 nullable: true
           examples:
+            passwordChangeRequired:
+              summary: Password change required
+              description: Returned when the user must change their temporary password before accessing protected features.
+              value:
+                type: https://errors.campuslynk.net/password-change-required
+                title: Password Change Required
+                status: 403
+                detail: You must change your password before accessing other features.
             forbidden:
               summary: Wrong role or non-institution scope
               description: Returned when the user lacks the super_admin role at institution scope.

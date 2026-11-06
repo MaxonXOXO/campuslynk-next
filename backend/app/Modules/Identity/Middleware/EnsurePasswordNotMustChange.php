@@ -30,7 +30,8 @@ class EnsurePasswordNotMustChange
             return ProblemDetails::response(
                 title: 'Password Change Required',
                 detail: 'You must change your password before accessing other features.',
-                status: Response::HTTP_FORBIDDEN
+                status: Response::HTTP_FORBIDDEN,
+                type: ProblemDetails::type('password-change-required')
             );
         }
 
