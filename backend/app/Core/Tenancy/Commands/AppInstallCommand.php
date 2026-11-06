@@ -154,28 +154,41 @@ class AppInstallCommand extends Command
                 ]
             );
 
-            // 3. First Super Admin Bootstrap (B5 + super_admin role assignment)
-            $adminEmailOption = $this->option('admin-email');
-            if (is_string($adminEmailOption) && trim($adminEmailOption) !== '') {
-                $adminEmail = trim($adminEmailOption);
-                $adminName = is_string($this->option('admin-name')) && trim((string) $this->option('admin-name')) !== ''
-                    ? trim((string) $this->option('admin-name'))
-                    : "{$name} Administrator";
+            $tenantContext->setTenant($tenant);
+            try {
+                // Always seed RBAC baseline (roles, delegation rules, permissions) before optional profile or admin creation
+                app(ModuleRegistry::class)->seed('rbac');
 
-                $tenantContext->setTenant($tenant);
-                try {
-                    $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
-                    if ($seedProfile !== '' && $seedProfile !== 'none') {
-                        $this->info(sprintf('Seeding %s profile...', $seedProfile));
-                        app(ModuleRegistry::class)->seed($seedProfile);
-                    }
+                $seedProfile = (string) ($this->option('seed-profile') ?? 'kerala-polytechnic');
+                if ($seedProfile !== '' && $seedProfile !== 'none') {
+                    $this->info(sprintf('Seeding %s profile...', $seedProfile));
+                    app(ModuleRegistry::class)->seed($seedProfile);
+                }
+
+                // 3. First Super Admin Bootstrap (B5 + super_admin role assignment)
+                $adminEmailOption = $this->option('admin-email');
+                if (is_string($adminEmailOption) && trim($adminEmailOption) !== '') {
+                    $adminEmail = trim($adminEmailOption);
+                    $adminName = is_string($this->option('admin-name')) && trim((string) $this->option('admin-name')) !== ''
+                        ? trim((string) $this->option('admin-name'))
+                        : "{$name} Administrator";
 
                     /** @var class-string<Model> $userModel */
                     $userModel = (string) config('auth.providers.users.model');
-                    if (class_exists($userModel) && $userModel::query()->where('type', 'staff')->count() === 0) {
+                    if (! class_exists($userModel)) {
+                        throw new \RuntimeException('Configured user model does not exist.');
+                    }
+
+                    if ($userModel::query()->where('type', 'staff')->count() === 0) {
                         $oneTimePassword = Str::password(16, symbols: false);
 
                         DB::connection('tenant')->transaction(function () use ($userModel, $adminName, $adminEmail, $oneTimePassword, $tenant): void {
+                            /** @var object{id: string}|null $superAdminRole */
+                            $superAdminRole = DB::connection('tenant')->table('roles')->where('key', 'super_admin')->first();
+                            if ($superAdminRole === null) {
+                                throw new \RuntimeException('Cannot bootstrap Super Admin: role [super_admin] does not exist in tenant database.');
+                            }
+
                             /** @var Model $user */
                             $user = $userModel::query()->create([
                                 'type' => 'staff',
@@ -186,29 +199,29 @@ class AppInstallCommand extends Command
                                 'status' => 'active',
                             ]);
 
-                            /** @var object{id: string}|null $superAdminRole */
-                            $superAdminRole = DB::connection('tenant')->table('roles')->where('key', 'super_admin')->first();
-                            if ($superAdminRole !== null) {
-                                /** @var object{scope_label: string}|null $inst */
-                                $inst = DB::connection('tenant')->table('institution')->first();
-                                $scopeLabel = $inst !== null ? $inst->scope_label : 'i_'.$tenant->slug;
+                            /** @var object{scope_label: string}|null $inst */
+                            $inst = DB::connection('tenant')->table('institution')->first();
+                            $scopeLabel = $inst !== null ? $inst->scope_label : 'i_'.$tenant->slug;
 
-                                DB::connection('tenant')->table('role_assignments')->insert([
-                                    'id' => (string) Str::ulid(),
-                                    'user_id' => $user->getKey(),
-                                    'role_id' => $superAdminRole->id,
-                                    'scope_type' => 'institution',
-                                    'scope_id' => null,
-                                    'scope_label' => $scopeLabel,
-                                    'is_singleton' => false,
-                                    'valid_from' => Carbon::now(),
-                                    'valid_to' => null,
-                                    'is_active' => true,
-                                    'assigned_by_user_id' => $user->getKey(),
-                                    'order_record' => 'Bootstrap Super Admin',
-                                    'created_at' => Carbon::now(),
-                                    'updated_at' => Carbon::now(),
-                                ]);
+                            $assigned = DB::connection('tenant')->table('role_assignments')->insert([
+                                'id' => (string) Str::ulid(),
+                                'user_id' => $user->getKey(),
+                                'role_id' => $superAdminRole->id,
+                                'scope_type' => 'institution',
+                                'scope_id' => null,
+                                'scope_label' => $scopeLabel,
+                                'is_singleton' => false,
+                                'valid_from' => Carbon::now(),
+                                'valid_to' => null,
+                                'is_active' => true,
+                                'assigned_by_user_id' => $user->getKey(),
+                                'order_record' => 'Bootstrap Super Admin',
+                                'created_at' => Carbon::now(),
+                                'updated_at' => Carbon::now(),
+                            ]);
+
+                            if (! $assigned) {
+                                throw new \RuntimeException('Cannot bootstrap Super Admin: failed to create role assignment.');
                             }
                         });
 
@@ -224,9 +237,9 @@ class AppInstallCommand extends Command
                         $this->warn('================================================================');
                         $this->newLine();
                     }
-                } finally {
-                    $tenantContext->forget();
                 }
+            } finally {
+                $tenantContext->forget();
             }
 
             $this->info('Appliance installation completed successfully.');

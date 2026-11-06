@@ -38,7 +38,12 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
 
     public function seeders(): array
     {
-        return [];
+        return [
+            'rbac' => Database\Seeders\RbacBaselineSeeder::class,
+            'none' => Database\Seeders\RbacBaselineSeeder::class,
+            'baseline' => Database\Seeders\RbacBaselineSeeder::class,
+            'kerala-polytechnic' => Database\Seeders\RbacBaselineSeeder::class,
+        ];
     }
 
     public function registerRoutes(): void

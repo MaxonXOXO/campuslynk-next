@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Database\Seeders;
 
+use App\Modules\Identity\Commands\PermissionsSyncCommand;
 use App\Modules\Identity\Models\DelegationRule;
 use App\Modules\Identity\Models\Role;
 use Illuminate\Database\Seeder;
@@ -270,5 +271,8 @@ class RbacBaselineSeeder extends Seeder
                 ]
             );
         }
+
+        // 3. Synchronize module permissions and role bindings for the active tenant
+        app(PermissionsSyncCommand::class)->syncCurrentTenant();
     }
 }
