@@ -28,14 +28,15 @@
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="DB_CONNECTION" value="unconfigured"/>
+        <env name="TENANT_DB_PREFIX" value="tenant_test_"/>
         <env name="LANDLORD_DB_HOST" value="127.0.0.1"/>
         <env name="LANDLORD_DB_PORT" value="5432"/>
-        <env name="LANDLORD_DB_DATABASE" value="landlord"/>
+        <env name="LANDLORD_DB_DATABASE" value="landlord_test"/>
         <env name="LANDLORD_DB_USERNAME" value="landlord_app"/>
         <env name="LANDLORD_DB_PASSWORD" value="secret"/>
         <env name="ADMIN_DB_HOST" value="127.0.0.1"/>
         <env name="ADMIN_DB_PORT" value="5432"/>
-        <env name="ADMIN_DB_DATABASE" value="landlord"/>
+        <env name="ADMIN_DB_DATABASE" value="landlord_test"/>
         <env name="ADMIN_DB_USERNAME" value="provisioner"/>
         <env name="ADMIN_DB_PASSWORD" value="secret"/>
         <env name="MAIL_MAILER" value="array"/>

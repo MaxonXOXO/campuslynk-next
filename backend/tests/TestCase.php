@@ -8,4 +8,11 @@ use Tests\Feature\Tenancy\TenancyTestHelper;
 abstract class TestCase extends BaseTestCase
 {
     use TenancyTestHelper;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->ensureTestEnvironmentBootstrapped();
+    }
 }

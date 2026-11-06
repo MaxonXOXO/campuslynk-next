@@ -25,7 +25,7 @@ it('completely resets tenant connection, cache prefix, and log context on forget
 
     expect($this->context->hasTenant())->toBeTrue()
         ->and($this->context->getTenant()?->id)->toEqual($tenant->id)
-        ->and(config('database.connections.tenant.database'))->toEqual('tenant_teardown')
+        ->and(config('database.connections.tenant.database'))->toEqual(config('tenancy.db_prefix', 'tenant_').'teardown')
         ->and(config('cache.prefix'))->toEqual('tenant_'.$tenant->id.'_');
 
     // Context exists in Log

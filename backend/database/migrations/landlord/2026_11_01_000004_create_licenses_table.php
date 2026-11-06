@@ -6,12 +6,14 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    protected $connection = 'pgsql_admin';
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        $conn = $this->getConnection() ?? 'landlord';
+        $conn = $this->getConnection() ?? 'pgsql_admin';
 
         Schema::connection($conn)->create('licenses', function (Blueprint $table): void {
             $table->ulid('id')->primary();
@@ -29,7 +31,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        $conn = $this->getConnection() ?? 'landlord';
+        $conn = $this->getConnection() ?? 'pgsql_admin';
         Schema::connection($conn)->dropIfExists('licenses');
     }
 };

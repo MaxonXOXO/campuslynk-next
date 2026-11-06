@@ -6,12 +6,16 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    protected $connection = 'pgsql_admin';
+
     /**
      * Run the migrations.
      */
     public function up(): void
     {
-        Schema::connection('landlord')->create('platform_users', function (Blueprint $table): void {
+        $conn = $this->getConnection() ?? 'pgsql_admin';
+
+        Schema::connection($conn)->create('platform_users', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->string('email', 255)->unique();
             $table->string('password_hash', 255);
@@ -25,6 +29,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::connection('landlord')->dropIfExists('platform_users');
+        $conn = $this->getConnection() ?? 'pgsql_admin';
+        Schema::connection($conn)->dropIfExists('platform_users');
     }
 };

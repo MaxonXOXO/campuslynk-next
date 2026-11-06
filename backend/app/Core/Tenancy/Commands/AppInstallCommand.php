@@ -61,7 +61,7 @@ class AppInstallCommand extends Command
         // 1. Run Landlord Migrations
         $this->info('Running landlord migrations...');
         $exitCode = Artisan::call('migrate', [
-            '--database' => 'landlord',
+            '--database' => 'pgsql_admin',
             '--path' => 'database/migrations/landlord',
             '--force' => true,
         ]);

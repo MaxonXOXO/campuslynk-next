@@ -46,6 +46,17 @@
   - Migrations must support zero-downtime execution following the `expand → migrate → contract` rollback pattern.
   - Every migration must execute cleanly on a fresh tenant database and support rolling back cleanly without data loss.
 
+- **Test Suite Isolation & Dev Tenant Protection**:
+  - The Pest test suite **never** runs against the development `landlord` database or touches non-test tenant databases (`tenant_<slug>`) or roles (`tenant_<slug>_u`).
+  - `backend/phpunit.xml` configures an isolated landlord database (`LANDLORD_DB_DATABASE=landlord_test`, `ADMIN_DB_DATABASE=landlord_test`) and a reserved tenant prefix (`TENANT_DB_PREFIX=tenant_test_`).
+  - `TenancyTestHelper` aborts with a `RuntimeException` unless `APP_ENV=testing`, landlord/admin connections point to `landlord_test`, and `tenancy.db_prefix` is `tenant_test_`. Its teardown and startup sweep only drop databases and roles matching `tenant_test_%`.
+  - To provision the local development tenant once (surviving all future `composer test` / `composer check` runs):
+    ```bash
+    cd backend
+    php artisan landlord:migrate
+    php artisan tenants:create "Dev College" dev localhost --admin-name="Dev Admin" --admin-email=admin@dev.test
+    ```
+
 ---
 
 ## 3. Scoped RBAC & PostgreSQL ltree (ADR-0004, ADR-0005, ADR-0013, ADR-0014)

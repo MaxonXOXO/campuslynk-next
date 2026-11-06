@@ -37,7 +37,8 @@ it('prohibits tenant A credentials from connecting to tenant B or landlord direc
         ->toThrow(PDOException::class);
 
     // 3. Tenant A credentials CANNOT connect to landlord database
-    $dsnLandlord = sprintf('pgsql:host=%s;port=%d;dbname=landlord', $host, $port);
+    $landlordDb = (string) config('database.connections.landlord.database', 'landlord');
+    $dsnLandlord = sprintf('pgsql:host=%s;port=%d;dbname=%s', $host, $port, $landlordDb);
     expect(fn () => new PDO($dsnLandlord, $dbA->username, $dbA->getDecryptedPassword()))
         ->toThrow(PDOException::class);
 

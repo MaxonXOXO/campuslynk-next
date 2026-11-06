@@ -61,8 +61,10 @@ class TenantProvisioner
         $this->validateSlug($slug);
 
         $deployProfile = $deployProfile ?? config('app_profile.deploy_profile', 'onprem');
-        $dbName = 'tenant_'.$slug;
-        $roleName = 'tenant_'.$slug.'_u';
+        /** @var string $prefix */
+        $prefix = (string) config('tenancy.db_prefix', 'tenant_');
+        $dbName = $prefix.$slug;
+        $roleName = $prefix.$slug.'_u';
         $plainPassword = Str::random(32);
 
         $adminConnection = DB::connection('pgsql_admin');
@@ -249,8 +251,10 @@ class TenantProvisioner
      */
     public function deprovision(Tenant $tenant): void
     {
-        $dbName = 'tenant_'.$tenant->slug;
-        $roleName = 'tenant_'.$tenant->slug.'_u';
+        /** @var string $prefix */
+        $prefix = (string) config('tenancy.db_prefix', 'tenant_');
+        $dbName = $prefix.$tenant->slug;
+        $roleName = $prefix.$tenant->slug.'_u';
 
         $adminConnection = DB::connection('pgsql_admin');
 

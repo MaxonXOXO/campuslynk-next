@@ -263,7 +263,7 @@ it('enforces UNIQUE (tenant_id, version) constraint on schema_versions', functio
 
 it('verifies that tenant PostgreSQL roles are created with least-privilege hygiene flags', function () {
     $tenant = $this->provisioner->provision('tenant_hygiene', 'Hygiene College', 'hygiene.test');
-    $roleName = 'tenant_tenant_hygiene_u';
+    $roleName = (string) config('tenancy.db_prefix', 'tenant_').'tenant_hygiene_u';
 
     $roleInfo = DB::connection('pgsql_admin')->selectOne(
         'SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolinherit FROM pg_roles WHERE rolname = ?',

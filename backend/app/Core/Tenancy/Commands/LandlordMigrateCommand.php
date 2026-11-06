@@ -30,7 +30,7 @@ class LandlordMigrateCommand extends Command
 
         try {
             $exitCode = Artisan::call('migrate', [
-                '--database' => 'landlord',
+                '--database' => 'pgsql_admin',
                 '--path' => 'database/migrations/landlord',
                 '--force' => true,
             ]);

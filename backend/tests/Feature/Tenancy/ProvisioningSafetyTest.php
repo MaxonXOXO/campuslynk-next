@@ -35,11 +35,13 @@ it('cleans up created database and role upon mid-way provisioning failure withou
     // Simulate failure by breaking migration path or forcing an error during migration
     $originalPath = config('database.migrations');
 
+    $prefix = (string) config('tenancy.db_prefix', 'tenant_test_');
+    $dbName = $prefix.'fail_test';
+    $roleName = $prefix.'fail_test_u';
+
     try {
         // Attempt provisioning with an invalid migration or mock failure
         // We can test that rollbackProvisioning correctly drops database and role
-        $dbName = 'tenant_fail_test';
-        $roleName = 'tenant_fail_test_u';
 
         // Pre-create role and db to simulate mid-way state
         $adminRole = config('database.connections.pgsql_admin.username', 'provisioner');
@@ -63,7 +65,55 @@ it('cleans up created database and role upon mid-way provisioning failure withou
         expect($dbCheck)->toBeNull()
             ->and($roleCheck)->toBeNull();
     } finally {
-        $admin->statement('DROP DATABASE IF EXISTS "tenant_fail_test"');
-        $admin->statement('DROP ROLE IF EXISTS "tenant_fail_test_u"');
+        $admin->statement("DROP DATABASE IF EXISTS \"{$dbName}\"");
+        $admin->statement("DROP ROLE IF EXISTS \"{$roleName}\"");
+    }
+});
+
+it('aborts test database purge unless APP_ENV is testing, landlord is landlord_test, and prefix is tenant_test_', function () {
+    $originalLandlordDb = config('database.connections.landlord.database');
+    $originalPrefix = config('tenancy.db_prefix');
+
+    try {
+        config(['database.connections.landlord.database' => 'landlord']);
+        expect(fn () => $this->purgeAllTenantDatabases())
+            ->toThrow(RuntimeException::class, 'landlord database must be "landlord_test"');
+
+        config(['database.connections.landlord.database' => $originalLandlordDb]);
+        config(['tenancy.db_prefix' => 'tenant_']);
+        expect(fn () => $this->purgeAllTenantDatabases())
+            ->toThrow(RuntimeException::class, 'tenancy.db_prefix must be "tenant_test_"');
+    } finally {
+        config(['database.connections.landlord.database' => $originalLandlordDb]);
+        config(['tenancy.db_prefix' => $originalPrefix]);
+    }
+});
+
+it('preserves non-test tenant databases and roles during test purge', function () {
+    $admin = DB::connection('pgsql_admin');
+    $adminRole = (string) config('database.connections.pgsql_admin.username', 'provisioner');
+
+    $devDbName = 'tenant_dev_protect_check';
+    $devRoleName = 'tenant_dev_protect_check_u';
+
+    try {
+        $admin->statement("DROP DATABASE IF EXISTS \"{$devDbName}\" WITH (FORCE)");
+        $admin->statement("DROP ROLE IF EXISTS \"{$devRoleName}\"");
+
+        $admin->statement("CREATE ROLE \"{$devRoleName}\" WITH LOGIN PASSWORD 'secret' ROLE \"{$adminRole}\"");
+        $admin->statement("CREATE DATABASE \"{$devDbName}\" OWNER \"{$devRoleName}\"");
+
+        // Run test purge
+        $this->purgeAllTenantDatabases();
+
+        // Non-test database and role must still exist untouched
+        $dbStillExists = $admin->selectOne('SELECT 1 FROM pg_database WHERE datname = ?', [$devDbName]);
+        $roleStillExists = $admin->selectOne('SELECT 1 FROM pg_roles WHERE rolname = ?', [$devRoleName]);
+
+        expect($dbStillExists)->not->toBeNull()
+            ->and($roleStillExists)->not->toBeNull();
+    } finally {
+        $admin->statement("DROP DATABASE IF EXISTS \"{$devDbName}\" WITH (FORCE)");
+        $admin->statement("DROP ROLE IF EXISTS \"{$devRoleName}\"");
     }
 });

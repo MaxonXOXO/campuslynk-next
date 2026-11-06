@@ -137,6 +137,7 @@ jobs:
           APP_ENV: testing
           DEPLOY_PROFILE: onprem
           DB_CONNECTION: unconfigured
+          TENANT_DB_PREFIX: tenant_test_
           LANDLORD_DB_HOST: 127.0.0.1
           LANDLORD_DB_PORT: 5432
           LANDLORD_DB_DATABASE: landlord
@@ -149,16 +150,17 @@ jobs:
           APP_ENV: testing
           DEPLOY_PROFILE: onprem
           DB_CONNECTION: unconfigured
+          TENANT_DB_PREFIX: tenant_test_
           LANDLORD_DB_HOST: 127.0.0.1
           LANDLORD_DB_PORT: 6432
-          LANDLORD_DB_DATABASE: landlord
+          LANDLORD_DB_DATABASE: landlord_test
           LANDLORD_DB_USERNAME: landlord_app
           LANDLORD_DB_PASSWORD: secret
           TENANT_DB_HOST: 127.0.0.1
           TENANT_DB_PORT: 6432
           ADMIN_DB_HOST: 127.0.0.1
           ADMIN_DB_PORT: 5432
-          ADMIN_DB_DATABASE: landlord
+          ADMIN_DB_DATABASE: landlord_test
           ADMIN_DB_USERNAME: provisioner
           ADMIN_DB_PASSWORD: secret
         run: composer test

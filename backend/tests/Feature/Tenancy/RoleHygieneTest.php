@@ -91,7 +91,7 @@ it('prohibits landlord_app from connecting to any tenant database', function () 
 
     $host = (string) config('database.connections.landlord.host', '127.0.0.1');
     $port = (int) config('database.connections.landlord.port', 6432);
-    $tenantDbName = 'tenant_'.$tenant->slug;
+    $tenantDbName = (string) config('tenancy.db_prefix', 'tenant_').$tenant->slug;
 
     $connectDenied = false;
     try {
