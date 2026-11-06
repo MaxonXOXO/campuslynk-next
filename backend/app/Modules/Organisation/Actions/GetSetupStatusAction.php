@@ -8,6 +8,7 @@ use App\Core\Tenancy\Models\TenantSetting;
 use App\Modules\Organisation\Models\AcademicYear;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Stream;
+use Illuminate\Database\Eloquent\Collection;
 
 final class GetSetupStatusAction
 {
@@ -27,12 +28,12 @@ final class GetSetupStatusAction
             ? $setupData['steps']
             : [];
 
-        /** @var list<string> $existingKeys */
-        $existingKeys = TenantSetting::whereIn('key', [
+        /** @var Collection<string, TenantSetting> $settings */
+        $settings = TenantSetting::whereIn('key', [
             'institution_profile',
             'calendar_basics',
             'signup_policy',
-        ])->pluck('key')->all();
+        ])->get()->keyBy('key');
 
         $steps = [];
         foreach (['institution_profile', 'calendar_basics', 'signup_policy'] as $stepKey) {
@@ -42,10 +43,15 @@ final class GetSetupStatusAction
                 ? $stepInfo['completed_at']
                 : null;
 
+            /** @var TenantSetting|null $setting */
+            $setting = $settings->get($stepKey);
+            $values = ($setting !== null && is_array($setting->value)) ? $setting->value : null;
+
             $steps[$stepKey] = [
                 'completed_at' => $completedAt,
                 'is_completed' => $completedAt !== null,
-                'settings_exist' => in_array($stepKey, $existingKeys, true),
+                'settings_exist' => $setting !== null,
+                'values' => $values,
             ];
         }
 

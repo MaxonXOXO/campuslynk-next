@@ -1200,7 +1200,10 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              oneOf:
+                - $ref: '#/components/schemas/InstitutionProfileValues'
+                - $ref: '#/components/schemas/CalendarBasicsValues'
+                - $ref: '#/components/schemas/SignupPolicyValues'
       responses:
         '200':
           description: Setup step saved successfully
@@ -1913,13 +1916,140 @@ components:
             self:
               type: string
 
+    InstitutionProfileValues:
+      type: object
+      description: Tenant institution profile and contact settings.
+      required: [name, short_code]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        short_code:
+          type: string
+          minLength: 1
+          maxLength: 32
+        board:
+          type: string
+          maxLength: 255
+        board_affiliation:
+          type: string
+          maxLength: 255
+        affiliation:
+          type: string
+          maxLength: 255
+        affiliation_code:
+          type: string
+          maxLength: 64
+        board_code:
+          type: string
+          maxLength: 64
+        code:
+          type: string
+          maxLength: 64
+        contact_email:
+          type: string
+          format: email
+        email:
+          type: string
+          format: email
+        contact_phone:
+          type: string
+          maxLength: 32
+        phone:
+          type: string
+          maxLength: 32
+        address_lines:
+          type: array
+          items:
+            type: string
+        address_line1:
+          type: string
+          maxLength: 255
+        address_line2:
+          type: string
+          maxLength: 255
+        city:
+          type: string
+          maxLength: 100
+        state:
+          type: string
+          maxLength: 100
+        postal_code:
+          type: string
+          maxLength: 20
+        website:
+          type: string
+          format: uri
+
+    CalendarBasicsPeriod:
+      type: object
+      description: Single period timing interval definition.
+      required: [index, start, end]
+      additionalProperties: false
+      properties:
+        index:
+          type: integer
+        start:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+        end:
+          type: string
+          pattern: '^(?:[01]\d|2[0-3]):[0-5]\d$'
+
+    CalendarBasicsValues:
+      type: object
+      description: Tenant academic calendar basics including instructional days, daily periods, period timings, and day order format.
+      required: [working_days, periods_per_day, periods, day_order_format]
+      additionalProperties: false
+      properties:
+        working_days:
+          type: array
+          description: Array of unique weekday names (1-7 days)
+          items:
+            type: string
+        periods_per_day:
+          type: integer
+          description: Total instructional periods scheduled per working day (1-12)
+          minimum: 1
+          maximum: 12
+        periods:
+          type: array
+          description: Ordered array of period timing definitions ({index, start, end})
+          items:
+            $ref: '#/components/schemas/CalendarBasicsPeriod'
+        day_order_format:
+          type: string
+          description: Day order cycle numbering representation
+          enum: [roman, numeric, alpha]
+
+    SignupPolicyValues:
+      type: object
+      description: Stored configuration for student and parent self-registration and approval mode. Inert until registration queue ships.
+      required: [student_self_registration_enabled, parent_self_registration_enabled, approval_mode]
+      additionalProperties: false
+      properties:
+        student_self_registration_enabled:
+          type: boolean
+          default: false
+        parent_self_registration_enabled:
+          type: boolean
+          default: false
+        approval_mode:
+          type: string
+          enum: [manual, auto]
+          default: manual
+
     SetupStatusEnvelope:
       type: object
       required: [data, meta, links]
+      additionalProperties: false
       properties:
         data:
           type: object
           required: [completed_at, is_completed, steps, prerequisites]
+          additionalProperties: false
           properties:
             completed_at:
               type: string
@@ -1930,10 +2060,12 @@ components:
             steps:
               type: object
               required: [institution_profile, calendar_basics, signup_policy]
+              additionalProperties: false
               properties:
                 institution_profile:
                   type: object
-                  required: [completed_at, is_completed, settings_exist]
+                  required: [completed_at, is_completed, settings_exist, values]
+                  additionalProperties: false
                   properties:
                     completed_at:
                       type: string
@@ -1943,9 +2075,14 @@ components:
                       type: boolean
                     settings_exist:
                       type: boolean
+                    values:
+                      oneOf:
+                        - $ref: '#/components/schemas/InstitutionProfileValues'
+                        - type: 'null'
                 calendar_basics:
                   type: object
-                  required: [completed_at, is_completed, settings_exist]
+                  required: [completed_at, is_completed, settings_exist, values]
+                  additionalProperties: false
                   properties:
                     completed_at:
                       type: string
@@ -1955,9 +2092,14 @@ components:
                       type: boolean
                     settings_exist:
                       type: boolean
+                    values:
+                      oneOf:
+                        - $ref: '#/components/schemas/CalendarBasicsValues'
+                        - type: 'null'
                 signup_policy:
                   type: object
-                  required: [completed_at, is_completed, settings_exist]
+                  required: [completed_at, is_completed, settings_exist, values]
+                  additionalProperties: false
                   properties:
                     completed_at:
                       type: string
@@ -1967,9 +2109,14 @@ components:
                       type: boolean
                     settings_exist:
                       type: boolean
+                    values:
+                      oneOf:
+                        - $ref: '#/components/schemas/SignupPolicyValues'
+                        - type: 'null'
             prerequisites:
               type: object
               required: [streams_count, departments_count, academic_years_count]
+              additionalProperties: false
               properties:
                 streams_count:
                   type: integer
@@ -1979,12 +2126,14 @@ components:
                   type: integer
         meta:
           type: object
+          additionalProperties: false
           properties:
             timestamp:
               type: string
               format: date-time
         links:
           type: object
+          additionalProperties: false
           properties:
             self:
               type: string
