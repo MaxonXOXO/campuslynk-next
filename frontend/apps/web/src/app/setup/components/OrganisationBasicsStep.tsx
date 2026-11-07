@@ -78,6 +78,7 @@ interface OrganisationBasicsStepProps {
     name: string;
     kind: "academic" | "general" | "administrative";
   }) => Promise<boolean>;
+  onDeleteDepartment?: (id: string) => Promise<{ success: boolean; error?: string }>;
   onCreateAcademicYear: (data: {
     label: string;
     start_date: string;
@@ -107,6 +108,7 @@ export function OrganisationBasicsStep({
   onRenameStream,
   onDeleteStream,
   onCreateDepartment,
+  onDeleteDepartment,
   onCreateAcademicYear,
   onNext,
   onBack,
@@ -125,6 +127,7 @@ export function OrganisationBasicsStep({
   const [renameError, setRenameError] = React.useState<string | null>(null);
 
   const [deleteStreamError, setDeleteStreamError] = React.useState<string | null>(null);
+  const [deleteDeptError, setDeleteDeptError] = React.useState<string | null>(null);
 
   const [createDeptOpen, setCreateDeptOpen] = React.useState(false);
   const [deptStreamId, setDeptStreamId] = React.useState("");
@@ -318,6 +321,20 @@ export function OrganisationBasicsStep({
     }
   };
 
+  const handleDeleteDepartmentClick = async (dept: DepartmentItem) => {
+    setDeleteDeptError(null);
+    if (!onDeleteDepartment) return;
+
+    const res = await onDeleteDepartment(dept.id);
+    if (!res.success) {
+      setDeleteDeptError(
+        res.error || `Cannot delete department "${dept.name}" because it is currently in use.`
+      );
+    } else {
+      await onRefresh();
+    }
+  };
+
   // Academic Year Handlers
   const handleOpenCreateYear = () => {
     setYearLabel("");
@@ -419,6 +436,14 @@ export function OrganisationBasicsStep({
           <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Stream Operation Blocked</AlertTitle>
           <AlertDescription>{deleteStreamError}</AlertDescription>
+        </Alert>
+      )}
+
+      {deleteDeptError && (
+        <Alert variant="destructive">
+          <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
+          <AlertTitle>Department Operation Blocked</AlertTitle>
+          <AlertDescription>{deleteDeptError}</AlertDescription>
         </Alert>
       )}
 
@@ -537,6 +562,7 @@ export function OrganisationBasicsStep({
                   <TableHead>Department Name</TableHead>
                   <TableHead>Stream</TableHead>
                   <TableHead>Kind</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -572,6 +598,18 @@ export function OrganisationBasicsStep({
                         <Badge variant="outline" className="capitalize text-xs">
                           {dept.kind || "academic"}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:bg-destructive/10"
+                          title={`Delete department ${dept.name}`}
+                          onClick={() => void handleDeleteDepartmentClick(dept)}
+                        >
+                          <RiDeleteBinLine className="size-4 mr-1" aria-hidden="true" /> Delete
+                        </Button>
                       </TableCell>
                     </TableRow>
                   );

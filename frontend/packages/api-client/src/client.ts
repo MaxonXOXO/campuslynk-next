@@ -291,6 +291,11 @@ export function createApiClient(config: ApiClientConfig) {
         body,
         ...options,
       }),
+    delete: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['deleteDepartment']>>(`/departments/${id}`, {
+        method: 'DELETE',
+        ...options,
+      }),
   };
 
   const programs = {

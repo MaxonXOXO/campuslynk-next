@@ -5,6 +5,7 @@ import {
   RiCheckboxCircleFill,
   RiRadioButtonLine,
   RiTimeLine,
+  RiCheckLine,
 } from "@remixicon/react";
 import { cn } from "@academic-suite/ui";
 import {
@@ -28,17 +29,19 @@ export function Stepper({
 }: StepperProps) {
   return (
     <nav aria-label="First-Run Setup Progress" className="w-full">
-      <ol className="grid grid-cols-2 md:grid-cols-5 gap-2 md:gap-3">
-        {WIZARD_STEPS.map((step) => {
+      <ol className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-1 gap-2 lg:gap-1.5">
+        {WIZARD_STEPS.map((step, index) => {
           const state = stepStates[step.id] || "not_started";
           const isCurrent = currentStep === step.id;
+          const isSaved = state === "saved";
+          const isLast = index === WIZARD_STEPS.length - 1;
 
           const renderStateBadge = () => {
-            if (state === "saved") {
+            if (isSaved) {
               return (
-                <span className="inline-flex items-center gap-1 text-xs font-medium text-primary">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                   <RiCheckboxCircleFill
-                    className="size-4 shrink-0 text-primary"
+                    className="size-3.5 shrink-0 text-primary"
                     aria-hidden="true"
                   />
                   <span>Saved</span>
@@ -47,9 +50,9 @@ export function Stepper({
             }
             if (isCurrent || state === "current") {
               return (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">
                   <RiRadioButtonLine
-                    className="size-4 shrink-0 text-primary animate-pulse"
+                    className="size-3.5 shrink-0 text-primary animate-pulse"
                     aria-hidden="true"
                   />
                   <span>Current</span>
@@ -57,43 +60,85 @@ export function Stepper({
               );
             }
             return (
-              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-                <RiTimeLine className="size-4 shrink-0" aria-hidden="true" />
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                <RiTimeLine className="size-3.5 shrink-0" aria-hidden="true" />
                 <span>Not started</span>
               </span>
             );
           };
 
           return (
-            <li key={step.id}>
+            <li key={step.id} className="relative">
+              {/* Vertical connector line on desktop guided sidebar */}
+              {!isLast && (
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    "hidden lg:block absolute left-[25px] top-11 -bottom-2.5 w-px transition-colors",
+                    isSaved ? "bg-primary/40" : "bg-border"
+                  )}
+                />
+              )}
+
               <button
                 type="button"
                 onClick={() => !disabled && onStepClick(step.id)}
                 disabled={disabled}
                 aria-current={isCurrent ? "step" : undefined}
                 className={cn(
-                  "w-full text-left p-3 rounded-lg border transition-all select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "group relative w-full text-left p-3 rounded-xl border transition-all select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "flex items-start gap-3",
                   isCurrent
-                    ? "border-primary bg-primary/5 shadow-xs"
-                    : state === "saved"
-                      ? "border-border bg-card hover:bg-muted/50"
-                      : "border-dashed border-border/80 bg-muted/20 hover:bg-muted/40",
+                    ? "border-primary/60 bg-primary/5 shadow-xs"
+                    : isSaved
+                      ? "border-transparent bg-card/60 hover:bg-muted/60 hover:border-border/60"
+                      : "border-transparent bg-transparent hover:bg-muted/40 hover:border-border/50",
                   disabled && "opacity-50 cursor-not-allowed"
                 )}
               >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-mono font-semibold text-muted-foreground">
-                    Step 0{step.stepNumber}
-                  </span>
-                  {renderStateBadge()}
-                </div>
+                {/* Guided Step Indicator Circle */}
                 <div
                   className={cn(
-                    "text-sm font-medium line-clamp-1",
-                    isCurrent ? "text-foreground font-semibold" : "text-muted-foreground"
+                    "relative z-10 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full border text-xs font-mono font-semibold transition-colors",
+                    isCurrent
+                      ? "border-primary bg-primary text-primary-foreground shadow-xs ring-4 ring-primary/15"
+                      : isSaved
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border bg-muted/50 text-muted-foreground group-hover:border-muted-foreground/40"
                   )}
                 >
-                  {step.title}
+                  {isSaved ? (
+                    <RiCheckLine className="size-4" aria-hidden="true" />
+                  ) : (
+                    <span>0{step.stepNumber}</span>
+                  )}
+                </div>
+
+                {/* Step Details */}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2 mb-0.5">
+                    <span className="text-[11px] font-mono font-semibold uppercase tracking-wider text-muted-foreground">
+                      Step 0{step.stepNumber}
+                    </span>
+                    {renderStateBadge()}
+                  </div>
+
+                  <div
+                    className={cn(
+                      "text-sm font-medium leading-snug truncate",
+                      isCurrent
+                        ? "text-foreground font-semibold"
+                        : isSaved
+                          ? "text-foreground/90"
+                          : "text-muted-foreground group-hover:text-foreground/80"
+                    )}
+                  >
+                    {step.title}
+                  </div>
+
+                  <p className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
+                    {step.description}
+                  </p>
                 </div>
               </button>
             </li>

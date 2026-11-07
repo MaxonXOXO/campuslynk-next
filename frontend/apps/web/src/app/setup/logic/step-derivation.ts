@@ -15,15 +15,46 @@ export interface StepItem {
   id: StepId;
   title: string;
   shortTitle: string;
+  description: string;
   stepNumber: number;
 }
 
 export const WIZARD_STEPS: StepItem[] = [
-  { id: 'institution_profile', title: 'Institution Profile', shortTitle: 'Profile', stepNumber: 1 },
-  { id: 'organisation_basics', title: 'Organisation Basics', shortTitle: 'Organisation', stepNumber: 2 },
-  { id: 'calendar_basics', title: 'Academic Calendar', shortTitle: 'Calendar', stepNumber: 3 },
-  { id: 'signup_policy', title: 'Sign-up Policy', shortTitle: 'Sign-up', stepNumber: 4 },
-  { id: 'review_finish', title: 'Review and Finish', shortTitle: 'Review', stepNumber: 5 },
+  {
+    id: 'institution_profile',
+    title: 'Institution Profile',
+    shortTitle: 'Profile',
+    description: 'Identity, board affiliation & contact details',
+    stepNumber: 1,
+  },
+  {
+    id: 'organisation_basics',
+    title: 'Organisation Basics',
+    shortTitle: 'Organisation',
+    description: 'Streams, departments & academic sessions',
+    stepNumber: 2,
+  },
+  {
+    id: 'calendar_basics',
+    title: 'Academic Calendar',
+    shortTitle: 'Calendar',
+    description: 'Working days, periods & day-order cycle',
+    stepNumber: 3,
+  },
+  {
+    id: 'signup_policy',
+    title: 'Sign-up Policy',
+    shortTitle: 'Sign-up',
+    description: 'Student & guardian registration rules',
+    stepNumber: 4,
+  },
+  {
+    id: 'review_finish',
+    title: 'Review and Finish',
+    shortTitle: 'Review',
+    description: 'Verify prerequisites & activate portal',
+    stepNumber: 5,
+  },
 ];
 
 export interface SetupStatusData {
@@ -34,16 +65,19 @@ export interface SetupStatusData {
       completed_at: string | null;
       is_completed: boolean;
       settings_exist: boolean;
+      values?: Record<string, unknown> | null;
     };
     calendar_basics: {
       completed_at: string | null;
       is_completed: boolean;
       settings_exist: boolean;
+      values?: Record<string, unknown> | null;
     };
     signup_policy: {
       completed_at: string | null;
       is_completed: boolean;
       settings_exist: boolean;
+      values?: Record<string, unknown> | null;
     };
   };
   prerequisites: {

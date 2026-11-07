@@ -259,7 +259,8 @@ export interface paths {
         /** Update department details */
         put: operations["updateDepartment"];
         post?: never;
-        delete?: never;
+        /** Delete a department */
+        delete: operations["deleteDepartment"];
         options?: never;
         head?: never;
         patch?: never;
@@ -897,6 +898,63 @@ export interface components {
                 self?: string;
             };
         };
+        /** @description Tenant institution profile and contact settings. */
+        InstitutionProfileValues: {
+            name: string;
+            short_code: string;
+            board?: string;
+            board_affiliation?: string;
+            affiliation?: string;
+            affiliation_code?: string;
+            board_code?: string;
+            code?: string;
+            /** Format: email */
+            contact_email?: string;
+            /** Format: email */
+            email?: string;
+            contact_phone?: string;
+            phone?: string;
+            address_lines?: string[];
+            address_line1?: string;
+            address_line2?: string;
+            city?: string;
+            state?: string;
+            postal_code?: string;
+            /** Format: uri */
+            website?: string;
+        };
+        /** @description Single period timing interval definition. */
+        CalendarBasicsPeriod: {
+            index: number;
+            start: string;
+            end: string;
+        };
+        /** @description Tenant academic calendar basics including instructional days, daily periods, period timings, and day order format. */
+        CalendarBasicsValues: {
+            /** @description Array of unique weekday names (1-7 days) */
+            working_days: string[];
+            /** @description Total instructional periods scheduled per working day (1-12) */
+            periods_per_day: number;
+            /** @description Ordered array of period timing definitions ({index, start, end}) */
+            periods: components["schemas"]["CalendarBasicsPeriod"][];
+            /**
+             * @description Day order cycle numbering representation
+             * @enum {string}
+             */
+            day_order_format: "roman" | "numeric" | "alpha";
+        };
+        /** @description Stored configuration for student and parent self-registration and approval mode. Inert until registration queue ships. */
+        SignupPolicyValues: {
+            /** @default false */
+            student_self_registration_enabled: boolean;
+            /** @default false */
+            parent_self_registration_enabled: boolean;
+            /**
+             * @default manual
+             * @enum {string}
+             */
+            approval_mode: "manual" | "auto";
+        };
         SetupStatusEnvelope: {
             data: {
                 /** Format: date-time */
@@ -908,18 +966,21 @@ export interface components {
                         completed_at: string | null;
                         is_completed: boolean;
                         settings_exist: boolean;
+                        values: components["schemas"]["InstitutionProfileValues"] | null;
                     };
                     calendar_basics: {
                         /** Format: date-time */
                         completed_at: string | null;
                         is_completed: boolean;
                         settings_exist: boolean;
+                        values: components["schemas"]["CalendarBasicsValues"] | null;
                     };
                     signup_policy: {
                         /** Format: date-time */
                         completed_at: string | null;
                         is_completed: boolean;
                         settings_exist: boolean;
+                        values: components["schemas"]["SignupPolicyValues"] | null;
                     };
                 };
                 prerequisites: {
@@ -938,7 +999,7 @@ export interface components {
         };
     };
     responses: {
-        /** @description RFC 7807 Problem Details error response */
+        /** @description RFC 7807 Problem Details error response. For 403 Forbidden on authenticated routes behind `EnsurePasswordNotMustChange`, returns problem type `password-change-required` when `must_change_password = true`, or `forbidden` when role/permission checks fail. */
         ProblemDetails: {
             headers: {
                 [name: string]: unknown;
@@ -960,7 +1021,7 @@ export interface components {
                 };
             };
         };
-        /** @description Forbidden response for setup wizard operations. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not assigned at institution scope. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+        /** @description Forbidden response for setup wizard operations. Returned with one of three RFC 7807 problem types: - `password-change-required`: User has `must_change_password = true` and must change their password first. - `forbidden`: User lacks the `super_admin` role or is not assigned at institution scope. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
         SetupForbiddenProblemDetails: {
             headers: {
                 [name: string]: unknown;
@@ -971,7 +1032,7 @@ export interface components {
                      * @description URI reference identifying the problem type
                      * @enum {string}
                      */
-                    type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                    type: "https://errors.campuslynk.net/password-change-required" | "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
                     /** @example Forbidden */
                     title: string;
                     /** @example 403 */
@@ -1157,7 +1218,28 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            403: components["responses"]["ProblemDetails"];
+            /** @description Forbidden error (`password-change-required`). Returned when the user has `must_change_password = true` and must change their password before accessing protected endpoints. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": {
+                        /**
+                         * @description URI reference identifying the problem type
+                         * @example https://errors.campuslynk.net/password-change-required
+                         */
+                        type: string;
+                        /** @example Password Change Required */
+                        title: string;
+                        /** @example 403 */
+                        status: number;
+                        /** @example You must change your password before accessing other features. */
+                        detail: string;
+                        instance?: string | null;
+                    };
+                };
+            };
         };
     };
     startImpersonation: {
@@ -1547,6 +1629,38 @@ export interface operations {
             };
             403: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
+        };
+    };
+    deleteDepartment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Department deleted */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        data: {
+                            message: string;
+                        };
+                        meta: {
+                            timestamp: string;
+                        };
+                    };
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
         };
     };
     listBatches: {
@@ -2199,7 +2313,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            /** @description Forbidden error. Returned with one of three RFC 7807 problem types: - `password-change-required`: User has `must_change_password = true` and must change their password first. - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2210,7 +2324,7 @@ export interface operations {
                          * @description URI reference identifying the problem type
                          * @enum {string}
                          */
-                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        type: "https://errors.campuslynk.net/password-change-required" | "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
                         /** @example Forbidden */
                         title: string;
                         /** @example 403 */
@@ -2233,7 +2347,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": Record<string, never>;
+                "application/json": components["schemas"]["InstitutionProfileValues"] | components["schemas"]["CalendarBasicsValues"] | components["schemas"]["SignupPolicyValues"];
             };
         };
         responses: {
@@ -2247,7 +2361,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            /** @description Forbidden error. Returned with one of three RFC 7807 problem types: - `password-change-required`: User has `must_change_password = true` and must change their password first. - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2258,7 +2372,7 @@ export interface operations {
                          * @description URI reference identifying the problem type
                          * @enum {string}
                          */
-                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        type: "https://errors.campuslynk.net/password-change-required" | "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
                         /** @example Forbidden */
                         title: string;
                         /** @example 403 */
@@ -2291,7 +2405,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["ProblemDetails"];
-            /** @description Forbidden error. Returned with one of two RFC 7807 problem types: - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
+            /** @description Forbidden error. Returned with one of three RFC 7807 problem types: - `password-change-required`: User has `must_change_password = true` and must change their password first. - `forbidden`: User lacks the `super_admin` role or is not scoped to `institution`. - `impersonation-not-allowed`: Setup endpoints cannot be accessed during an active impersonation session. */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -2302,7 +2416,7 @@ export interface operations {
                          * @description URI reference identifying the problem type
                          * @enum {string}
                          */
-                        type: "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
+                        type: "https://errors.campuslynk.net/password-change-required" | "https://errors.campuslynk.net/forbidden" | "https://errors.campuslynk.net/impersonation-not-allowed";
                         /** @example Forbidden */
                         title: string;
                         /** @example 403 */

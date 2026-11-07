@@ -584,6 +584,44 @@ paths:
           $ref: '#/components/responses/ProblemDetails'
         '422':
           $ref: '#/components/responses/ProblemDetails'
+    delete:
+      operationId: deleteDepartment
+      summary: Delete a department
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Department deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: object
+                    required: [message]
+                    properties:
+                      message:
+                        type: string
+                  meta:
+                    type: object
+                    required: [timestamp]
+                    properties:
+                      timestamp:
+                        type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
 
   /batches:
     get:

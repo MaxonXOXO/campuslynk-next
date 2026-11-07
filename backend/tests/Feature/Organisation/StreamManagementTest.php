@@ -12,7 +12,10 @@ use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use App\Modules\Organisation\Actions\CreateDepartmentAction;
 use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
+use App\Modules\Organisation\Models\Department;
+use App\Modules\Organisation\Models\Program;
 use App\Modules\Organisation\Models\Stream;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Symfony\Component\HttpFoundation\Response;
 use Tests\Feature\Tenancy\TenancyTestHelper;
@@ -506,6 +509,125 @@ it('executes full flow on fresh baseline-only tenant: create stream -> create de
         $ayRes->assertStatus(Response::HTTP_CREATED);
         $ayId = (string) $ayRes->json('data.id');
         expect($ayId)->not->toBeEmpty();
+    } finally {
+        $this->tenantContext->forget();
+    }
+});
+
+it('deletes an unreferenced department via DELETE /departments/{id} and blocks deletion with 409 when referenced by a program', function () {
+    config(['app_profile.deploy_profile' => 'cloud']);
+
+    $tenant = $this->provisioner->provision('tenant_dept_delete', 'Dept College', 'deptdelete.test', 'cloud');
+    $this->tenantContext->setTenant($tenant);
+    app(TenantBaselineSeeder::class)->run();
+
+    try {
+        $superAdmin = User::create([
+            'type' => 'staff',
+            'name' => 'Super Administrator',
+            'email' => 'superadmin@deptdelete.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'inst_root',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $lecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Regular Lecturer',
+            'email' => 'lecturer@deptdelete.test',
+            'password' => Hash::make('Password123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $lecturerRole = Role::where('key', 'lecturer')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $lecturer->id,
+            'role_id' => $lecturerRole->id,
+            'scope_type' => 'institution',
+            'scope_label' => 'inst_root',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $adminToken = $superAdmin->createToken('admin-token')->plainTextToken;
+        $lecturerToken = $lecturer->createToken('lecturer-token')->plainTextToken;
+
+        $stream = Stream::create([
+            'code' => 'AIDED',
+            'name' => 'Aided Stream',
+            'scope_label' => 's_aided',
+        ]);
+
+        $dept = app(CreateDepartmentAction::class)->execute(
+            code: 'CE',
+            name: 'Civil Engineering',
+            streamId: $stream->id
+        );
+
+        // 1. Unauthorized lecturer gets 403
+        $forbiddenRes = $this->withHeaders([
+            'Authorization' => "Bearer {$lecturerToken}",
+        ])->deleteJson("http://deptdelete.test/api/v1/departments/{$dept->id}");
+        $forbiddenRes->assertStatus(Response::HTTP_FORBIDDEN);
+
+        // Clear Sanctum cached guard user before authenticating with adminToken
+        Auth::forgetGuards();
+
+        // 2. Attach a Program to the department -> delete is blocked with 409 department-in-use
+        $this->tenantContext->setTenant($tenant);
+        $program = Program::create([
+            'department_id' => $dept->id,
+            'code' => 'DIP-CE',
+            'name' => 'Diploma in Civil Engineering',
+            'duration_years' => 3,
+            'total_semesters' => 6,
+            'regulation' => 'REV2021',
+            'scope_label' => 'p_dip_ce',
+            'path' => 'inst_root.s_aided.d_aided_ce.p_dip_ce',
+        ]);
+
+        $blockedRes = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->deleteJson("http://deptdelete.test/api/v1/departments/{$dept->id}");
+
+        $blockedRes->assertStatus(Response::HTTP_CONFLICT)
+            ->assertHeader('Content-Type', 'application/problem+json')
+            ->assertJson([
+                'type' => ProblemDetails::type('department-in-use'),
+                'title' => 'Conflict',
+                'status' => Response::HTTP_CONFLICT,
+            ]);
+
+        // 3. Remove program -> department delete succeeds with 200, and then stream delete also succeeds!
+        $this->tenantContext->setTenant($tenant);
+        $program->delete();
+
+        $successDeptRes = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->deleteJson("http://deptdelete.test/api/v1/departments/{$dept->id}");
+
+        $successDeptRes->assertStatus(Response::HTTP_OK)
+            ->assertJsonPath('data.message', 'Department deleted successfully.');
+
+        $this->tenantContext->setTenant($tenant);
+        expect(Department::where('id', $dept->id)->exists())->toBeFalse();
+
+        // Stream now has 0 departments and can be deleted cleanly
+        $successStreamRes = $this->withHeaders([
+            'Authorization' => "Bearer {$adminToken}",
+        ])->deleteJson("http://deptdelete.test/api/v1/streams/{$stream->id}");
+
+        $successStreamRes->assertStatus(Response::HTTP_OK)
+            ->assertJsonPath('data.message', 'Stream deleted successfully.');
     } finally {
         $this->tenantContext->forget();
     }

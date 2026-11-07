@@ -180,6 +180,9 @@ Route::prefix('v1')->group(function (): void {
             Route::put('/departments/{id}', [DepartmentController::class, 'update'])
                 ->middleware(RequirePermission::class.':organisation.department.manage')
                 ->name('api.v1.departments.update');
+            Route::delete('/departments/{id}', [DepartmentController::class, 'destroy'])
+                ->middleware(RequirePermission::class.':organisation.department.manage')
+                ->name('api.v1.departments.destroy');
 
             // Organisation: Governance Rules
             Route::get('/governance-rules', [GovernanceRuleController::class, 'index'])

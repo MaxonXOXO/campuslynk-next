@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Organisation\Http\Controllers;
 
 use App\Modules\Organisation\Actions\CreateDepartmentAction;
+use App\Modules\Organisation\Actions\DeleteDepartmentAction;
 use App\Modules\Organisation\Actions\UpdateDepartmentAction;
 use App\Modules\Organisation\Http\Resources\DepartmentResource;
 use App\Modules\Organisation\Models\Department;
@@ -98,6 +99,23 @@ class DepartmentController
             'data' => new DepartmentResource($updated),
             'links' => [
                 'self' => url("/api/v1/departments/{$updated->id}"),
+            ],
+        ]);
+    }
+
+    public function destroy(string $id, DeleteDepartmentAction $action): JsonResponse
+    {
+        /** @var Department $dept */
+        $dept = Department::findOrFail($id);
+
+        $action->execute($dept);
+
+        return response()->json([
+            'data' => [
+                'message' => 'Department deleted successfully.',
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
             ],
         ]);
     }

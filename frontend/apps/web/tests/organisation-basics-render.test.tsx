@@ -29,6 +29,7 @@ describe("OrganisationBasicsStep Render & Interactive Tests (Item 4)", () => {
   const mockOnRenameStream = vi.fn().mockResolvedValue(true);
   const mockOnDeleteStream = vi.fn().mockResolvedValue({ success: true });
   const mockOnCreateDepartment = vi.fn().mockResolvedValue(true);
+  const mockOnDeleteDepartment = vi.fn().mockResolvedValue({ success: true });
   const mockOnCreateAcademicYear = vi.fn().mockResolvedValue(true);
   const mockOnRefresh = vi.fn().mockResolvedValue(undefined);
   const mockOnNext = vi.fn();
@@ -48,6 +49,7 @@ describe("OrganisationBasicsStep Render & Interactive Tests (Item 4)", () => {
         onRenameStream={mockOnRenameStream}
         onDeleteStream={mockOnDeleteStream}
         onCreateDepartment={mockOnCreateDepartment}
+        onDeleteDepartment={mockOnDeleteDepartment}
         onCreateAcademicYear={mockOnCreateAcademicYear}
         onRefresh={mockOnRefresh}
         onNext={mockOnNext}
@@ -227,6 +229,19 @@ describe("OrganisationBasicsStep Render & Interactive Tests (Item 4)", () => {
 
       expect(sfDeleteBtn).not.toBeDisabled();
     });
+
+    it("deletes a department when its Delete button is clicked and triggers onRefresh", async () => {
+      const user = userEvent.setup();
+      renderStep();
+
+      const deleteDeptBtn = screen.getByTitle("Delete department Computer Science");
+      expect(deleteDeptBtn).not.toBeDisabled();
+
+      await user.click(deleteDeptBtn);
+
+      expect(mockOnDeleteDepartment).toHaveBeenCalledWith("d1");
+      expect(mockOnRefresh).toHaveBeenCalled();
+    });
   });
 
   describe("Department & Academic Year Dialogs", () => {
@@ -278,6 +293,7 @@ describe("OrganisationBasicsStep Render & Interactive Tests (Item 4)", () => {
           onRenameStream={mockOnRenameStream}
           onDeleteStream={mockOnDeleteStream}
           onCreateDepartment={mockOnCreateDepartment}
+          onDeleteDepartment={mockOnDeleteDepartment}
           onCreateAcademicYear={mockOnCreateAcademicYear}
           onRefresh={mockOnRefresh}
           onNext={mockOnNext}

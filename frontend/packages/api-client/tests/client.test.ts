@@ -322,6 +322,7 @@ describe('Academic Suite API Client', () => {
       createDepartment: () => client.organisation.departments.create,
       getDepartment: () => client.organisation.departments.get,
       updateDepartment: () => client.organisation.departments.update,
+      deleteDepartment: () => client.organisation.departments.delete,
       listPrograms: () => client.organisation.programs.list,
       createProgram: () => client.organisation.programs.create,
       getProgram: () => client.organisation.programs.get,
