@@ -7,7 +7,7 @@ import {
   RiTimeLine,
   RiCheckLine,
 } from "@remixicon/react";
-import { cn } from "@academic-suite/ui";
+import { Button, cn } from "@academic-suite/ui";
 import {
   WIZARD_STEPS,
   type StepId,
@@ -80,13 +80,14 @@ export function Stepper({
                 />
               )}
 
-              <button
+              <Button
                 type="button"
+                variant="ghost"
                 onClick={() => !disabled && onStepClick(step.id)}
                 disabled={disabled}
                 aria-current={isCurrent ? "step" : undefined}
                 className={cn(
-                  "group relative w-full text-left p-3 rounded-xl border transition-all select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                  "group relative h-auto w-full whitespace-normal text-left p-3 rounded-xl border transition-all select-none outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                   "flex items-start gap-3",
                   isCurrent
                     ? "border-primary/60 bg-primary/5 shadow-xs"
@@ -140,7 +141,7 @@ export function Stepper({
                     {step.description}
                   </p>
                 </div>
-              </button>
+              </Button>
             </li>
           );
         })}
@@ -148,4 +149,3 @@ export function Stepper({
     </nav>
   );
 }
-

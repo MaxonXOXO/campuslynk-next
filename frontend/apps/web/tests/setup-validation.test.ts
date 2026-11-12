@@ -95,6 +95,7 @@ describe("Setup Validation Logic", () => {
       const res = validatePeriods(overlapping, 2);
       expect(res.valid).toBe(false);
       expect(res.error).toContain("Periods overlap");
+      expect(res.errors?.["periods.1.start"]).toBe(res.error);
     });
 
     it("accepts valid chronological, non-overlapping periods", () => {
@@ -107,6 +108,42 @@ describe("Setup Validation Logic", () => {
       const res = validatePeriods(valid, 3);
       expect(res.valid).toBe(true);
       expect(res.error).toBeUndefined();
+    });
+
+    it("rejects non-overlapping periods scheduled backwards by period number", () => {
+      const res = validatePeriods([
+        { index: 1, start: "11:00", end: "12:00" },
+        { index: 2, start: "09:00", end: "10:00" },
+      ], 2);
+
+      expect(res.valid).toBe(false);
+      expect(res.errors).toEqual({
+        "periods.1.start": "Period 2 must start at or after Period 1 ends (12:00).",
+      });
+    });
+
+    it("allows the next period to start exactly when the previous period ends", () => {
+      expect(validatePeriods([
+        { index: 1, start: "09:00", end: "10:00" },
+        { index: 2, start: "10:00", end: "11:00" },
+      ], 2).valid).toBe(true);
+    });
+
+    it("checks numerical period order and maps errors to the original table row", () => {
+      const res = validatePeriods([
+        { index: 2, start: "09:00", end: "10:00" },
+        { index: 1, start: "11:00", end: "12:00" },
+      ], 2);
+
+      expect(res.valid).toBe(false);
+      expect(res.errors).toEqual({
+        "periods.0.start": "Period 2 must start at or after Period 1 ends (12:00).",
+      });
+
+      expect(validatePeriods([
+        { index: 2, start: "10:00", end: "11:00" },
+        { index: 1, start: "09:00", end: "10:00" },
+      ], 2).valid).toBe(true);
     });
 
     it("generates day order preview for roman, numeric, and alpha formats", () => {

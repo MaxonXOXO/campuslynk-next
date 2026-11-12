@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   deriveCurrentStep,
   deriveStepStates,
+  deriveSetupProgress,
   isFinishEnabled,
   getPrerequisiteChecklist,
   type SetupStatusData,
@@ -159,5 +160,58 @@ describe("Step Derivation & Completion Logic", () => {
     expect(checklist.length).toBe(6);
     expect(checklist.every((c) => !c.satisfied)).toBe(true);
   });
-});
 
+  describe("Prerequisite progress and explicit finalization state", () => {
+    it.each([
+      { ready: 0, percentage: 0 },
+      { ready: 1, percentage: 25 },
+      { ready: 2, percentage: 50 },
+      { ready: 3, percentage: 75 },
+      { ready: 4, percentage: 100 },
+    ])("reports $percentage% for $ready of four ready prerequisite steps", ({ ready, percentage }) => {
+      const saved = { is_completed: true, completed_at: "2026-11-05T12:00:00Z", settings_exist: true };
+      const status: SetupStatusData = {
+        ...baseStatus,
+        steps: {
+          institution_profile: ready >= 1 ? saved : baseStatus.steps.institution_profile,
+          calendar_basics: ready >= 3 ? saved : baseStatus.steps.calendar_basics,
+          signup_policy: ready >= 4 ? saved : baseStatus.steps.signup_policy,
+        },
+        prerequisites: ready >= 2
+          ? { streams_count: 1, departments_count: 1, academic_years_count: 1 }
+          : baseStatus.prerequisites,
+      };
+
+      expect(deriveSetupProgress(status)).toEqual({
+        completedRequirements: ready,
+        totalRequirements: 4,
+        percentage,
+        completionState: ready === 4 ? "ready_to_finalize" : "in_progress",
+      });
+      const finalized = deriveSetupProgress({ ...status, is_completed: true, completed_at: "2026-11-05T13:00:00Z" });
+      expect(finalized.percentage).toBe(percentage);
+      expect(finalized.completedRequirements).toBe(ready);
+      expect(finalized.completionState).toBe("completed");
+    });
+
+    it.each(["streams_count", "departments_count", "academic_years_count"] as const)(
+      "requires %s before counting organisation as ready",
+      (missing) => {
+        const saved = { is_completed: true, completed_at: "2026-11-05T12:00:00Z", settings_exist: true };
+        const progress = deriveSetupProgress({
+          ...baseStatus,
+          steps: { institution_profile: saved, calendar_basics: saved, signup_policy: saved },
+          prerequisites: { streams_count: 2, departments_count: 3, academic_years_count: 1, [missing]: 0 },
+        });
+        expect(progress.percentage).toBe(75);
+        expect(progress.completionState).toBe("in_progress");
+      }
+    );
+
+    it("reports zero prerequisites while status is unavailable", () => {
+      expect(deriveSetupProgress(null)).toEqual({
+        completedRequirements: 0, totalRequirements: 4, percentage: 0, completionState: "in_progress",
+      });
+    });
+  });
+});

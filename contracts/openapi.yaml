@@ -1153,6 +1153,13 @@ paths:
     get:
       operationId: getSetupStatus
       summary: Retrieve first-run setup wizard state and prerequisite counts
+      description: >-
+        Read-only reporting of persisted setup state. Each step is_completed requires
+        both a nonempty completion timestamp and its tenant setting row. A missing
+        setting returns settings_exist=false and values=null even if a historical
+        step timestamp remains. This operation never initializes defaults; an absent
+        signup_policy remains null until explicitly saved or initialized by a
+        successful POST /setup/complete.
       security:
         - bearerAuth: []
       responses:
@@ -1224,6 +1231,11 @@ paths:
     put:
       operationId: saveSetupStep
       summary: Save or update configuration for a specific setup step and mark it complete
+      description: >-
+        Explicitly saves the supplied configuration, preserving existing step and
+        overall completion timestamps. Saving signup_policy is optional before
+        finalization; this operation remains available to choose custom preferences
+        before or after setup completion.
       security:
         - bearerAuth: []
       parameters:
@@ -1314,12 +1326,29 @@ paths:
   /setup/complete:
     post:
       operationId: completeSetup
-      summary: Finalize first-run setup wizard verifying all steps and prerequisites
+      summary: Finalize first-run setup with optional sign-up policy defaults
+      description: >-
+        Requires persisted institution_profile and calendar_basics settings with
+        nonempty step completion timestamps, plus at least one stream, department,
+        and academic year. An explicit signup_policy save is not required. Inside
+        one tenant transaction, relevant setting and prerequisite rows are locked,
+        all prerequisites are checked, and an absent policy is created with
+        student_self_registration_enabled=false, parent_self_registration_enabled=false,
+        and approval_mode=manual. Existing policy values and row timestamps are
+        preserved; only a missing policy step completion timestamp is supplied.
+        Default creation is attributed to the completing administrator in the tenant
+        activity log as signup_policy.defaults_initialized with source=setup_completion,
+        distinguishing it from an explicit save. Finalization and initialization are
+        atomic: failed completion leaves no newly created policy or completion markers.
+        Repeated or losing concurrent completion requests return 409 setup-already-completed.
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: Setup successfully finalized
+          description: >-
+            Setup successfully finalized. The response includes persisted policy
+            values (defaults if previously absent), its nonempty completion timestamp,
+            settings_exist=true, and is_completed=true.
           content:
             application/json:
               schema:
@@ -1383,8 +1412,18 @@ paths:
                     detail: Setup endpoints cannot be accessed during an impersonation session.
         '409':
           $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Setup was already finalized, including by a winning concurrent request.
+            Returns the setup-already-completed problem type without changing policy
+            values or existing completion timestamps.
         '422':
           $ref: '#/components/responses/ProblemDetails'
+          description: >-
+            Required profile/calendar settings or their completion timestamps, or a
+            stream, department, or academic year, are missing. Returns the
+            setup-prerequisites-missing problem type with errors.missing listing the
+            unmet prerequisites. An unsaved signup_policy is not a missing prerequisite.
+            No defaults or completion markers are persisted on failure.
 
 components:
   securitySchemes:
@@ -2064,7 +2103,12 @@ components:
 
     SignupPolicyValues:
       type: object
-      description: Stored configuration for student and parent self-registration and approval mode. Inert until registration queue ships.
+      description: >-
+        Persisted configuration for student and parent self-registration and approval
+        mode. Inert until registration queue ships. An explicit setup save is optional:
+        successful setup completion initializes an absent policy using the defaults
+        below, while preserving any existing custom configuration. Default annotations
+        do not initialize settings during reads.
       required: [student_self_registration_enabled, parent_self_registration_enabled, approval_mode]
       additionalProperties: false
       properties:
@@ -2111,6 +2155,7 @@ components:
                       nullable: true
                     is_completed:
                       type: boolean
+                      description: True only when a nonempty step completion timestamp and the institution_profile setting row both exist.
                     settings_exist:
                       type: boolean
                     values:
@@ -2128,6 +2173,7 @@ components:
                       nullable: true
                     is_completed:
                       type: boolean
+                      description: True only when a nonempty step completion timestamp and the calendar_basics setting row both exist.
                     settings_exist:
                       type: boolean
                     values:
@@ -2145,9 +2191,11 @@ components:
                       nullable: true
                     is_completed:
                       type: boolean
+                      description: True only when a nonempty step completion timestamp and the signup_policy setting row both exist, including automatic initialization during finalization.
                     settings_exist:
                       type: boolean
                     values:
+                      description: Persisted values only; null until explicitly saved or initialized during successful setup completion.
                       oneOf:
                         - $ref: '#/components/schemas/SignupPolicyValues'
                         - type: 'null'

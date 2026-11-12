@@ -31,6 +31,7 @@ import {
   RiCheckLine,
   RiInformationLine,
   RiLoader4Line,
+  RiRefreshLine,
 } from "@remixicon/react";
 
 export interface StreamItem {
@@ -63,11 +64,26 @@ export interface AcademicYearItem {
   is_current?: boolean;
 }
 
+export type OrganisationSection = "streams" | "departments" | "academicYears";
+
+export type OrganisationLoadStates = Record<OrganisationSection, {
+  isLoading: boolean;
+  error: string | null;
+}>;
+
+const DEFAULT_LOAD_STATES: OrganisationLoadStates = {
+  streams: { isLoading: false, error: null },
+  departments: { isLoading: false, error: null },
+  academicYears: { isLoading: false, error: null },
+};
+
 interface OrganisationBasicsStepProps {
   streams: StreamItem[];
   departments: DepartmentItem[];
   academicYears: AcademicYearItem[];
   isLoading?: boolean;
+  loadStates?: OrganisationLoadStates;
+  onRetryLoad?: (section: OrganisationSection) => Promise<void>;
   onRefresh: () => Promise<void>;
   onCreateStream: (code: string, name: string) => Promise<boolean>;
   onRenameStream: (id: string, name: string) => Promise<boolean>;
@@ -87,6 +103,9 @@ interface OrganisationBasicsStepProps {
   }) => Promise<boolean>;
   onNext: () => void;
   onBack: () => void;
+  navigationDisabled?: boolean;
+  onSavingChange?: (isSaving: boolean) => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 }
 
 export function deriveStreamCode(name: string): string {
@@ -103,6 +122,8 @@ export function OrganisationBasicsStep({
   departments,
   academicYears,
   isLoading = false,
+  loadStates = DEFAULT_LOAD_STATES,
+  onRetryLoad,
   onRefresh,
   onCreateStream,
   onRenameStream,
@@ -112,6 +133,9 @@ export function OrganisationBasicsStep({
   onCreateAcademicYear,
   onNext,
   onBack,
+  navigationDisabled = false,
+  onSavingChange,
+  onDirtyChange,
 }: OrganisationBasicsStepProps) {
   // Dialog States
   const [createStreamOpen, setCreateStreamOpen] = React.useState(false);
@@ -131,6 +155,7 @@ export function OrganisationBasicsStep({
 
   const [createDeptOpen, setCreateDeptOpen] = React.useState(false);
   const [deptStreamId, setDeptStreamId] = React.useState("");
+  const initialDeptStreamId = React.useRef("");
   const [deptCode, setDeptCode] = React.useState("");
   const [deptName, setDeptName] = React.useState("");
   const [deptKind, setDeptKind] = React.useState<"academic" | "general" | "administrative">("academic");
@@ -145,10 +170,39 @@ export function OrganisationBasicsStep({
   const [yearError, setYearError] = React.useState<string | null>(null);
   const [isSubmittingYear, setIsSubmittingYear] = React.useState(false);
 
+  const pendingMutations = React.useRef(0);
+  const [isMutating, setIsMutating] = React.useState(false);
+  const beginMutation = () => {
+    pendingMutations.current += 1;
+    setIsMutating(true);
+    onSavingChange?.(true);
+  };
+  const endMutation = () => {
+    pendingMutations.current -= 1;
+    const stillSaving = pendingMutations.current > 0;
+    setIsMutating(stillSaving);
+    onSavingChange?.(stillSaving);
+  };
+  const isNavigationDisabled = navigationDisabled || isMutating;
+  const isDirty =
+    (createStreamOpen && (streamName !== "" || streamCode !== "")) ||
+    (renameStreamOpen && renameName !== editingStream?.name) ||
+    (createDeptOpen && (deptCode !== "" || deptName !== "" || deptKind !== "academic" ||
+      deptStreamId !== initialDeptStreamId.current)) ||
+    (createYearOpen && (yearLabel !== "" || yearStart !== "" || yearEnd !== "" || yearCurrent));
+
+  React.useLayoutEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
   const streamsCount = streams.length;
   const departmentsCount = departments.length;
   const yearsCount = academicYears.length;
-  const isPrerequisitesSatisfied = streamsCount >= 1 && departmentsCount >= 1 && yearsCount >= 1;
+  const hasLoadingCollection = Object.values(loadStates).some((state) => state.isLoading);
+  const hasCollectionError = Object.values(loadStates).some((state) => Boolean(state.error));
+  const isPrerequisitesSatisfied = !hasLoadingCollection && !hasCollectionError &&
+    streamsCount >= 1 && departmentsCount >= 1 && yearsCount >= 1;
+  const areStreamsAvailable = !loadStates.streams.isLoading && !loadStates.streams.error;
 
   // Stream Handlers
   const handleOpenCreateStream = () => {
@@ -202,6 +256,7 @@ export function OrganisationBasicsStep({
 
     setIsSubmittingStream(true);
     setStreamError(null);
+    beginMutation();
     try {
       const ok = await onCreateStream(code, name);
       if (ok) {
@@ -212,6 +267,7 @@ export function OrganisationBasicsStep({
       setStreamError(err instanceof Error ? err.message : "Failed to create stream.");
     } finally {
       setIsSubmittingStream(false);
+      endMutation();
     }
   };
 
@@ -230,6 +286,7 @@ export function OrganisationBasicsStep({
     }
     setIsSubmittingStream(true);
     setRenameError(null);
+    beginMutation();
     try {
       const ok = await onRenameStream(editingStream.id, renameName.trim());
       if (ok) {
@@ -240,6 +297,7 @@ export function OrganisationBasicsStep({
       setRenameError(err instanceof Error ? err.message : "Failed to rename stream.");
     } finally {
       setIsSubmittingStream(false);
+      endMutation();
     }
   };
 
@@ -252,17 +310,23 @@ export function OrganisationBasicsStep({
       return;
     }
 
-    const res = await onDeleteStream(stream.id);
-    if (!res.success) {
-      setDeleteStreamError(res.error || "Cannot delete stream in use.");
-    } else {
-      await onRefresh();
+    beginMutation();
+    try {
+      const res = await onDeleteStream(stream.id);
+      if (!res.success) {
+        setDeleteStreamError(res.error || "Cannot delete stream in use.");
+      } else {
+        await onRefresh();
+      }
+    } finally {
+      endMutation();
     }
   };
 
   // Department Handlers
   const handleOpenCreateDept = () => {
-    setDeptStreamId(streams[0]?.id || "");
+    initialDeptStreamId.current = streams[0]?.id || "";
+    setDeptStreamId(initialDeptStreamId.current);
     setDeptCode("");
     setDeptName("");
     setDeptKind("academic");
@@ -303,6 +367,7 @@ export function OrganisationBasicsStep({
 
     setIsSubmittingDept(true);
     setDeptError(null);
+    beginMutation();
     try {
       const ok = await onCreateDepartment({
         stream_id: deptStreamId,
@@ -318,6 +383,7 @@ export function OrganisationBasicsStep({
       setDeptError(err instanceof Error ? err.message : "Failed to create department.");
     } finally {
       setIsSubmittingDept(false);
+      endMutation();
     }
   };
 
@@ -325,13 +391,18 @@ export function OrganisationBasicsStep({
     setDeleteDeptError(null);
     if (!onDeleteDepartment) return;
 
-    const res = await onDeleteDepartment(dept.id);
-    if (!res.success) {
-      setDeleteDeptError(
-        res.error || `Cannot delete department "${dept.name}" because it is currently in use.`
-      );
-    } else {
-      await onRefresh();
+    beginMutation();
+    try {
+      const res = await onDeleteDepartment(dept.id);
+      if (!res.success) {
+        setDeleteDeptError(
+          res.error || `Cannot delete department "${dept.name}" because it is currently in use.`
+        );
+      } else {
+        await onRefresh();
+      }
+    } finally {
+      endMutation();
     }
   };
 
@@ -358,6 +429,7 @@ export function OrganisationBasicsStep({
 
     setIsSubmittingYear(true);
     setYearError(null);
+    beginMutation();
     try {
       const ok = await onCreateAcademicYear({
         label: yearLabel.trim(),
@@ -373,6 +445,7 @@ export function OrganisationBasicsStep({
       setYearError(err instanceof Error ? err.message : "Failed to create academic year.");
     } finally {
       setIsSubmittingYear(false);
+      endMutation();
     }
   };
 
@@ -420,14 +493,24 @@ export function OrganisationBasicsStep({
               Structural Prerequisites: At least one of each is required
             </div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              Streams: <span className="font-semibold text-foreground">{streamsCount}</span> •
-              Departments: <span className="font-semibold text-foreground">{departmentsCount}</span> •
-              Academic Years: <span className="font-semibold text-foreground">{yearsCount}</span>
+              Streams: <span className="font-semibold text-foreground">
+                {loadStates.streams.error ? "Unavailable" : loadStates.streams.isLoading ? "Loading..." : streamsCount}
+              </span> •
+              Departments: <span className="font-semibold text-foreground">
+                {loadStates.departments.error ? "Unavailable" : loadStates.departments.isLoading ? "Loading..." : departmentsCount}
+              </span> •
+              Academic Years: <span className="font-semibold text-foreground">
+                {loadStates.academicYears.error ? "Unavailable" : loadStates.academicYears.isLoading ? "Loading..." : yearsCount}
+              </span>
             </div>
           </div>
         </div>
         <Badge variant={isPrerequisitesSatisfied ? "default" : "outline"}>
-          {isPrerequisitesSatisfied ? "Prerequisites Met" : "Action Required"}
+          {hasCollectionError
+            ? "Unable to Verify"
+            : hasLoadingCollection
+              ? "Loading Prerequisites"
+              : isPrerequisitesSatisfied ? "Prerequisites Met" : "Action Required"}
         </Badge>
       </div>
 
@@ -448,10 +531,10 @@ export function OrganisationBasicsStep({
       )}
 
       {/* SECTION 1: STREAMS */}
-      <section className="space-y-4 border border-border rounded-xl p-5 bg-card">
+      <section aria-labelledby="streams-section-title" aria-busy={loadStates.streams.isLoading} className="space-y-4 border border-border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-foreground">1. Streams</h3>
+            <h3 id="streams-section-title" className="text-base font-semibold text-foreground">1. Streams</h3>
             <p className="text-xs text-muted-foreground">
               Streams represent academic administration branches (e.g. Aided, Self-Financing).
             </p>
@@ -461,7 +544,25 @@ export function OrganisationBasicsStep({
           </Button>
         </div>
 
-        {streams.length === 0 ? (
+        {loadStates.streams.isLoading ? (
+          <div role="status" className="space-y-3">
+            <p className="text-sm text-muted-foreground">Loading Streams...</p>
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : loadStates.streams.error ? (
+          <Alert variant="destructive">
+            <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
+            <AlertTitle>Failed to Load Streams</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>{loadStates.streams.error}</p>
+              {onRetryLoad && (
+                <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoad("streams")}>
+                  <RiRefreshLine className="size-4 mr-1.5" aria-hidden="true" /> Retry Streams
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : streams.length === 0 ? (
           <div className="text-center py-6 border border-dashed border-border rounded-lg text-sm text-muted-foreground">
             No streams created yet. Click &quot;Add Stream&quot; above to create your first stream.
           </div>
@@ -527,10 +628,10 @@ export function OrganisationBasicsStep({
       </section>
 
       {/* SECTION 2: DEPARTMENTS */}
-      <section className="space-y-4 border border-border rounded-xl p-5 bg-card">
+      <section aria-labelledby="departments-section-title" aria-busy={loadStates.departments.isLoading} className="space-y-4 border border-border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-foreground">2. Departments</h3>
+            <h3 id="departments-section-title" className="text-base font-semibold text-foreground">2. Departments</h3>
             <p className="text-xs text-muted-foreground">
               Academic, general, and administrative divisions grouped under institutional streams.
             </p>
@@ -539,14 +640,34 @@ export function OrganisationBasicsStep({
             type="button"
             size="sm"
             onClick={handleOpenCreateDept}
-            disabled={streams.length === 0}
-            title={streams.length === 0 ? "Create a stream first before adding departments." : ""}
+            disabled={!areStreamsAvailable || streams.length === 0}
+            title={!areStreamsAvailable
+              ? "Load streams before adding departments."
+              : streams.length === 0 ? "Create a stream first before adding departments." : ""}
           >
             <RiAddLine className="size-4 mr-1" aria-hidden="true" /> Add Department
           </Button>
         </div>
 
-        {departments.length === 0 ? (
+        {loadStates.departments.isLoading ? (
+          <div role="status" className="space-y-3">
+            <p className="text-sm text-muted-foreground">Loading Departments...</p>
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : loadStates.departments.error ? (
+          <Alert variant="destructive">
+            <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
+            <AlertTitle>Failed to Load Departments</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>{loadStates.departments.error}</p>
+              {onRetryLoad && (
+                <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoad("departments")}>
+                  <RiRefreshLine className="size-4 mr-1.5" aria-hidden="true" /> Retry Departments
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : departments.length === 0 ? (
           <div className="text-center py-6 border border-dashed border-border rounded-lg text-sm text-muted-foreground">
             No departments created yet.{" "}
             {streams.length === 0
@@ -621,10 +742,10 @@ export function OrganisationBasicsStep({
       </section>
 
       {/* SECTION 3: ACADEMIC YEARS */}
-      <section className="space-y-4 border border-border rounded-xl p-5 bg-card">
+      <section aria-labelledby="academic-years-section-title" aria-busy={loadStates.academicYears.isLoading} className="space-y-4 border border-border rounded-xl p-5 bg-card">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-semibold text-foreground">3. Academic Years</h3>
+            <h3 id="academic-years-section-title" className="text-base font-semibold text-foreground">3. Academic Years</h3>
             <p className="text-xs text-muted-foreground">
               Institutional academic calendar sessions for enrollment and terms.
             </p>
@@ -634,7 +755,25 @@ export function OrganisationBasicsStep({
           </Button>
         </div>
 
-        {academicYears.length === 0 ? (
+        {loadStates.academicYears.isLoading ? (
+          <div role="status" className="space-y-3">
+            <p className="text-sm text-muted-foreground">Loading Academic Years...</p>
+            <Skeleton className="h-24 w-full" />
+          </div>
+        ) : loadStates.academicYears.error ? (
+          <Alert variant="destructive">
+            <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
+            <AlertTitle>Failed to Load Academic Years</AlertTitle>
+            <AlertDescription className="space-y-3">
+              <p>{loadStates.academicYears.error}</p>
+              {onRetryLoad && (
+                <Button type="button" variant="outline" size="sm" onClick={() => void onRetryLoad("academicYears")}>
+                  <RiRefreshLine className="size-4 mr-1.5" aria-hidden="true" /> Retry Academic Years
+                </Button>
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : academicYears.length === 0 ? (
           <div className="text-center py-6 border border-dashed border-border rounded-lg text-sm text-muted-foreground">
             No academic years created yet. Click &quot;Add Academic Year&quot; above.
           </div>
@@ -689,11 +828,11 @@ export function OrganisationBasicsStep({
 
       {/* Navigation Footer */}
       <div className="flex items-center justify-between border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onBack}>
+        <Button type="button" variant="outline" onClick={onBack} disabled={isNavigationDisabled}>
           ← Back to Profile
         </Button>
-        <Button type="button" onClick={onNext}>
-          Next Step: Calendar →
+        <Button type="button" onClick={onNext} disabled={isNavigationDisabled}>
+          Continue
         </Button>
       </div>
 
@@ -1063,4 +1202,3 @@ export function OrganisationBasicsStep({
     </div>
   );
 }
-

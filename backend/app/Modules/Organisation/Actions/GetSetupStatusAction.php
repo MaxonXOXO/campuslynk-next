@@ -49,7 +49,7 @@ final class GetSetupStatusAction
 
             $steps[$stepKey] = [
                 'completed_at' => $completedAt,
-                'is_completed' => $completedAt !== null,
+                'is_completed' => $completedAt !== null && $completedAt !== '' && $setting !== null,
                 'settings_exist' => $setting !== null,
                 'values' => $values,
             ];

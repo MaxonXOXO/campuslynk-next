@@ -76,6 +76,13 @@ export function isWrongRoleForbiddenError(error: unknown): boolean {
   return !isImpersonationError(error);
 }
 
+export function isSetupCompletionConflictError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+
+  const err = error as ProblemLikeError;
+  return (err.status ?? err.problem?.status) === 409;
+}
+
 export function isSetupAlreadyCompletedError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
 
@@ -83,10 +90,8 @@ export function isSetupAlreadyCompletedError(error: unknown): boolean {
   const status = err.status ?? err.problem?.status;
   const typeUri = err.type ?? err.problem?.type ?? '';
 
-  return (
-    status === 409 ||
+  return status === 409 && (
     typeUri === 'https://errors.campuslynk.net/setup-already-completed' ||
     typeUri.endsWith('/setup-already-completed')
   );
 }
-

@@ -10,11 +10,12 @@ import {
   AlertDescription,
   Skeleton,
 } from "@academic-suite/ui";
-import { RiLoader4Line, RiAlertLine, RiCheckLine, RiInformationLine } from "@remixicon/react";
+import { RiLoader4Line, RiAlertLine, RiInformationLine } from "@remixicon/react";
 import {
   validateSignupPolicy,
   type SignupPolicyFormValues,
 } from "../logic/validation";
+import { useStepForm } from "../logic/use-step-form";
 
 export type { SignupPolicyFormValues } from "../logic/validation";
 
@@ -22,6 +23,8 @@ interface SignupPolicyStepProps {
   initialValues?: Partial<SignupPolicyFormValues>;
   isLoading?: boolean;
   isSaving?: boolean;
+  isPersisted?: boolean;
+  navigationDisabled?: boolean;
   serverErrors?: Record<string, string>;
   generalError?: string | null;
   onSave: (values: SignupPolicyFormValues) => Promise<boolean>;
@@ -34,6 +37,8 @@ export function SignupPolicyStep({
   initialValues,
   isLoading = false,
   isSaving = false,
+  isPersisted = false,
+  navigationDisabled = false,
   serverErrors = {},
   generalError = null,
   onSave,
@@ -41,42 +46,30 @@ export function SignupPolicyStep({
   onBack,
   onDirtyChange,
 }: SignupPolicyStepProps) {
-  const [studentSelfReg, setStudentSelfReg] = React.useState<boolean>(
-    initialValues?.student_self_registration_enabled ?? false
+  const initialFormValues = React.useMemo<SignupPolicyFormValues>(() => ({
+    student_self_registration_enabled: initialValues?.student_self_registration_enabled ?? false,
+    parent_self_registration_enabled: initialValues?.parent_self_registration_enabled ?? false,
+    approval_mode: initialValues?.approval_mode ?? "manual",
+  }), [initialValues]);
+  const { values, setValues, isDirty, markSaved } = useStepForm(
+    initialFormValues, isPersisted, onDirtyChange
   );
-  const [parentSelfReg, setParentSelfReg] = React.useState<boolean>(
-    initialValues?.parent_self_registration_enabled ?? false
-  );
-  const [approvalMode, setApprovalMode] = React.useState<"manual" | "auto">(
-    initialValues?.approval_mode ?? "manual"
-  );
+  const {
+    student_self_registration_enabled: studentSelfReg,
+    parent_self_registration_enabled: parentSelfReg,
+    approval_mode: approvalMode,
+  } = values;
+  const submitting = React.useRef(false);
 
   const [clientErrors, setClientErrors] = React.useState<Record<string, string>>({});
-  const [saveSuccess, setSaveSuccess] = React.useState(false);
-
-  React.useEffect(() => {
-    if (initialValues) {
-      if (initialValues.student_self_registration_enabled !== undefined) {
-        setStudentSelfReg(initialValues.student_self_registration_enabled);
-      }
-      if (initialValues.parent_self_registration_enabled !== undefined) {
-        setParentSelfReg(initialValues.parent_self_registration_enabled);
-      }
-      if (initialValues.approval_mode !== undefined) {
-        setApprovalMode(initialValues.approval_mode);
-      }
-    }
-  }, [initialValues]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveSuccess(false);
-
-    const values: SignupPolicyFormValues = {
-      student_self_registration_enabled: studentSelfReg,
-      parent_self_registration_enabled: parentSelfReg,
-      approval_mode: approvalMode,
-    };
+    if (isSaving || navigationDisabled || submitting.current) return;
+    if (!isDirty) {
+      onNext();
+      return;
+    }
 
     const errors = validateSignupPolicy(values);
     if (Object.keys(errors).length > 0) {
@@ -85,10 +78,14 @@ export function SignupPolicyStep({
     }
 
     setClientErrors({});
-    const success = await onSave(values);
-    if (success) {
-      setSaveSuccess(true);
-      onDirtyChange?.(false);
+    submitting.current = true;
+    try {
+      if (await onSave(values)) {
+        markSaved(values);
+        onNext();
+      }
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -103,7 +100,7 @@ export function SignupPolicyStep({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} noValidate className="space-y-8">
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Sign-up &amp; Registration Policy
@@ -131,16 +128,6 @@ export function SignupPolicyStep({
         </Alert>
       )}
 
-      {saveSuccess && (
-        <Alert className="border-primary/30 bg-primary/5 text-primary">
-          <RiCheckLine className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <AlertTitle className="text-foreground">Policy Saved</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            Sign-up policy has been saved. You can proceed to Review and Finish.
-          </AlertDescription>
-        </Alert>
-      )}
-
       {/* TOGGLE 1: STUDENT REGISTRATION */}
       <div className="border border-border rounded-xl p-5 bg-card space-y-4">
         <div className="flex items-center justify-between">
@@ -155,11 +142,9 @@ export function SignupPolicyStep({
           <Switch
             id="student-reg-toggle"
             checked={studentSelfReg}
-            onCheckedChange={(checked) => {
-              setStudentSelfReg(checked);
-              onDirtyChange?.(true);
-              setSaveSuccess(false);
-            }}
+            onCheckedChange={(checked) => setValues((prev) => ({
+              ...prev, student_self_registration_enabled: checked,
+            }))}
             disabled={isSaving}
           />
         </div>
@@ -179,11 +164,9 @@ export function SignupPolicyStep({
           <Switch
             id="parent-reg-toggle"
             checked={parentSelfReg}
-            onCheckedChange={(checked) => {
-              setParentSelfReg(checked);
-              onDirtyChange?.(true);
-              setSaveSuccess(false);
-            }}
+            onCheckedChange={(checked) => setValues((prev) => ({
+              ...prev, parent_self_registration_enabled: checked,
+            }))}
             disabled={isSaving}
           />
         </div>
@@ -201,15 +184,13 @@ export function SignupPolicyStep({
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-          <button
+          <Button
             type="button"
-            onClick={() => {
-              setApprovalMode("manual");
-              onDirtyChange?.(true);
-              setSaveSuccess(false);
-            }}
+            variant="outline"
+            onClick={() => setValues((prev) => ({ ...prev, approval_mode: "manual" }))}
             disabled={isSaving}
-            className={`p-4 rounded-lg border text-left transition-all ${
+            aria-pressed={approvalMode === "manual"}
+            className={`h-auto flex-col items-start gap-1 whitespace-normal p-4 rounded-lg border text-left transition-all ${
               approvalMode === "manual"
                 ? "border-primary bg-primary/5 ring-1 ring-primary"
                 : "border-border bg-muted/20 hover:bg-muted/40"
@@ -220,17 +201,15 @@ export function SignupPolicyStep({
               Registrations require administrative review by designated institutional staff before
               activating credentials.
             </div>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
-            onClick={() => {
-              setApprovalMode("auto");
-              onDirtyChange?.(true);
-              setSaveSuccess(false);
-            }}
+            variant="outline"
+            onClick={() => setValues((prev) => ({ ...prev, approval_mode: "auto" }))}
             disabled={isSaving}
-            className={`p-4 rounded-lg border text-left transition-all ${
+            aria-pressed={approvalMode === "auto"}
+            className={`h-auto flex-col items-start gap-1 whitespace-normal p-4 rounded-lg border text-left transition-all ${
               approvalMode === "auto"
                 ? "border-primary bg-primary/5 ring-1 ring-primary"
                 : "border-border bg-muted/20 hover:bg-muted/40"
@@ -241,7 +220,7 @@ export function SignupPolicyStep({
               Registrations matching verified student roll records are automatically activated
               with immediate credential dispatch.
             </div>
-          </button>
+          </Button>
         </div>
 
         {(clientErrors.approval_mode || serverErrors.approval_mode) && (
@@ -253,22 +232,19 @@ export function SignupPolicyStep({
 
       {/* FOOTER ACTIONS */}
       <div className="flex items-center justify-between border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onBack}>
+        <Button type="button" variant="outline" onClick={onBack} disabled={isSaving || navigationDisabled}>
           ← Back to Calendar
         </Button>
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isSaving}>
+          <Button type="submit" disabled={isSaving || navigationDisabled}>
             {isSaving ? (
               <>
                 <RiLoader4Line className="size-4 animate-spin mr-2" aria-hidden="true" />
                 Saving...
               </>
             ) : (
-              "Save Policy"
+              isDirty ? "Save & Continue" : "Continue"
             )}
-          </Button>
-          <Button type="button" variant="outline" onClick={onNext}>
-            Next Step: Review &amp; Finish →
           </Button>
         </div>
       </div>

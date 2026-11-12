@@ -61,4 +61,22 @@ describe("Guided Sidebar Stepper Component", () => {
 
     expect(onStepClick).toHaveBeenCalledWith("calendar_basics");
   });
+
+  it("blocks every sidebar step while navigation is disabled and re-enables them afterward", async () => {
+    const user = userEvent.setup();
+    const onStepClick = vi.fn();
+    const props = { currentStep: "organisation_basics" as const, stepStates: defaultStates, onStepClick };
+    const view = render(<Stepper {...props} disabled />);
+
+    for (const button of screen.getAllByRole("button")) {
+      expect(button).toBeDisabled();
+      await user.click(button);
+    }
+    expect(onStepClick).not.toHaveBeenCalled();
+
+    view.rerender(<Stepper {...props} disabled={false} />);
+    await user.click(screen.getByRole("button", { name: /academic calendar/i }));
+    expect(onStepClick).toHaveBeenCalledOnce();
+    expect(onStepClick).toHaveBeenCalledWith("calendar_basics");
+  });
 });

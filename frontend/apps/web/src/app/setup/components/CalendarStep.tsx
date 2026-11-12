@@ -17,7 +17,7 @@ import {
   Badge,
   Skeleton,
 } from "@academic-suite/ui";
-import { RiLoader4Line, RiAlertLine, RiCheckLine, RiMagicLine } from "@remixicon/react";
+import { RiLoader4Line, RiAlertLine, RiMagicLine } from "@remixicon/react";
 import {
   VALID_WEEKDAYS,
   validateWorkingDays,
@@ -26,6 +26,7 @@ import {
   formatDayOrderPreview,
   type PeriodDefinition,
 } from "../logic/validation";
+import { useStepForm } from "../logic/use-step-form";
 
 export interface CalendarFormValues {
   working_days: string[];
@@ -38,6 +39,8 @@ interface CalendarStepProps {
   initialValues?: Partial<CalendarFormValues>;
   isLoading?: boolean;
   isSaving?: boolean;
+  isPersisted?: boolean;
+  navigationDisabled?: boolean;
   serverErrors?: Record<string, string>;
   generalError?: string | null;
   onSave: (values: CalendarFormValues) => Promise<boolean>;
@@ -73,10 +76,18 @@ function generateDefaultPeriods(count: number): PeriodDefinition[] {
   return defaults;
 }
 
+function sameCalendarValues(left: CalendarFormValues, right: CalendarFormValues): boolean {
+  // Weekday buttons represent a selection; compare it without changing API payload order.
+  return JSON.stringify({ ...left, working_days: [...left.working_days].sort() }) ===
+    JSON.stringify({ ...right, working_days: [...right.working_days].sort() });
+}
+
 export function CalendarStep({
   initialValues,
   isLoading = false,
   isSaving = false,
+  isPersisted = false,
+  navigationDisabled = false,
   serverErrors = {},
   generalError = null,
   onSave,
@@ -84,72 +95,45 @@ export function CalendarStep({
   onBack,
   onDirtyChange,
 }: CalendarStepProps) {
-  const [workingDays, setWorkingDays] = React.useState<string[]>(
-    initialValues?.working_days || ["monday", "tuesday", "wednesday", "thursday", "friday"]
-  );
-
-  const [periodsPerDay, setPeriodsPerDay] = React.useState<number>(
-    initialValues?.periods_per_day || 6
-  );
-
-  const [periods, setPeriods] = React.useState<PeriodDefinition[]>(
-    initialValues?.periods && initialValues.periods.length > 0
+  const initialFormValues = React.useMemo<CalendarFormValues>(() => ({
+    working_days: initialValues?.working_days || ["monday", "tuesday", "wednesday", "thursday", "friday"],
+    periods_per_day: initialValues?.periods_per_day || 6,
+    periods: initialValues?.periods && initialValues.periods.length > 0
       ? initialValues.periods
-      : generateDefaultPeriods(initialValues?.periods_per_day || 6)
+      : generateDefaultPeriods(initialValues?.periods_per_day || 6),
+    day_order_format: initialValues?.day_order_format || "roman",
+  }), [initialValues]);
+  const { values, setValues, isDirty, markSaved } = useStepForm(
+    initialFormValues, isPersisted, onDirtyChange, sameCalendarValues
   );
-
-  const [dayOrderFormat, setDayOrderFormat] = React.useState<"roman" | "numeric" | "alpha">(
-    initialValues?.day_order_format || "roman"
-  );
+  const {
+    working_days: workingDays,
+    periods_per_day: periodsPerDay,
+    periods,
+    day_order_format: dayOrderFormat,
+  } = values;
+  const submitting = React.useRef(false);
 
   const [clientErrors, setClientErrors] = React.useState<Record<string, string>>({});
-  const [saveSuccess, setSaveSuccess] = React.useState(false);
-
-  React.useEffect(() => {
-    if (initialValues) {
-      if (initialValues.working_days) setWorkingDays(initialValues.working_days);
-      if (initialValues.periods_per_day) {
-        setPeriodsPerDay(initialValues.periods_per_day);
-        if (!initialValues.periods || initialValues.periods.length === 0) {
-          setPeriods(generateDefaultPeriods(initialValues.periods_per_day));
-        }
-      }
-      if (initialValues.periods && initialValues.periods.length > 0) {
-        setPeriods(initialValues.periods);
-      }
-      if (initialValues.day_order_format) {
-        setDayOrderFormat(initialValues.day_order_format);
-      }
-    }
-  }, [initialValues]);
 
   const handleWeekdayToggle = (day: string) => {
-    setWorkingDays((prev) => {
-      const exists = prev.includes(day);
-      const next = exists ? prev.filter((d) => d !== day) : [...prev, day];
-      onDirtyChange?.(true);
-      return next;
-    });
-    setSaveSuccess(false);
+    setValues((prev) => ({
+      ...prev,
+      working_days: prev.working_days.includes(day)
+        ? prev.working_days.filter((d) => d !== day)
+        : [...prev.working_days, day],
+    }));
   };
 
   const handlePeriodsPerDayChange = (newCount: number) => {
     if (isNaN(newCount) || newCount < 1 || newCount > 12) return;
-    setPeriodsPerDay(newCount);
-    onDirtyChange?.(true);
-    setSaveSuccess(false);
-
-    // Synchronize periods length
-    setPeriods((prev) => {
-      if (prev.length === newCount) return prev;
-      if (prev.length < newCount) {
-        // Expand
-        const additional = generateDefaultPeriods(newCount).slice(prev.length);
-        return [...prev, ...additional];
-      }
-      // Shrink
-      return prev.slice(0, newCount);
-    });
+    setValues((prev) => ({
+      ...prev,
+      periods_per_day: newCount,
+      periods: prev.periods.length < newCount
+        ? [...prev.periods, ...generateDefaultPeriods(newCount).slice(prev.periods.length)]
+        : prev.periods.slice(0, newCount),
+    }));
   };
 
   const handlePeriodChange = (
@@ -157,22 +141,23 @@ export function CalendarStep({
     field: "start" | "end",
     value: string
   ) => {
-    setPeriods((prev) =>
-      prev.map((p, idx) => (idx === index ? { ...p, [field]: value } : p))
-    );
-    onDirtyChange?.(true);
-    setSaveSuccess(false);
+    setValues((prev) => ({
+      ...prev,
+      periods: prev.periods.map((p, idx) => (idx === index ? { ...p, [field]: value } : p)),
+    }));
   };
 
   const handleResetDefaultPeriods = () => {
-    setPeriods(generateDefaultPeriods(periodsPerDay));
-    onDirtyChange?.(true);
-    setSaveSuccess(false);
+    setValues((prev) => ({ ...prev, periods: generateDefaultPeriods(prev.periods_per_day) }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveSuccess(false);
+    if (isSaving || navigationDisabled || submitting.current) return;
+    if (!isDirty) {
+      onNext();
+      return;
+    }
 
     const errors: Record<string, string> = {};
 
@@ -192,6 +177,7 @@ export function CalendarStep({
     const periodsResult = validatePeriods(periods, periodsPerDay);
     if (!periodsResult.valid && periodsResult.error) {
       errors.periods = periodsResult.error;
+      Object.assign(errors, periodsResult.errors);
     }
 
     if (Object.keys(errors).length > 0) {
@@ -200,16 +186,14 @@ export function CalendarStep({
     }
 
     setClientErrors({});
-    const success = await onSave({
-      working_days: workingDays,
-      periods_per_day: periodsPerDay,
-      periods,
-      day_order_format: dayOrderFormat,
-    });
-
-    if (success) {
-      setSaveSuccess(true);
-      onDirtyChange?.(false);
+    submitting.current = true;
+    try {
+      if (await onSave(values)) {
+        markSaved(values);
+        onNext();
+      }
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -226,7 +210,7 @@ export function CalendarStep({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form onSubmit={handleSubmit} noValidate className="space-y-8">
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Academic Calendar Basics
@@ -242,16 +226,6 @@ export function CalendarStep({
           <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Calendar Configuration Error</AlertTitle>
           <AlertDescription>{generalError}</AlertDescription>
-        </Alert>
-      )}
-
-      {saveSuccess && (
-        <Alert className="border-primary/30 bg-primary/5 text-primary">
-          <RiCheckLine className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <AlertTitle className="text-foreground">Calendar Saved</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            Academic calendar basics have been validated and saved.
-          </AlertDescription>
         </Alert>
       )}
 
@@ -366,35 +340,50 @@ export function CalendarStep({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {periods.map((p, idx) => (
-                <TableRow key={p.index || idx}>
-                  <TableCell className="font-mono text-xs font-semibold">
-                    Period {p.index || idx + 1}
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="text"
-                      value={p.start}
-                      onChange={(e) => handlePeriodChange(idx, "start", e.target.value)}
-                      placeholder="09:00"
-                      maxLength={5}
-                      className="w-32 font-mono text-xs"
-                      disabled={isSaving}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="text"
-                      value={p.end}
-                      onChange={(e) => handlePeriodChange(idx, "end", e.target.value)}
-                      placeholder="09:55"
-                      maxLength={5}
-                      className="w-32 font-mono text-xs"
-                      disabled={isSaving}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
+              {periods.map((p, idx) => {
+                const periodNumber = p.index || idx + 1;
+                const startError = clientErrors[`periods.${idx}.start`];
+                const startErrorId = `period-${idx}-start-error`;
+
+                return (
+                  <TableRow key={p.index || idx}>
+                    <TableCell className="font-mono text-xs font-semibold">
+                      Period {periodNumber}
+                    </TableCell>
+                    <TableCell className="space-y-1.5">
+                      <Input
+                        type="text"
+                        value={p.start}
+                        onChange={(e) => handlePeriodChange(idx, "start", e.target.value)}
+                        placeholder="09:00"
+                        maxLength={5}
+                        className="w-32 font-mono text-xs"
+                        aria-label={`Period ${periodNumber} start time`}
+                        aria-invalid={Boolean(startError)}
+                        aria-describedby={startError ? startErrorId : undefined}
+                        disabled={isSaving}
+                      />
+                      {startError && (
+                        <p id={startErrorId} className="text-xs text-destructive font-medium" role="alert">
+                          {startError}
+                        </p>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        type="text"
+                        value={p.end}
+                        onChange={(e) => handlePeriodChange(idx, "end", e.target.value)}
+                        placeholder="09:55"
+                        maxLength={5}
+                        className="w-32 font-mono text-xs"
+                        aria-label={`Period ${periodNumber} end time`}
+                        disabled={isSaving}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -421,16 +410,14 @@ export function CalendarStep({
           ).map((item) => {
             const isSelected = dayOrderFormat === item.id;
             return (
-              <button
+              <Button
                 key={item.id}
                 type="button"
-                onClick={() => {
-                  setDayOrderFormat(item.id);
-                  onDirtyChange?.(true);
-                  setSaveSuccess(false);
-                }}
+                variant="outline"
+                onClick={() => setValues((prev) => ({ ...prev, day_order_format: item.id }))}
                 disabled={isSaving}
-                className={`p-4 rounded-lg border text-left transition-all ${
+                aria-pressed={isSelected}
+                className={`h-auto flex-col items-start gap-1 whitespace-normal p-4 rounded-lg border text-left transition-all ${
                   isSelected
                     ? "border-primary bg-primary/5 ring-1 ring-primary"
                     : "border-border bg-muted/20 hover:bg-muted/40"
@@ -440,7 +427,7 @@ export function CalendarStep({
                 <div className="text-xs text-muted-foreground mt-1 font-mono">
                   {item.sample}
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -462,26 +449,22 @@ export function CalendarStep({
 
       {/* FOOTER ACTIONS */}
       <div className="flex items-center justify-between border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onBack}>
+        <Button type="button" variant="outline" onClick={onBack} disabled={isSaving || navigationDisabled}>
           ← Back to Organisation
         </Button>
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isSaving}>
+          <Button type="submit" disabled={isSaving || navigationDisabled}>
             {isSaving ? (
               <>
                 <RiLoader4Line className="size-4 animate-spin mr-2" aria-hidden="true" />
                 Saving...
               </>
             ) : (
-              "Save Calendar"
+              isDirty ? "Save & Continue" : "Continue"
             )}
-          </Button>
-          <Button type="button" variant="outline" onClick={onNext}>
-            Next Step: Sign-up Policy →
           </Button>
         </div>
       </div>
     </form>
   );
 }
-

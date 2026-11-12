@@ -56,3 +56,37 @@ RFC 7807 problem detail type URIs resolve dynamically via `config/errors.php` (`
 - ✅ Resilient post-setup editing: Institutional settings can be tuned anytime without breaking completion status.
 - ✅ Fully decoupled problem-type configuration ready for production domain registration.
 
+---
+
+## Decision Amendment — 2026-11-12: Optional Sign-Up Policy at Finalization
+
+**Status:** Decided
+
+**Scope:** Supersedes the requirement in Decision §2 to explicitly complete `signup_policy` before finalization. The remaining setup lifecycle and authorization decisions continue to apply.
+
+### Rationale
+
+The sign-up preferences are currently inert pending the dedicated Self-Registration module. Requiring an explicit save of unchanged, disabled defaults adds a mandatory onboarding operation without an active registration workflow. Successful finalization can initialize the canonical policy while still preserving administrator-selected preferences.
+
+### Amended Contract
+
+- `POST /api/v1/setup/complete` still requires the `institution_profile` and `calendar_basics` setting rows **and** their nonempty completion timestamps, plus at least one Stream, Department, and Academic Year. Missing prerequisites return **HTTP 422** (`setup-prerequisites-missing`, `errors.missing`). An unsaved `signup_policy` is not a missing prerequisite.
+- Successful completion initializes a missing `signup_policy` through the existing schema-validated `TenantSetting` write path with:
+  - `student_self_registration_enabled = false`
+  - `parent_self_registration_enabled = false`
+  - `approval_mode = manual`
+- Existing policy values, `created_at`, and `updated_at` are preserved. An existing policy row without a step completion timestamp receives only the missing `setup.steps.signup_policy.completed_at`; the policy row is not re-saved. Existing step timestamps are preserved, including when a missing policy row must be recreated.
+- Policy initialization, any missing policy step timestamp, and `setup.completed_at` are persisted in **one tenant transaction** after all prerequisites pass. The status response is resolved within that transaction. A failed completion leaves no partially initialized policy or completion markers.
+- Completion locks existing setup/configuration rows in deterministic key order before checking the recorded completion state. The required profile/calendar timestamps imply an existing `setup` row, which serializes finalization even when no policy row exists to lock. One live prerequisite row of each kind is also locked until commit. Transaction retries handle deadlocks; a repeated call or a losing concurrent completion returns **HTTP 409** (`setup-already-completed`) after observing the winner's recorded timestamp.
+- `GET /api/v1/setup/status` remains read-only. Each step's `is_completed` requires both a nonempty completion timestamp and its setting row. Missing settings report `settings_exist = false`, `values = null`, and `is_completed = false` even if a historical timestamp remains. Policy defaults appear only after explicit saving or successful initialization at finalization.
+- `PUT /api/v1/setup/steps/signup_policy` remains available for explicit preferences before or after setup completion, preserving the existing re-save timestamp semantics.
+
+### Writer Attribution
+
+`tenant_settings` has no writer column or automatic setting-save audit hook. Automatic policy creation therefore uses the existing tenant-local `organisation` activity log and its authenticated-causer resolution. The event `signup_policy.defaults_initialized`, subject `TenantSetting` / `signup_policy`, and property `source = setup_completion` attribute creation to the completing administrator and distinguish automatic initialization from an explicit save. Existing policy rows are not re-attributed by completion.
+
+This amendment adds no migration, setting-schema fields, or response fields.
+
+### Revisit Trigger
+
+Revisit this decision when the dedicated **Self-Registration module** begins consuming `signup_policy`, before those preferences enable live student/parent registration or registration-queue approval. Its ADR must reassess whether policy review or explicit confirmation is required, define how existing automatically initialized policies are treated, and retain distinguishable writer provenance.

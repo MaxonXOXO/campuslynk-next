@@ -30,14 +30,17 @@ import {
   WIZARD_STEPS,
   deriveCurrentStep,
   deriveStepStates,
+  deriveSetupProgress,
   isValidStepId,
   type StepId,
   type SetupStatusData,
 } from "./logic/step-derivation";
+import { useSetupNavigation } from "./logic/use-setup-navigation";
 import {
   isImpersonationError,
   isWrongRoleForbiddenError,
   isSetupAlreadyCompletedError,
+  isSetupCompletionConflictError,
 } from "./logic/role-routing";
 import {
   mapProblemFieldErrors,
@@ -55,6 +58,8 @@ import {
   type StreamItem,
   type DepartmentItem,
   type AcademicYearItem,
+  type OrganisationSection,
+  type OrganisationLoadStates,
 } from "./components/OrganisationBasicsStep";
 import {
   CalendarStep,
@@ -80,13 +85,25 @@ function SetupWizardContent() {
 
   // Wizard Lifecycle & Data State
   const [status, setStatus] = React.useState<SetupStatusData | null>(null);
+  const statusRef = React.useRef<SetupStatusData | null>(null);
   const [currentStep, setCurrentStep] = React.useState<StepId>("institution_profile");
+  const currentStepRef = React.useRef<StepId>("institution_profile");
   const [viewingSummary, setViewingSummary] = React.useState(false);
 
   // Structural Prerequisite Collections
   const [streams, setStreams] = React.useState<StreamItem[]>([]);
   const [departments, setDepartments] = React.useState<DepartmentItem[]>([]);
   const [academicYears, setAcademicYears] = React.useState<AcademicYearItem[]>([]);
+  const [organisationLoadStates, setOrganisationLoadStates] = React.useState<OrganisationLoadStates>({
+    streams: { isLoading: true, error: null },
+    departments: { isLoading: true, error: null },
+    academicYears: { isLoading: true, error: null },
+  });
+  const organisationRequestIds = React.useRef<Record<OrganisationSection, number>>({
+    streams: 0,
+    departments: 0,
+    academicYears: 0,
+  });
 
   // Cached Step Values for Review Summary
   const [profileValues, setProfileValues] = React.useState<Partial<InstitutionProfileFormValues>>({});
@@ -96,7 +113,12 @@ function SetupWizardContent() {
   // Loading & Saving States
   const [isLoadingStatus, setIsLoadingStatus] = React.useState(true);
   const [isSavingStep, setIsSavingStep] = React.useState(false);
+  const savingStepRef = React.useRef(false);
+  const [isSavingOrganisation, setIsSavingOrganisation] = React.useState(false);
+  const savingOrganisationRef = React.useRef(false);
   const [isFinishing, setIsFinishing] = React.useState(false);
+  const finishingRef = React.useRef(false);
+  const [completionRetry, setCompletionRetry] = React.useState<"complete" | "status" | null>(null);
 
   // Security & Error States
   const [securityBlock, setSecurityBlock] = React.useState<"impersonation" | "forbidden" | null>(null);
@@ -105,11 +127,138 @@ function SetupWizardContent() {
   const [missingPrerequisites, setMissingPrerequisites] = React.useState<string[]>([]);
 
   // Dirty State & Navigation Guard
-  const [isDirty, setIsDirty] = React.useState(false);
-  const [pendingStepNavigation, setPendingStepNavigation] = React.useState<StepId | null>(null);
-  const [dirtyWarningOpen, setDirtyWarningOpen] = React.useState(false);
+  const [dirtySteps, setDirtySteps] = React.useState<Record<StepId, boolean>>({
+    institution_profile: false,
+    organisation_basics: false,
+    calendar_basics: false,
+    signup_policy: false,
+    review_finish: false,
+  });
+  const dirtyStepsRef = React.useRef(dirtySteps);
+  const [draftVersion, setDraftVersion] = React.useState(0);
+  const isDirty = dirtySteps[currentStep];
+  const isAnySaving = isSavingStep || isSavingOrganisation || isFinishing;
+
+  const setActiveStep = React.useCallback((step: StepId) => {
+    currentStepRef.current = step;
+    setCurrentStep(step);
+  }, []);
+
+  const setStepDirty = React.useCallback((step: StepId, dirty: boolean) => {
+    dirtyStepsRef.current = { ...dirtyStepsRef.current, [step]: dirty };
+    setDirtySteps((prev) => prev[step] === dirty ? prev : { ...prev, [step]: dirty });
+  }, []);
+
+  const dirtyChangeHandlers = React.useMemo(() => ({
+    institution_profile: (dirty: boolean) => setStepDirty("institution_profile", dirty),
+    organisation_basics: (dirty: boolean) => setStepDirty("organisation_basics", dirty),
+    calendar_basics: (dirty: boolean) => setStepDirty("calendar_basics", dirty),
+    signup_policy: (dirty: boolean) => setStepDirty("signup_policy", dirty),
+  }), [setStepDirty]);
+
+  const isNavigationSaving = React.useCallback(() =>
+    savingStepRef.current || savingOrganisationRef.current || finishingRef.current, []);
+
+  const hasUnsavedChanges = React.useCallback(() =>
+    dirtyStepsRef.current[currentStepRef.current], []);
+
+  const handleOrganisationSavingChange = React.useCallback((saving: boolean) => {
+    savingOrganisationRef.current = saving;
+    setIsSavingOrganisation(saving);
+  }, []);
 
   const initialRequestedStepRef = React.useRef<string | null>(requestedStepParam);
+
+  const navigation = useSetupNavigation({
+    hasUnsavedChanges,
+    isSaving: isNavigationSaving,
+    protectDocument: isDirty || isAnySaving,
+    onDiscard: () => {
+      setStepDirty(currentStepRef.current, false);
+      setDraftVersion((prev) => prev + 1);
+      setStepServerErrors({});
+      setGeneralError(null);
+    },
+    onHistoryNavigate: (url) => {
+      if (url.pathname !== "/setup") return;
+      const requestedStep = url.searchParams.get("step");
+      // A traversal during the initial GET must remain the resume target when it resolves.
+      initialRequestedStepRef.current = requestedStep;
+      setStepDirty(currentStepRef.current, false);
+      setStepServerErrors({});
+      setGeneralError(null);
+      setViewingSummary(Boolean(statusRef.current?.completed_at && !requestedStep));
+      setActiveStep(deriveCurrentStep(statusRef.current, requestedStep));
+    },
+  });
+  const isNavigationDisabled = isAnySaving || navigation.isRestoringHistory;
+
+  const updateSetupStatus = React.useCallback((statusData: SetupStatusData) => {
+    statusRef.current = statusData;
+    setStatus(statusData);
+
+    if (statusData.steps?.institution_profile?.values) {
+      setProfileValues(
+        statusData.steps.institution_profile.values as Partial<InstitutionProfileFormValues>
+      );
+    }
+    if (statusData.steps?.calendar_basics?.values) {
+      setCalendarValues(
+        statusData.steps.calendar_basics.values as Partial<CalendarFormValues>
+      );
+    }
+    if (statusData.steps?.signup_policy?.values) {
+      setSignupValues(
+        statusData.steps.signup_policy.values as Partial<SignupPolicyFormValues>
+      );
+    }
+  }, []);
+
+  const refreshOrganisationCollections = React.useCallback(async (section?: OrganisationSection) => {
+    const sections: OrganisationSection[] = section
+      ? [section]
+      : ["streams", "departments", "academicYears"];
+    const requests = {
+      streams: () => client.organisation.streams.list(),
+      departments: () => client.organisation.departments.list(),
+      academicYears: () => client.organisation.academicYears.list(),
+    };
+    const labels = { streams: "streams", departments: "departments", academicYears: "academic years" };
+
+    await Promise.allSettled(sections.map(async (key) => {
+      const requestId = ++organisationRequestIds.current[key];
+      setOrganisationLoadStates((prev) => ({
+        ...prev,
+        [key]: { isLoading: true, error: null },
+      }));
+
+      try {
+        const res = await requests[key]();
+        if (organisationRequestIds.current[key] !== requestId) return;
+
+        const data = (res as { data?: unknown }).data;
+        if (key === "streams") setStreams((data as StreamItem[]) || []);
+        if (key === "departments") setDepartments((data as DepartmentItem[]) || []);
+        if (key === "academicYears") setAcademicYears((data as AcademicYearItem[]) || []);
+        setOrganisationLoadStates((prev) => ({
+          ...prev,
+          [key]: { isLoading: false, error: null },
+        }));
+      } catch (err: unknown) {
+        if (organisationRequestIds.current[key] !== requestId) return;
+
+        if (key === "streams") setStreams([]);
+        if (key === "departments") setDepartments([]);
+        if (key === "academicYears") setAcademicYears([]);
+        const fallback = `Failed to load ${labels[key]}.`;
+        setOrganisationLoadStates((prev) => ({
+          ...prev,
+          [key]: { isLoading: false, error: getGeneralErrorMessage(err, fallback) || fallback },
+        }));
+        throw err;
+      }
+    }));
+  }, [client]);
 
   // Fetch status and prerequisite entities
   const loadSetupStatus = React.useCallback(
@@ -124,37 +273,7 @@ function SetupWizardContent() {
       try {
         const res = await client.setup.status();
         const statusData = res.data as SetupStatusData;
-        setStatus(statusData);
-
-        if (statusData.steps?.institution_profile?.values) {
-          setProfileValues(
-            statusData.steps.institution_profile.values as Partial<InstitutionProfileFormValues>
-          );
-        }
-        if (statusData.steps?.calendar_basics?.values) {
-          setCalendarValues(
-            statusData.steps.calendar_basics.values as Partial<CalendarFormValues>
-          );
-        }
-        if (statusData.steps?.signup_policy?.values) {
-          setSignupValues(
-            statusData.steps.signup_policy.values as Partial<SignupPolicyFormValues>
-          );
-        }
-
-        // Fetch structural collections
-        try {
-          const [streamsRes, deptsRes, yearsRes] = await Promise.all([
-            client.organisation.streams.list(),
-            client.organisation.departments.list(),
-            client.organisation.academicYears.list(),
-          ]);
-          setStreams(((streamsRes as { data?: unknown })?.data as StreamItem[]) || []);
-          setDepartments(((deptsRes as { data?: unknown })?.data as DepartmentItem[]) || []);
-          setAcademicYears(((yearsRes as { data?: unknown })?.data as AcademicYearItem[]) || []);
-        } catch {
-          // Fall back gracefully if individual entity lists fail
-        }
+        updateSetupStatus(statusData);
 
         if (!silent) {
           const initialStep = initialRequestedStepRef.current;
@@ -163,9 +282,13 @@ function SetupWizardContent() {
             setViewingSummary(true);
           } else {
             const derived = deriveCurrentStep(statusData, initialStep);
-            setCurrentStep(derived);
+            setActiveStep(derived);
           }
+          // Collection loading is shown independently in the organisation sections.
+          setIsLoadingStatus(false);
         }
+
+        await refreshOrganisationCollections();
       } catch (err: unknown) {
         if (!silent) {
           if (isImpersonationError(err)) {
@@ -182,7 +305,7 @@ function SetupWizardContent() {
         }
       }
     },
-    [client]
+    [client, updateSetupStatus, refreshOrganisationCollections, setActiveStep]
   );
 
   const refreshSetupStatusSilently = React.useCallback(async () => {
@@ -193,64 +316,56 @@ function SetupWizardContent() {
     void loadSetupStatus();
   }, [loadSetupStatus]);
 
-  // Synchronize currentStep if URL ?step= query parameter changes (e.g. browser Back/Forward)
+  // Native-history changes reach this effect only after the traversal is allowed.
   React.useEffect(() => {
-    if (requestedStepParam && isValidStepId(requestedStepParam)) {
+    if (requestedStepParam && isValidStepId(requestedStepParam) &&
+      requestedStepParam === new URLSearchParams(window.location.search).get("step") &&
+      !navigation.isRestoringHistory && !isNavigationSaving() && !hasUnsavedChanges()) {
       setViewingSummary(false);
-      setCurrentStep(requestedStepParam);
+      setActiveStep(requestedStepParam);
     }
-  }, [requestedStepParam]);
+  }, [requestedStepParam, navigation.isRestoringHistory, isNavigationSaving, hasUnsavedChanges, setActiveStep]);
 
   // Handle URL step synchronization
-  const navigateToStep = (targetStep: StepId, force = false) => {
-    if (isDirty && !force) {
-      setPendingStepNavigation(targetStep);
-      setDirtyWarningOpen(true);
-      return;
-    }
-
-    setIsDirty(false);
-    setStepServerErrors({});
-    setGeneralError(null);
-    setViewingSummary(false);
-    setCurrentStep(targetStep);
-
-    // Sync query parameter
-    const params = new URLSearchParams(window.location.search);
-    params.set("step", targetStep);
-    router.push(`/setup?${params.toString()}`);
-  };
-
-  const handleConfirmLeaveDirty = () => {
-    setDirtyWarningOpen(false);
-    if (pendingStepNavigation) {
-      navigateToStep(pendingStepNavigation, true);
-      setPendingStepNavigation(null);
-    }
+  const navigateToStep = (targetStep: StepId, afterSave = false) => {
+    if (targetStep === currentStepRef.current && !viewingSummary) return;
+    navigation.requestNavigation(() => {
+      setStepDirty(currentStepRef.current, false);
+      setStepServerErrors({});
+      setGeneralError(null);
+      setViewingSummary(false);
+      setActiveStep(targetStep);
+      navigation.pushStep(targetStep);
+      // Native query navigation does not provide router.push's scroll handling.
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }, afterSave);
   };
 
   // STEP 1: SAVE INSTITUTION PROFILE
   const handleSaveProfile = async (values: InstitutionProfileFormValues): Promise<boolean> => {
+    if (isNavigationSaving()) return false;
+    savingStepRef.current = true;
     setIsSavingStep(true);
     setStepServerErrors({});
     setGeneralError(null);
 
     try {
       const res = await client.setup.saveStep("institution_profile", values as unknown as Record<string, unknown>);
-      setStatus(res.data as SetupStatusData);
-      setProfileValues(values);
+      statusRef.current = res.data as SetupStatusData;
+      setStatus(statusRef.current);
+      setProfileValues((statusRef.current.steps?.institution_profile?.values as Partial<InstitutionProfileFormValues> | null) ?? values);
       toast.success("Institution profile saved successfully.");
-      setIsDirty(false);
+      setStepDirty("institution_profile", false);
       return true;
     } catch (err: unknown) {
       const fieldErrors = mapProblemFieldErrors(err);
       if (Object.keys(fieldErrors).length > 0) {
         setStepServerErrors(fieldErrors);
-      } else {
-        setGeneralError(getGeneralErrorMessage(err, "Failed to save institution profile."));
       }
+      setGeneralError(getGeneralErrorMessage(err, "Failed to save institution profile.") || "Failed to save institution profile.");
       return false;
     } finally {
+      savingStepRef.current = false;
       setIsSavingStep(false);
     }
   };
@@ -338,86 +453,114 @@ function SetupWizardContent() {
 
   // STEP 3: SAVE CALENDAR
   const handleSaveCalendar = async (values: CalendarFormValues): Promise<boolean> => {
+    if (isNavigationSaving()) return false;
+    savingStepRef.current = true;
     setIsSavingStep(true);
     setStepServerErrors({});
     setGeneralError(null);
 
     try {
       const res = await client.setup.saveStep("calendar_basics", values as unknown as Record<string, unknown>);
-      setStatus(res.data as SetupStatusData);
-      setCalendarValues(values);
+      statusRef.current = res.data as SetupStatusData;
+      setStatus(statusRef.current);
+      setCalendarValues((statusRef.current.steps?.calendar_basics?.values as Partial<CalendarFormValues> | null) ?? values);
       toast.success("Academic calendar basics saved.");
-      setIsDirty(false);
+      setStepDirty("calendar_basics", false);
       return true;
     } catch (err: unknown) {
       const fieldErrors = mapProblemFieldErrors(err);
       if (Object.keys(fieldErrors).length > 0) {
         setStepServerErrors(fieldErrors);
-      } else {
-        setGeneralError(getGeneralErrorMessage(err, "Failed to save calendar basics."));
       }
+      setGeneralError(getGeneralErrorMessage(err, "Failed to save calendar basics.") || "Failed to save calendar basics.");
       return false;
     } finally {
+      savingStepRef.current = false;
       setIsSavingStep(false);
     }
   };
 
   // STEP 4: SAVE SIGN-UP POLICY
   const handleSaveSignupPolicy = async (values: SignupPolicyFormValues): Promise<boolean> => {
+    if (isNavigationSaving()) return false;
+    savingStepRef.current = true;
     setIsSavingStep(true);
     setStepServerErrors({});
     setGeneralError(null);
 
     try {
       const res = await client.setup.saveStep("signup_policy", values as unknown as Record<string, unknown>);
-      setStatus(res.data as SetupStatusData);
-      setSignupValues(values);
+      statusRef.current = res.data as SetupStatusData;
+      setStatus(statusRef.current);
+      setSignupValues((statusRef.current.steps?.signup_policy?.values as Partial<SignupPolicyFormValues> | null) ?? values);
       toast.success("Sign-up policy preferences saved.");
-      setIsDirty(false);
+      setStepDirty("signup_policy", false);
       return true;
     } catch (err: unknown) {
       const fieldErrors = mapProblemFieldErrors(err);
       if (Object.keys(fieldErrors).length > 0) {
         setStepServerErrors(fieldErrors);
-      } else {
-        setGeneralError(getGeneralErrorMessage(err, "Failed to save sign-up policy."));
       }
+      setGeneralError(getGeneralErrorMessage(err, "Failed to save sign-up policy.") || "Failed to save sign-up policy.");
       return false;
     } finally {
+      savingStepRef.current = false;
       setIsSavingStep(false);
     }
   };
 
   // STEP 5: FINISH SETUP
-  const handleFinishSetup = async () => {
+  const handleFinishSetup = async (refreshStatusOnly = false) => {
+    if (isNavigationSaving()) return;
+    finishingRef.current = true;
+    let isRefreshingCompletedStatus = refreshStatusOnly;
     setIsFinishing(true);
     setGeneralError(null);
     setMissingPrerequisites([]);
+    setCompletionRetry(null);
 
     try {
-      const res = await client.setup.complete();
-      const updatedStatus = res.data as SetupStatusData;
-      setStatus(updatedStatus);
-      toast.success("First-run setup finalized successfully!");
+      if (!isRefreshingCompletedStatus) {
+        try {
+          const res = await client.setup.complete();
+          const updatedStatus = res.data as SetupStatusData;
+          statusRef.current = updatedStatus;
+          setStatus(updatedStatus);
+          toast.success("First-run setup finalized successfully!");
+          setViewingSummary(true);
+          return;
+        } catch (err: unknown) {
+          if (!isSetupAlreadyCompletedError(err)) throw err;
+          isRefreshingCompletedStatus = true;
+        }
+      }
+
+      const res = await client.setup.status();
+      const refreshedStatus = res.data as SetupStatusData;
+      if (!refreshedStatus.is_completed || !refreshedStatus.completed_at) {
+        throw new Error("Setup completion could not be confirmed. Please retry.");
+      }
+      updateSetupStatus(refreshedStatus);
+      toast.info("Setup was already finalized.");
       setViewingSummary(true);
     } catch (err: unknown) {
-      if (isSetupAlreadyCompletedError(err)) {
-        // Prompt item 10: "On 409 setup-already-completed, route to the completed summary, not an error screen."
-        toast.info("Setup was already finalized.");
-        setViewingSummary(true);
-      } else {
-        const missing = extractMissingPrerequisites(err);
-        if (missing.length > 0) {
-          setMissingPrerequisites(missing);
-        }
-        setGeneralError(
-          getGeneralErrorMessage(
-            err,
-            "Cannot finalize setup. Please ensure all steps and prerequisite counts are satisfied."
-          )
-        );
+      const isConflict = isSetupCompletionConflictError(err);
+      if (isRefreshingCompletedStatus || isConflict) {
+        setCompletionRetry(isRefreshingCompletedStatus ? "status" : "complete");
       }
+      const missing = extractMissingPrerequisites(err);
+      if (missing.length > 0) {
+        setMissingPrerequisites(missing);
+      }
+      const fallback = isRefreshingCompletedStatus
+        ? "Failed to refresh completed setup status. Please retry."
+        : isConflict
+          ? "Setup could not be finalized because of a conflict. Please retry."
+          : "Cannot finalize setup. Please ensure all steps and prerequisite counts are satisfied.";
+      const message = getGeneralErrorMessage(err, fallback);
+      setGeneralError(isRefreshingCompletedStatus || isConflict ? message || fallback : message);
     } finally {
+      finishingRef.current = false;
       setIsFinishing(false);
     }
   };
@@ -483,21 +626,7 @@ function SetupWizardContent() {
   const activeStepMeta =
     WIZARD_STEPS.find((s) => s.id === currentStep) ?? WIZARD_STEPS[0]!;
 
-  // Calculate overall completed count for sidebar progress bar
-  const isOrgReady =
-    (status?.prerequisites?.streams_count ?? 0) >= 1 &&
-    (status?.prerequisites?.departments_count ?? 0) >= 1 &&
-    (status?.prerequisites?.academic_years_count ?? 0) >= 1;
-
-  const completedStepsCount = [
-    Boolean(status?.steps?.institution_profile?.is_completed),
-    isOrgReady,
-    Boolean(status?.steps?.calendar_basics?.is_completed),
-    Boolean(status?.steps?.signup_policy?.is_completed),
-    Boolean(status?.is_completed),
-  ].filter(Boolean).length;
-
-  const progressPercentage = Math.round((completedStepsCount / WIZARD_STEPS.length) * 100);
+  const progress = deriveSetupProgress(status);
 
   return (
     <main className="min-h-screen bg-muted/20 text-foreground py-6 px-4 sm:px-6 lg:py-8 lg:px-8">
@@ -529,23 +658,24 @@ function SetupWizardContent() {
                 <div className="mt-4 pt-4 border-t border-border/60 space-y-2">
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-medium text-muted-foreground">
-                      Setup Completion
+                      Prerequisite Progress
                     </span>
                     <span className="font-mono font-semibold text-foreground">
-                      {completedStepsCount} of {WIZARD_STEPS.length} steps ({progressPercentage}%)
+                      {progress.completedRequirements} of {progress.totalRequirements} prerequisite steps ({progress.percentage}%)
                     </span>
                   </div>
                   <div
                     className="h-2 w-full rounded-full bg-muted overflow-hidden"
                     role="progressbar"
-                    aria-valuenow={progressPercentage}
+                    aria-valuenow={progress.percentage}
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-label="Overall setup completion progress"
+                    aria-label="Setup prerequisite progress"
+                    aria-valuetext={`${progress.completedRequirements} of ${progress.totalRequirements} prerequisite steps ready`}
                   >
                     <div
                       className="h-full bg-primary transition-all duration-300 rounded-full"
-                      style={{ width: `${progressPercentage}%` }}
+                      style={{ width: `${progress.percentage}%` }}
                     />
                   </div>
                 </div>
@@ -558,7 +688,8 @@ function SetupWizardContent() {
                       variant="outline"
                       size="sm"
                       className="w-full justify-center"
-                      onClick={() => setViewingSummary(!viewingSummary)}
+                      onClick={() => navigation.requestNavigation(() => setViewingSummary(!viewingSummary))}
+                      disabled={isNavigationDisabled}
                     >
                       {viewingSummary ? "Open Wizard Steps" : "View Read-only Summary"}
                     </Button>
@@ -583,7 +714,7 @@ function SetupWizardContent() {
                     currentStep={currentStep}
                     stepStates={stepStates}
                     onStepClick={(step) => navigateToStep(step)}
-                    disabled={isSavingStep || isFinishing}
+                    disabled={isNavigationDisabled}
                   />
                 </div>
               )}
@@ -666,13 +797,13 @@ function SetupWizardContent() {
               )}
 
               <div className="flex items-center gap-2 self-start sm:self-auto">
-                {status?.is_completed ? (
+                {progress.completionState === "completed" ? (
                   <Badge variant="default" className="text-xs">
                     Setup Complete
                   </Badge>
                 ) : (
                   <Badge variant="outline" className="text-xs text-muted-foreground">
-                    In Progress
+                    {progress.completionState === "ready_to_finalize" ? "Ready to Finalize" : "In Progress"}
                   </Badge>
                 )}
               </div>
@@ -687,31 +818,34 @@ function SetupWizardContent() {
                     profileValues={profileValues}
                     calendarValues={calendarValues}
                     signupValues={signupValues}
-                    onEditStep={(step) => {
-                      setViewingSummary(false);
-                      navigateToStep(step);
-                    }}
-                    onGoToDashboard={() => router.push("/")}
+                    onEditStep={(step) => navigateToStep(step)}
+                    onGoToDashboard={() => navigation.requestNavigation(() => router.push("/home"))}
                   />
                 ) : (
                   <>
                     {currentStep === "institution_profile" && (
                       <InstitutionProfileStep
+                        key={`profile-${draftVersion}`}
                         initialValues={profileValues}
-                        isSaving={isSavingStep}
+                        isSaving={isAnySaving}
+                        isPersisted={Boolean(status?.steps.institution_profile.is_completed && status.steps.institution_profile.settings_exist)}
+                        navigationDisabled={isNavigationDisabled}
                         serverErrors={stepServerErrors}
                         generalError={generalError}
                         onSave={handleSaveProfile}
-                        onNext={() => navigateToStep("organisation_basics")}
-                        onDirtyChange={setIsDirty}
+                        onNext={() => navigateToStep("organisation_basics", true)}
+                        onDirtyChange={dirtyChangeHandlers.institution_profile}
                       />
                     )}
 
                     {currentStep === "organisation_basics" && (
                       <OrganisationBasicsStep
+                        key={`organisation-${draftVersion}`}
                         streams={streams}
                         departments={departments}
                         academicYears={academicYears}
+                        loadStates={organisationLoadStates}
+                        onRetryLoad={refreshOrganisationCollections}
                         onRefresh={refreshSetupStatusSilently}
                         onCreateStream={handleCreateStream}
                         onRenameStream={handleRenameStream}
@@ -721,32 +855,41 @@ function SetupWizardContent() {
                         onCreateAcademicYear={handleCreateAcademicYear}
                         onNext={() => navigateToStep("calendar_basics")}
                         onBack={() => navigateToStep("institution_profile")}
+                        navigationDisabled={isNavigationDisabled}
+                        onSavingChange={handleOrganisationSavingChange}
+                        onDirtyChange={dirtyChangeHandlers.organisation_basics}
                       />
                     )}
 
                     {currentStep === "calendar_basics" && (
                       <CalendarStep
+                        key={`calendar-${draftVersion}`}
                         initialValues={calendarValues}
-                        isSaving={isSavingStep}
+                        isSaving={isAnySaving}
+                        isPersisted={Boolean(status?.steps.calendar_basics.is_completed && status.steps.calendar_basics.settings_exist)}
+                        navigationDisabled={isNavigationDisabled}
                         serverErrors={stepServerErrors}
                         generalError={generalError}
                         onSave={handleSaveCalendar}
-                        onNext={() => navigateToStep("signup_policy")}
+                        onNext={() => navigateToStep("signup_policy", true)}
                         onBack={() => navigateToStep("organisation_basics")}
-                        onDirtyChange={setIsDirty}
+                        onDirtyChange={dirtyChangeHandlers.calendar_basics}
                       />
                     )}
 
                     {currentStep === "signup_policy" && (
                       <SignupPolicyStep
+                        key={`signup-${draftVersion}`}
                         initialValues={signupValues}
-                        isSaving={isSavingStep}
+                        isSaving={isAnySaving}
+                        isPersisted={Boolean(status?.steps.signup_policy.is_completed && status.steps.signup_policy.settings_exist)}
+                        navigationDisabled={isNavigationDisabled}
                         serverErrors={stepServerErrors}
                         generalError={generalError}
                         onSave={handleSaveSignupPolicy}
-                        onNext={() => navigateToStep("review_finish")}
+                        onNext={() => navigateToStep("review_finish", true)}
                         onBack={() => navigateToStep("calendar_basics")}
-                        onDirtyChange={setIsDirty}
+                        onDirtyChange={dirtyChangeHandlers.signup_policy}
                       />
                     )}
 
@@ -760,7 +903,8 @@ function SetupWizardContent() {
                         missingPrerequisites={missingPrerequisites}
                         generalError={generalError}
                         onEditStep={(step) => navigateToStep(step)}
-                        onFinish={handleFinishSetup}
+                        onFinish={() => handleFinishSetup()}
+                        onRetry={completionRetry ? () => handleFinishSetup(completionRetry === "status") : undefined}
                         onBack={() => navigateToStep("signup_policy")}
                       />
                     )}
@@ -774,12 +918,10 @@ function SetupWizardContent() {
 
       {/* DIRTY STEP NAVIGATION DIALOG */}
       <DirtyStepWarningDialog
-        open={dirtyWarningOpen}
-        onConfirm={handleConfirmLeaveDirty}
-        onCancel={() => {
-          setDirtyWarningOpen(false);
-          setPendingStepNavigation(null);
-        }}
+        open={navigation.warningOpen}
+        disabled={isNavigationDisabled}
+        onConfirm={navigation.confirmDiscard}
+        onCancel={navigation.cancelNavigation}
       />
     </main>
   );

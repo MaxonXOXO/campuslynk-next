@@ -501,7 +501,7 @@ it('lists missing prerequisites when complete is called prematurely, completes c
         expect($missing)->toBeArray()
             ->and($missing)->toContain('Setup step [institution_profile] is not completed.')
             ->and($missing)->toContain('Setup step [calendar_basics] is not completed.')
-            ->and($missing)->toContain('Setup step [signup_policy] is not completed.')
+            ->and($missing)->not->toContain('Setup step [signup_policy] is not completed.')
             ->and($missing)->toContain('At least one stream must exist.')
             ->and($missing)->toContain('At least one department must exist.')
             ->and($missing)->toContain('At least one academic year must exist.');

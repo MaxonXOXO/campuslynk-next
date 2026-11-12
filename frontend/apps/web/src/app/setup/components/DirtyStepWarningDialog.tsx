@@ -14,17 +14,19 @@ import { RiAlertLine } from "@remixicon/react";
 
 interface DirtyStepWarningDialogProps {
   open: boolean;
+  disabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
 export function DirtyStepWarningDialog({
   open,
+  disabled = false,
   onConfirm,
   onCancel,
 }: DirtyStepWarningDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onCancel()}>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !disabled && onCancel()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-2 text-destructive mb-1">
@@ -38,10 +40,10 @@ export function DirtyStepWarningDialog({
         </DialogHeader>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button type="button" variant="outline" onClick={onCancel}>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={disabled}>
             Stay on Step
           </Button>
-          <Button type="button" variant="destructive" onClick={onConfirm}>
+          <Button type="button" variant="destructive" onClick={onConfirm} disabled={disabled}>
             Discard &amp; Leave
           </Button>
         </DialogFooter>
@@ -49,4 +51,3 @@ export function DirtyStepWarningDialog({
     </Dialog>
   );
 }
-

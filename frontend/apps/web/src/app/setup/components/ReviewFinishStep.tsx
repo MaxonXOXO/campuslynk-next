@@ -16,6 +16,7 @@ import {
   RiEditLine,
   RiLoader4Line,
   RiShieldCheckLine,
+  RiRefreshLine,
 } from "@remixicon/react";
 import {
   isFinishEnabled,
@@ -38,6 +39,7 @@ interface ReviewFinishStepProps {
   generalError?: string | null;
   onEditStep: (step: StepId) => void;
   onFinish: () => Promise<void>;
+  onRetry?: () => Promise<void>;
   onBack: () => void;
 }
 
@@ -52,6 +54,7 @@ export function ReviewFinishStep({
   generalError = null,
   onEditStep,
   onFinish,
+  onRetry,
   onBack,
 }: ReviewFinishStepProps) {
   const canFinish = isFinishEnabled(status);
@@ -83,7 +86,21 @@ export function ReviewFinishStep({
         <Alert variant="destructive">
           <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Setup Finalization Error</AlertTitle>
-          <AlertDescription>{generalError}</AlertDescription>
+          <AlertDescription className="space-y-3">
+            <p>{generalError}</p>
+            {onRetry && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void onRetry()}
+                disabled={isFinishing}
+              >
+                <RiRefreshLine className="size-4 mr-1.5" aria-hidden="true" />
+                Retry Finalization
+              </Button>
+            )}
+          </AlertDescription>
         </Alert>
       )}
 
@@ -138,6 +155,7 @@ export function ReviewFinishStep({
                   size="sm"
                   className="h-7 text-xs text-primary"
                   onClick={() => onEditStep(item.stepTarget)}
+                  disabled={isFinishing}
                 >
                   Configure →
                 </Button>
@@ -161,6 +179,7 @@ export function ReviewFinishStep({
               variant="outline"
               size="sm"
               onClick={() => onEditStep("institution_profile")}
+              disabled={isFinishing}
             >
               <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
             </Button>
@@ -206,6 +225,7 @@ export function ReviewFinishStep({
               variant="outline"
               size="sm"
               onClick={() => onEditStep("organisation_basics")}
+              disabled={isFinishing}
             >
               <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
             </Button>
@@ -244,6 +264,7 @@ export function ReviewFinishStep({
               variant="outline"
               size="sm"
               onClick={() => onEditStep("calendar_basics")}
+              disabled={isFinishing}
             >
               <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
             </Button>
@@ -282,6 +303,7 @@ export function ReviewFinishStep({
               variant="outline"
               size="sm"
               onClick={() => onEditStep("signup_policy")}
+              disabled={isFinishing}
             >
               <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
             </Button>
@@ -339,4 +361,3 @@ export function ReviewFinishStep({
     </div>
   );
 }
-

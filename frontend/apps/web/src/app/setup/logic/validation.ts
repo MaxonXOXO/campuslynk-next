@@ -1,6 +1,6 @@
 /**
  * First-Run Setup Wizard Validation Logic
- * Mirrors backend schema rules and CalendarBasicsRule
+ * Validates setup forms and chronological period schedules
  */
 
 export const VALID_WEEKDAYS = [
@@ -85,7 +85,7 @@ export function validatePeriods(
     };
   }
 
-  const parsedIntervals: Array<{ index: number; start: number; end: number; startStr: string; endStr: string }> = [];
+  const parsedIntervals: Array<{ index: number; row: number; start: number; end: number; startStr: string; endStr: string }> = [];
 
   for (let i = 0; i < periods.length; i++) {
     const p = periods[i];
@@ -118,6 +118,7 @@ export function validatePeriods(
 
     parsedIntervals.push({
       index: periodNumber,
+      row: i,
       start: startMin,
       end: endMin,
       startStr: p.start,
@@ -125,7 +126,7 @@ export function validatePeriods(
     });
   }
 
-  // Check chronological order and overlaps
+  // Check overlaps independently of period numbering.
   const sorted = [...parsedIntervals].sort((a, b) => a.start - b.start);
 
   for (let i = 0; i < sorted.length - 1; i++) {
@@ -134,9 +135,28 @@ export function validatePeriods(
     if (!curr || !next) continue;
 
     if (curr.end > next.start) {
+      const error = `Periods overlap: Period ${curr.index} (${curr.startStr}–${curr.endStr}) overlaps with Period ${next.index} (${next.startStr}–${next.endStr}).`;
       return {
         valid: false,
-        error: `Periods overlap: Period ${curr.index} (${curr.startStr}–${curr.endStr}) overlaps with Period ${next.index} (${next.startStr}–${next.endStr}).`,
+        error,
+        errors: { [`periods.${next.row}.start`]: error },
+      };
+    }
+  }
+
+  // Period N must finish before (or exactly when) period N+1 starts.
+  const byPeriodNumber = [...parsedIntervals].sort((a, b) => a.index - b.index);
+  for (let i = 0; i < byPeriodNumber.length - 1; i++) {
+    const curr = byPeriodNumber[i];
+    const next = byPeriodNumber[i + 1];
+    if (!curr || !next) continue;
+
+    if (curr.end > next.start) {
+      const error = `Period ${next.index} must start at or after Period ${curr.index} ends (${curr.endStr}).`;
+      return {
+        valid: false,
+        error,
+        errors: { [`periods.${next.row}.start`]: error },
       };
     }
   }

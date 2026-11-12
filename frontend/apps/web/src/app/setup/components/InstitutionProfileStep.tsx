@@ -10,16 +10,19 @@ import {
   AlertDescription,
   Skeleton,
 } from "@academic-suite/ui";
-import { RiLoader4Line, RiAlertLine, RiCheckLine } from "@remixicon/react";
+import { RiLoader4Line, RiAlertLine } from "@remixicon/react";
 import {
   validateInstitutionProfile,
   type InstitutionProfileFormValues,
 } from "../logic/validation";
+import { useStepForm } from "../logic/use-step-form";
 
 interface InstitutionProfileStepProps {
   initialValues?: Partial<InstitutionProfileFormValues>;
   isLoading?: boolean;
   isSaving?: boolean;
+  isPersisted?: boolean;
+  navigationDisabled?: boolean;
   serverErrors?: Record<string, string>;
   generalError?: string | null;
   onSave: (values: InstitutionProfileFormValues) => Promise<boolean>;
@@ -31,13 +34,15 @@ export function InstitutionProfileStep({
   initialValues,
   isLoading = false,
   isSaving = false,
+  isPersisted = false,
+  navigationDisabled = false,
   serverErrors = {},
   generalError = null,
   onSave,
   onNext,
   onDirtyChange,
 }: InstitutionProfileStepProps) {
-  const [values, setValues] = React.useState<InstitutionProfileFormValues>({
+  const initialFormValues = React.useMemo<InstitutionProfileFormValues>(() => ({
     name: initialValues?.name || "",
     short_code: initialValues?.short_code || "",
     board: initialValues?.board || "",
@@ -52,29 +57,19 @@ export function InstitutionProfileStep({
     state: initialValues?.state || "",
     postal_code: initialValues?.postal_code || "",
     website: initialValues?.website || "",
-  });
+  }), [initialValues]);
+  const { values, setValues, isDirty, markSaved } = useStepForm(
+    initialFormValues, isPersisted, onDirtyChange
+  );
+  const submitting = React.useRef(false);
 
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
-  const [saveSuccess, setSaveSuccess] = React.useState(false);
-
-  // Synchronize when initialValues arrive asynchronously
-  React.useEffect(() => {
-    if (initialValues) {
-      setValues((prev) => ({
-        ...prev,
-        ...initialValues,
-      }));
-    }
-  }, [initialValues]);
 
   const handleChange = (field: keyof InstitutionProfileFormValues, value: string) => {
     setValues((prev) => {
       const next = { ...prev, [field]: value };
       return next;
     });
-    onDirtyChange?.(true);
-    setSaveSuccess(false);
-
     if (fieldErrors[field] || serverErrors[field]) {
       setFieldErrors((prev) => {
         const next = { ...prev };
@@ -86,7 +81,11 @@ export function InstitutionProfileStep({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaveSuccess(false);
+    if (isSaving || navigationDisabled || submitting.current) return;
+    if (!isDirty) {
+      onNext();
+      return;
+    }
 
     // Client-side validation
     const errors = validateInstitutionProfile(values);
@@ -96,10 +95,14 @@ export function InstitutionProfileStep({
     }
 
     setFieldErrors({});
-    const success = await onSave(values);
-    if (success) {
-      setSaveSuccess(true);
-      onDirtyChange?.(false);
+    submitting.current = true;
+    try {
+      if (await onSave(values)) {
+        markSaved(values);
+        onNext();
+      }
+    } finally {
+      submitting.current = false;
     }
   };
 
@@ -123,7 +126,7 @@ export function InstitutionProfileStep({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} noValidate className="space-y-6">
       <div>
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Institution Profile
@@ -139,17 +142,6 @@ export function InstitutionProfileStep({
           <RiAlertLine className="size-4 shrink-0" aria-hidden="true" />
           <AlertTitle>Configuration Error</AlertTitle>
           <AlertDescription>{generalError}</AlertDescription>
-        </Alert>
-      )}
-
-      {saveSuccess && (
-        <Alert className="border-primary/30 bg-primary/5 text-primary">
-          <RiCheckLine className="size-4 shrink-0 text-primary" aria-hidden="true" />
-          <AlertTitle className="text-foreground">Settings Saved</AlertTitle>
-          <AlertDescription className="text-muted-foreground">
-            Institution profile has been saved. You can proceed to Organisation Basics or
-            review other steps.
-          </AlertDescription>
         </Alert>
       )}
 
@@ -214,8 +206,15 @@ export function InstitutionProfileStep({
               value={values.board || ""}
               onChange={(e) => handleChange("board", e.target.value)}
               placeholder="State Technical Education Board"
+              aria-invalid={Boolean(getFieldError("board"))}
+              aria-describedby={getFieldError("board") ? "inst-board-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("board") && (
+              <p id="inst-board-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("board")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -228,8 +227,15 @@ export function InstitutionProfileStep({
               value={values.board_code || ""}
               onChange={(e) => handleChange("board_code", e.target.value)}
               placeholder="BRD-001"
+              aria-invalid={Boolean(getFieldError("board_code"))}
+              aria-describedby={getFieldError("board_code") ? "inst-board-code-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("board_code") && (
+              <p id="inst-board-code-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("board_code")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -242,8 +248,15 @@ export function InstitutionProfileStep({
               value={values.affiliation || ""}
               onChange={(e) => handleChange("affiliation", e.target.value)}
               placeholder="Technical University / Directorate"
+              aria-invalid={Boolean(getFieldError("affiliation"))}
+              aria-describedby={getFieldError("affiliation") ? "inst-affiliation-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("affiliation") && (
+              <p id="inst-affiliation-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("affiliation")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -256,8 +269,15 @@ export function InstitutionProfileStep({
               value={values.affiliation_code || ""}
               onChange={(e) => handleChange("affiliation_code", e.target.value)}
               placeholder="AFF-001"
+              aria-invalid={Boolean(getFieldError("affiliation_code"))}
+              aria-describedby={getFieldError("affiliation_code") ? "inst-affiliation-code-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("affiliation_code") && (
+              <p id="inst-affiliation-code-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("affiliation_code")}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -300,8 +320,15 @@ export function InstitutionProfileStep({
               value={values.contact_phone || ""}
               onChange={(e) => handleChange("contact_phone", e.target.value)}
               placeholder="+91 00000 00000"
+              aria-invalid={Boolean(getFieldError("contact_phone"))}
+              aria-describedby={getFieldError("contact_phone") ? "inst-phone-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("contact_phone") && (
+              <p id="inst-phone-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("contact_phone")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -343,8 +370,15 @@ export function InstitutionProfileStep({
               value={values.address_line1 || ""}
               onChange={(e) => handleChange("address_line1", e.target.value)}
               placeholder="Campus Road / Sector"
+              aria-invalid={Boolean(getFieldError("address_line1"))}
+              aria-describedby={getFieldError("address_line1") ? "inst-addr1-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("address_line1") && (
+              <p id="inst-addr1-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("address_line1")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5 md:col-span-2">
@@ -357,8 +391,15 @@ export function InstitutionProfileStep({
               value={values.address_line2 || ""}
               onChange={(e) => handleChange("address_line2", e.target.value)}
               placeholder="Post / Area"
+              aria-invalid={Boolean(getFieldError("address_line2"))}
+              aria-describedby={getFieldError("address_line2") ? "inst-addr2-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("address_line2") && (
+              <p id="inst-addr2-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("address_line2")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -371,8 +412,15 @@ export function InstitutionProfileStep({
               value={values.city || ""}
               onChange={(e) => handleChange("city", e.target.value)}
               placeholder="City"
+              aria-invalid={Boolean(getFieldError("city"))}
+              aria-describedby={getFieldError("city") ? "inst-city-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("city") && (
+              <p id="inst-city-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("city")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -385,8 +433,15 @@ export function InstitutionProfileStep({
               value={values.state || ""}
               onChange={(e) => handleChange("state", e.target.value)}
               placeholder="State"
+              aria-invalid={Boolean(getFieldError("state"))}
+              aria-describedby={getFieldError("state") ? "inst-state-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("state") && (
+              <p id="inst-state-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("state")}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -399,8 +454,15 @@ export function InstitutionProfileStep({
               value={values.postal_code || ""}
               onChange={(e) => handleChange("postal_code", e.target.value)}
               placeholder="000000"
+              aria-invalid={Boolean(getFieldError("postal_code"))}
+              aria-describedby={getFieldError("postal_code") ? "inst-postal-error" : undefined}
               disabled={isSaving}
             />
+            {getFieldError("postal_code") && (
+              <p id="inst-postal-error" className="text-xs text-destructive font-medium" role="alert">
+                {getFieldError("postal_code")}
+              </p>
+            )}
           </div>
         </div>
       </div>
@@ -411,22 +473,18 @@ export function InstitutionProfileStep({
           Step 1 of 5 • Profile settings
         </div>
         <div className="flex items-center gap-3">
-          <Button type="submit" disabled={isSaving}>
+          <Button type="submit" disabled={isSaving || navigationDisabled}>
             {isSaving ? (
               <>
                 <RiLoader4Line className="size-4 animate-spin mr-2" aria-hidden="true" />
                 Saving...
               </>
             ) : (
-              "Save Profile"
+              isDirty ? "Save & Continue" : "Continue"
             )}
-          </Button>
-          <Button type="button" variant="outline" onClick={onNext}>
-            Next Step →
           </Button>
         </div>
       </div>
     </form>
   );
 }
-

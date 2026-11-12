@@ -181,8 +181,8 @@ describe("Role Routing & Gating Logic (Part 2 & Part 6)", () => {
   });
 
   describe("isSetupAlreadyCompletedError (409)", () => {
-    it("identifies 409 status as setup-already-completed", () => {
-      expect(isSetupAlreadyCompletedError({ status: 409 })).toBe(true);
+    it("requires the already-completed problem type as well as 409 status", () => {
+      expect(isSetupAlreadyCompletedError({ status: 409 })).toBe(false);
       expect(
         isSetupAlreadyCompletedError({
           status: 409,
@@ -202,9 +202,39 @@ describe("Role Routing & Gating Logic (Part 2 & Part 6)", () => {
       ).toBe(true);
     });
 
+    it("does not treat unrelated conflicts or English detail text as completion", () => {
+      expect(
+        isSetupAlreadyCompletedError({
+          status: 409,
+          type: "https://errors.example.test/other-conflict",
+          detail: "Setup already completed",
+        })
+      ).toBe(false);
+      expect(
+        isSetupAlreadyCompletedError({
+          problem: { status: 409, type: "about:blank" },
+        })
+      ).toBe(false);
+    });
+
+    it("supports the backend's configurable problem-type base URL", () => {
+      expect(
+        isSetupAlreadyCompletedError({
+          status: 409,
+          type: "https://college.example.test/problems/setup-already-completed",
+        })
+      ).toBe(true);
+    });
+
     it("returns false for other status codes", () => {
       expect(isSetupAlreadyCompletedError({ status: 400 })).toBe(false);
       expect(isSetupAlreadyCompletedError({ status: 422 })).toBe(false);
+      expect(
+        isSetupAlreadyCompletedError({
+          status: 500,
+          type: "https://errors.campuslynk.net/setup-already-completed",
+        })
+      ).toBe(false);
       expect(isSetupAlreadyCompletedError(null)).toBe(false);
     });
   });

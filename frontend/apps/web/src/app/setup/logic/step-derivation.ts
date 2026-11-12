@@ -159,6 +159,38 @@ export function deriveStepStates(
   return states;
 }
 
+export interface SetupProgress {
+  completedRequirements: number;
+  totalRequirements: number;
+  percentage: number;
+  completionState: 'in_progress' | 'ready_to_finalize' | 'completed';
+}
+
+/** Finalization is a state, not an additional portion of prerequisite progress. */
+export function deriveSetupProgress(status: SetupStatusData | null | undefined): SetupProgress {
+  const organisationReady =
+    (status?.prerequisites?.streams_count ?? 0) >= 1 &&
+    (status?.prerequisites?.departments_count ?? 0) >= 1 &&
+    (status?.prerequisites?.academic_years_count ?? 0) >= 1;
+  const requirements = [
+    Boolean(status?.steps?.institution_profile?.is_completed),
+    organisationReady,
+    Boolean(status?.steps?.calendar_basics?.is_completed),
+    Boolean(status?.steps?.signup_policy?.is_completed),
+  ];
+  const completedRequirements = requirements.filter(Boolean).length;
+  const totalRequirements = requirements.length;
+
+  return {
+    completedRequirements,
+    totalRequirements,
+    percentage: Math.round((completedRequirements / totalRequirements) * 100),
+    completionState: status?.is_completed
+      ? 'completed'
+      : completedRequirements === totalRequirements ? 'ready_to_finalize' : 'in_progress',
+  };
+}
+
 export function isFinishEnabled(status: SetupStatusData | null | undefined): boolean {
   if (!status) return false;
 
@@ -229,4 +261,3 @@ export function getPrerequisiteChecklist(
     },
   ];
 }
-
