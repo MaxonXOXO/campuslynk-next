@@ -2,10 +2,11 @@
 
 declare(strict_types=1);
 
+use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Support\Facades\Route;
 use Symfony\Component\Yaml\Yaml;
-use Tests\TestCase;
 
+// Route discovery needs a booted application, not tenant database provisioning.
 uses(TestCase::class);
 
 test('OpenAPI contract is strictly synchronized with registered api/v1 routes', function () {

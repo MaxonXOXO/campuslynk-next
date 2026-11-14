@@ -589,7 +589,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Retrieve first-run setup wizard state and prerequisite counts */
+        /**
+         * Retrieve first-run setup wizard state and prerequisite counts
+         * @description Read-only reporting of persisted setup state. Each step is_completed requires both a nonempty completion timestamp and its tenant setting row. A missing setting returns settings_exist=false and values=null even if a historical step timestamp remains. This operation never initializes defaults; an absent signup_policy remains null until explicitly saved or initialized by a successful POST /setup/complete.
+         */
         get: operations["getSetupStatus"];
         put?: never;
         post?: never;
@@ -607,7 +610,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Save or update configuration for a specific setup step and mark it complete */
+        /**
+         * Save or update configuration for a specific setup step and mark it complete
+         * @description Explicitly saves the supplied configuration, preserving existing step and overall completion timestamps. Saving signup_policy is optional before finalization; this operation remains available to choose custom preferences before or after setup completion.
+         */
         put: operations["saveSetupStep"];
         post?: never;
         delete?: never;
@@ -625,7 +631,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Finalize first-run setup wizard verifying all steps and prerequisites */
+        /**
+         * Finalize first-run setup with optional sign-up policy defaults
+         * @description Requires persisted institution_profile and calendar_basics settings with nonempty step completion timestamps, plus at least one stream, department, and academic year. An explicit signup_policy save is not required. Inside one tenant transaction, relevant setting and prerequisite rows are locked, all prerequisites are checked, and an absent policy is created with student_self_registration_enabled=false, parent_self_registration_enabled=false, and approval_mode=manual. Existing policy values and row timestamps are preserved; only a missing policy step completion timestamp is supplied. Default creation is attributed to the completing administrator in the tenant activity log as signup_policy.defaults_initialized with source=setup_completion, distinguishing it from an explicit save. Finalization and initialization are atomic: failed completion leaves no newly created policy or completion markers. Repeated or losing concurrent completion requests return 409 setup-already-completed.
+         */
         post: operations["completeSetup"];
         delete?: never;
         options?: never;
@@ -943,7 +952,7 @@ export interface components {
              */
             day_order_format: "roman" | "numeric" | "alpha";
         };
-        /** @description Stored configuration for student and parent self-registration and approval mode. Inert until registration queue ships. */
+        /** @description Persisted configuration for student and parent self-registration and approval mode. Inert until registration queue ships. An explicit setup save is optional: successful setup completion initializes an absent policy using the defaults below, while preserving any existing custom configuration. Default annotations do not initialize settings during reads. */
         SignupPolicyValues: {
             /** @default false */
             student_self_registration_enabled: boolean;
@@ -964,6 +973,7 @@ export interface components {
                     institution_profile: {
                         /** Format: date-time */
                         completed_at: string | null;
+                        /** @description True only when a nonempty step completion timestamp and the institution_profile setting row both exist. */
                         is_completed: boolean;
                         settings_exist: boolean;
                         values: components["schemas"]["InstitutionProfileValues"] | null;
@@ -971,6 +981,7 @@ export interface components {
                     calendar_basics: {
                         /** Format: date-time */
                         completed_at: string | null;
+                        /** @description True only when a nonempty step completion timestamp and the calendar_basics setting row both exist. */
                         is_completed: boolean;
                         settings_exist: boolean;
                         values: components["schemas"]["CalendarBasicsValues"] | null;
@@ -978,8 +989,10 @@ export interface components {
                     signup_policy: {
                         /** Format: date-time */
                         completed_at: string | null;
+                        /** @description True only when a nonempty step completion timestamp and the signup_policy setting row both exist, including automatic initialization during finalization. */
                         is_completed: boolean;
                         settings_exist: boolean;
+                        /** @description Persisted values only; null until explicitly saved or initialized during successful setup completion. */
                         values: components["schemas"]["SignupPolicyValues"] | null;
                     };
                 };
@@ -2395,7 +2408,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Setup successfully finalized */
+            /** @description Setup successfully finalized. The response includes persisted policy values (defaults if previously absent), its nonempty completion timestamp, settings_exist=true, and is_completed=true. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -2426,7 +2439,9 @@ export interface operations {
                     };
                 };
             };
+            /** @description Setup was already finalized, including by a winning concurrent request. Returns the setup-already-completed problem type without changing policy values or existing completion timestamps. */
             409: components["responses"]["ProblemDetails"];
+            /** @description Required profile/calendar settings or their completion timestamps, or a stream, department, or academic year, are missing. Returns the setup-prerequisites-missing problem type with errors.missing listing the unmet prerequisites. An unsaved signup_policy is not a missing prerequisite. No defaults or completion markers are persisted on failure. */
             422: components["responses"]["ProblemDetails"];
         };
     };
