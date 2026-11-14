@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\DB;
 final class CompleteSetupAction
 {
     public function __construct(
-        protected GetSetupStatusAction $statusAction
+        protected GetSetupStatusAction $statusAction,
+        protected LockSetupStateAction $lockSetupStateAction
     ) {}
 
     /**
@@ -25,16 +26,16 @@ final class CompleteSetupAction
     public function execute(): array
     {
         return DB::connection('tenant')->transaction(function (): array {
-            // Successful completion requires recorded steps in an existing setup row.
-            // Lock it with the configuration rows so an absent policy is protected too.
+            // Lock setup in its own statement before reading configuration, so
+            // a policy committed while this lock waits is visible below.
+            $setupSetting = $this->lockSetupStateAction->execute();
             /** @var Collection<string, TenantSetting> $settings */
             $settings = TenantSetting::whereIn('key', [
-                'setup', 'institution_profile', 'calendar_basics', 'signup_policy',
+                'institution_profile', 'calendar_basics', 'signup_policy',
             ])->orderBy('key')->lockForUpdate()->get()->keyBy('key');
 
-            $setupSetting = $settings->get('setup');
             /** @var array<string, mixed> $setupData */
-            $setupData = ($setupSetting !== null && is_array($setupSetting->value))
+            $setupData = is_array($setupSetting->value)
                 ? $setupSetting->value
                 : ['completed_at' => null, 'steps' => []];
 
@@ -101,10 +102,6 @@ final class CompleteSetupAction
             $steps['signup_policy'] = $signupStep;
             $setupData['steps'] = $steps;
             $setupData['completed_at'] = $completedAt;
-
-            if ($setupSetting === null) {
-                $setupSetting = new TenantSetting(['key' => 'setup']);
-            }
 
             $setupSetting->value = $setupData;
             $setupSetting->save();

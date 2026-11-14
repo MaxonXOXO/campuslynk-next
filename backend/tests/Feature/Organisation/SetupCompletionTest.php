@@ -18,11 +18,14 @@ use App\Modules\Organisation\Database\Seeders\TenantBaselineSeeder;
 use App\Modules\Organisation\Models\AcademicYear;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Stream;
+use Illuminate\Database\Events\QueryExecuted;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use InvalidArgumentException;
 use PDO;
+use RuntimeException;
+use Symfony\Component\Process\InputStream;
 use Symfony\Component\Process\Process;
 use Tests\Feature\Tenancy\TenancyTestHelper;
 
@@ -30,7 +33,7 @@ uses(TenancyTestHelper::class);
 
 beforeEach(function () {
     $this->purgeAllTenantDatabases();
-    config(['app_profile.deploy_profile' => 'cloud', 'activitylog.enabled' => true]);
+    config(['app_profile.deploy_profile' => 'cloud', 'activitylog.enabled' => true, 'activitylog.buffer.enabled' => false]);
     Carbon::setTestNow('2026-11-12T09:00:00+00:00');
 
     $this->tenant = app(TenantProvisioner::class)->provision(
@@ -297,6 +300,94 @@ it('rolls back the new policy row if final setup state persistence fails after p
         ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(0);
 });
 
+it('rolls back policy, completion markers and audit on a late failure and writes exactly once on retry', function (string $failurePoint) {
+    $setupBeforeFailure = TenantSetting::where('key', 'setup')->firstOrFail()->getAttributes();
+    $completedAtBeforeFailure = now()->toIso8601String();
+    $auditInserted = false;
+    $failedOnce = false;
+    $statusTables = [];
+    $observed = [];
+    $message = "Simulated failure {$failurePoint}.";
+    $this->app['events']->listen(QueryExecuted::class, function (QueryExecuted $event) use (
+        $failurePoint, $message, &$auditInserted, &$failedOnce, &$statusTables, &$observed
+    ): void {
+        if ($event->connectionName !== 'tenant' || $failedOnce) {
+            return;
+        }
+
+        $isAuditInsert = str_starts_with($event->sql, 'insert into "activity_log"');
+        if ($isAuditInsert) {
+            $auditInserted = true;
+        }
+        if ($auditInserted && preg_match('/^select count\(\*\) as aggregate from "(streams|departments|academic_years)"$/', $event->sql, $matches) === 1) {
+            $statusTables[] = $matches[1];
+        }
+        $isFinalStatusRead = $auditInserted && $statusTables === ['streams', 'departments', 'academic_years'];
+        if (($failurePoint === 'after audit insert' && $isAuditInsert)
+            || ($failurePoint === 'after final status read' && $isFinalStatusRead)) {
+            $failedOnce = true;
+            $observed = [
+                'policy' => TenantSetting::where('key', 'signup_policy')->firstOrFail()->value,
+                'completed_at' => TenantSetting::where('key', 'setup')->firstOrFail()->value['completed_at'],
+                'audit_count' => Activity::where('event', 'signup_policy.defaults_initialized')->count(),
+            ];
+
+            throw new RuntimeException($message);
+        }
+    });
+    $this->withoutExceptionHandling();
+
+    expect(fn () => $this->postJson("{$this->setupUrl}/complete"))->toThrow(RuntimeException::class, $message);
+    $this->tenantContext->setTenant($this->tenant);
+    expect($failedOnce)->toBeTrue()
+        ->and($observed)->toBe([
+            'policy' => $this->defaults,
+            'completed_at' => $completedAtBeforeFailure,
+            'audit_count' => 1,
+        ])
+        ->and(TenantSetting::where('key', 'signup_policy')->exists())->toBeFalse()
+        ->and(TenantSetting::where('key', 'setup')->firstOrFail()->getAttributes())->toBe($setupBeforeFailure)
+        ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(0);
+    if ($failurePoint === 'after final status read') {
+        expect($statusTables)->toBe(['streams', 'departments', 'academic_years']);
+    }
+
+    $this->withExceptionHandling();
+    Carbon::setTestNow(now()->addHour());
+    $completedAt = now()->toIso8601String();
+    $this->app['auth']->forgetGuards();
+    $this->postJson("{$this->setupUrl}/complete")->assertOk()
+        ->assertJsonPath('data.completed_at', $completedAt)
+        ->assertJsonPath('data.steps.signup_policy.values', $this->defaults)
+        ->assertJsonPath('data.steps.signup_policy.completed_at', $completedAt);
+    $this->tenantContext->setTenant($this->tenant);
+    expect(TenantSetting::where('key', 'signup_policy')->count())->toBe(1)
+        ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(1)
+        ->and(Activity::where('event', 'signup_policy.defaults_initialized')->firstOrFail()->causer_id)->toBe($this->admin->id);
+
+    $this->app['auth']->forgetGuards();
+    $this->postJson("{$this->setupUrl}/complete")->assertStatus(409);
+    $this->tenantContext->setTenant($this->tenant);
+    expect(TenantSetting::where('key', 'signup_policy')->count())->toBe(1)
+        ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(1)
+        ->and(TenantSetting::where('key', 'setup')->firstOrFail()->value['completed_at'])->toBe($completedAt);
+})->with(['after audit insert', 'after final status read']);
+
+it('does not persist an initialized setup mutex or policy when completion has no setup timestamps', function () {
+    TenantSetting::where('key', 'setup')->delete();
+
+    $this->postJson("{$this->setupUrl}/complete")->assertStatus(422)
+        ->assertJsonPath('errors.missing', [
+            'Setup step [institution_profile] is not completed.',
+            'Setup step [calendar_basics] is not completed.',
+        ]);
+
+    $this->tenantContext->setTenant($this->tenant);
+    expect(TenantSetting::where('key', 'setup')->exists())->toBeFalse()
+        ->and(TenantSetting::where('key', 'signup_policy')->exists())->toBeFalse()
+        ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(0);
+});
+
 it('reports each step complete only when both its timestamp and its setting row exist', function (string $step) {
     $value = match ($step) {
         'institution_profile' => $this->profile,
@@ -474,3 +565,223 @@ it('serializes two overlapping completion requests so one succeeds, one returns 
         }
     }
 });
+
+it('serializes an overlapping policy PUT and completion POST without losing preferences or timestamps', function (bool $existingPolicy, string $pauseAt) {
+    $this->assertTestingEnvironmentSafety();
+    if ($existingPolicy) {
+        app(SaveSetupStepAction::class)->execute('signup_policy', $this->defaults);
+    }
+    $recordedPolicyAt = $existingPolicy ? now()->toIso8601String() : now()->addHour()->toIso8601String();
+    $savedAt = now()->addHour()->toIso8601String();
+    $completedAt = now()->addHours(2)->toIso8601String();
+    $customPolicy = [
+        'student_self_registration_enabled' => true,
+        'parent_self_registration_enabled' => true,
+        'approval_mode' => 'auto',
+    ];
+    $connection = config('database.connections.tenant');
+    expect($connection['database'])->toStartWith($this::TEST_TENANT_DB_PREFIX);
+    $environment = setupCompletionWorkerEnvironment($this::TEST_TENANT_DB_PREFIX);
+
+    $workers = [];
+    $inputs = [];
+    try {
+        foreach ([
+            ['url' => "{$this->setupUrl}/steps/signup_policy", 'method' => 'PUT', 'payload' => $customPolicy,
+                'now' => $savedAt, 'pause_at' => $pauseAt],
+            ['url' => "{$this->setupUrl}/complete", 'now' => $completedAt],
+        ] as $request) {
+            $input = new InputStream;
+            $input->write(json_encode([...$request, 'token' => $this->token], JSON_THROW_ON_ERROR)."\n");
+            $worker = new Process([PHP_BINARY, base_path('tests/Fixtures/CompleteSetupWorker.php')], base_path(), $environment);
+            $worker->setTimeout(30);
+            $worker->setInput($input);
+            $workers[] = $worker;
+            $inputs[] = $input;
+            $worker->start();
+
+            $marker = count($workers) === 1 ? 'PAUSED' : 'LOCKING';
+            expect($worker->waitUntil(fn () => preg_match("/{$marker}:(\\d+)/", $worker->getOutput()) === 1))
+                ->toBeTrue($worker->getErrorOutput().$worker->getOutput());
+        }
+
+        preg_match('/PAUSED:(\d+)/', $workers[0]->getOutput(), $matches);
+        $savingPid = (int) $matches[1];
+        preg_match('/LOCKING:(\d+)/', $workers[1]->getOutput(), $matches);
+        $completingPid = (int) $matches[1];
+        expect($savingPid)->not->toBe($completingPid);
+
+        // Observe completion really waiting on the PUT's PostgreSQL session.
+        // Let completion's first deadlock probe see an acyclic wait before
+        // releasing the PUT. Check SQL failures too: completion may retry them.
+        $deadline = microtime(true) + 15;
+        do {
+            $waiting = DB::connection('tenant')->selectOne(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = ? AND wait_event_type = 'Lock'
+                    AND ? = ANY(pg_blocking_pids(pid))) AS blocked,
+                    EXISTS (SELECT 1 FROM pg_locks WHERE pid = ? AND NOT granted
+                        AND waitstart < clock_timestamp() - 2 * current_setting('deadlock_timeout')::interval) AS probed",
+                [$completingPid, $savingPid, $completingPid]
+            );
+            $ready = (bool) $waiting->blocked && (! $existingPolicy || (bool) $waiting->probed);
+            if (! $ready) {
+                usleep(10000);
+            }
+        } while (! $ready && microtime(true) < $deadline);
+        expect($ready)->toBeTrue($workers[0]->getOutput().$workers[1]->getOutput());
+        if (! $existingPolicy) {
+            expect(TenantSetting::where('key', 'signup_policy')->exists())->toBeFalse();
+        }
+
+        $inputs[0]->write("RELEASE\n");
+        foreach ($inputs as $input) {
+            $input->close();
+        }
+        $responses = [];
+        foreach ($workers as $worker) {
+            $worker->wait();
+            expect($worker->isSuccessful())->toBeTrue($worker->getErrorOutput());
+            $lines = explode("\n", trim($worker->getOutput()));
+            $responses[] = json_decode(array_pop($lines), true, 512, JSON_THROW_ON_ERROR);
+        }
+        $diagnostics = json_encode(array_map(fn (array $response) => [
+            'status' => $response['status'],
+            'message' => $response['body']['message'] ?? null,
+        ], $responses), JSON_THROW_ON_ERROR);
+        expect(array_column($responses, 'status'))->toBe([200, 200], $diagnostics)
+            ->and($workers[0]->getOutput().$workers[1]->getOutput())->not->toContain('SQLSTATE:40P01')
+            ->and($responses[1]['body']['data']['completed_at'])->toBe($completedAt)
+            ->and($responses[1]['body']['data']['steps']['signup_policy']['values'])->toBe($customPolicy)
+            ->and($responses[1]['body']['data']['steps']['signup_policy']['completed_at'])->toBe($recordedPolicyAt);
+
+        $policy = TenantSetting::where('key', 'signup_policy')->firstOrFail();
+        $setup = TenantSetting::where('key', 'setup')->firstOrFail();
+        expect($policy->value)->toBe($customPolicy)
+            ->and(TenantSetting::where('key', 'signup_policy')->count())->toBe(1)
+            ->and($setup->value['completed_at'])->toBe($completedAt)
+            ->and($setup->value['steps']['signup_policy']['completed_at'])->toBe($recordedPolicyAt)
+            ->and($setup->value['steps']['institution_profile'])->toBe($this->setupBefore['steps']['institution_profile'])
+            ->and($setup->value['steps']['calendar_basics'])->toBe($this->setupBefore['steps']['calendar_basics'])
+            ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(0);
+    } finally {
+        foreach ($inputs as $input) {
+            $input->close();
+        }
+        foreach ($workers as $worker) {
+            if ($worker->isRunning()) {
+                $worker->stop(1);
+            }
+        }
+    }
+})->with([
+    'existing policy lock ordering' => [true, 'after_policy_write'],
+    'initial policy committed during completion lock wait' => [false, 'before_commit'],
+]);
+
+it('serializes the first profile and calendar saves when the setup mutex is absent', function () {
+    $this->assertTestingEnvironmentSafety();
+    expect(config('database.connections.tenant.database'))->toStartWith($this::TEST_TENANT_DB_PREFIX);
+    TenantSetting::whereIn('key', ['setup', 'institution_profile', 'calendar_basics'])->delete();
+    $profileAt = now()->toIso8601String();
+    $calendarAt = now()->addHour()->toIso8601String();
+    $environment = setupCompletionWorkerEnvironment($this::TEST_TENANT_DB_PREFIX);
+    $workers = [];
+    $inputs = [];
+
+    try {
+        foreach ([
+            ['url' => "{$this->setupUrl}/steps/institution_profile", 'payload' => $this->profile,
+                'now' => $profileAt, 'pause_at' => 'before_commit'],
+            ['url' => "{$this->setupUrl}/steps/calendar_basics", 'payload' => $this->calendar, 'now' => $calendarAt],
+        ] as $request) {
+            $input = new InputStream;
+            $input->write(json_encode([...$request, 'method' => 'PUT', 'token' => $this->token], JSON_THROW_ON_ERROR)."\n");
+            $worker = new Process([PHP_BINARY, base_path('tests/Fixtures/CompleteSetupWorker.php')], base_path(), $environment);
+            $worker->setTimeout(30);
+            $worker->setInput($input);
+            $workers[] = $worker;
+            $inputs[] = $input;
+            $worker->start();
+
+            $marker = count($workers) === 1 ? 'PAUSED' : 'SETUP_QUERY';
+            expect($worker->waitUntil(fn () => preg_match("/{$marker}:(\\d+)/", $worker->getOutput()) === 1))
+                ->toBeTrue($worker->getErrorOutput().$worker->getOutput());
+        }
+
+        preg_match('/PAUSED:(\d+)/', $workers[0]->getOutput(), $matches);
+        $profilePid = (int) $matches[1];
+        preg_match('/SETUP_QUERY:(\d+)/', $workers[1]->getOutput(), $matches);
+        $calendarPid = (int) $matches[1];
+        expect($profilePid)->not->toBe($calendarPid);
+        $deadline = microtime(true) + 10;
+        do {
+            $waiting = DB::connection('tenant')->selectOne(
+                "SELECT count(*) AS total FROM pg_stat_activity WHERE pid = ? AND wait_event_type = 'Lock'
+                    AND ? = ANY(pg_blocking_pids(pid))",
+                [$calendarPid, $profilePid]
+            );
+            $blocked = (int) $waiting->total === 1;
+            if (! $blocked) {
+                usleep(10000);
+            }
+        } while (! $blocked && microtime(true) < $deadline);
+        expect($blocked)->toBeTrue($workers[0]->getOutput().$workers[1]->getOutput())
+            ->and(TenantSetting::where('key', 'setup')->exists())->toBeFalse();
+
+        $inputs[0]->write("RELEASE\n");
+        foreach ($inputs as $input) {
+            $input->close();
+        }
+        $responses = [];
+        foreach ($workers as $worker) {
+            $worker->wait();
+            expect($worker->isSuccessful())->toBeTrue($worker->getErrorOutput());
+            $lines = explode("\n", trim($worker->getOutput()));
+            $responses[] = json_decode(array_pop($lines), true, 512, JSON_THROW_ON_ERROR);
+        }
+        expect(array_column($responses, 'status'))->toBe([200, 200], json_encode($responses, JSON_THROW_ON_ERROR))
+            ->and($responses[1]['body']['data']['is_completed'])->toBeFalse()
+            ->and($responses[1]['body']['data']['steps']['institution_profile']['completed_at'])->toBe($profileAt)
+            ->and($responses[1]['body']['data']['steps']['calendar_basics']['completed_at'])->toBe($calendarAt)
+            ->and($responses[1]['body']['data']['steps']['signup_policy']['is_completed'])->toBeFalse()
+            ->and(TenantSetting::where('key', 'setup')->count())->toBe(1)
+            ->and(TenantSetting::where('key', 'signup_policy')->exists())->toBeFalse()
+            ->and(Activity::where('event', 'signup_policy.defaults_initialized')->count())->toBe(0);
+    } finally {
+        foreach ($inputs as $input) {
+            $input->close();
+        }
+        foreach ($workers as $worker) {
+            if ($worker->isRunning()) {
+                $worker->stop(1);
+            }
+        }
+    }
+});
+
+/** @return array<string, string|false> */
+function setupCompletionWorkerEnvironment(string $tenantPrefix): array
+{
+    $environment = [
+        'APP_ENV' => 'testing',
+        'APP_DEBUG' => 'true',
+        'APP_KEY' => config('app.key'),
+        'DEPLOY_PROFILE' => 'cloud',
+        'DB_CONNECTION' => 'unconfigured',
+        'TENANT_DB_PREFIX' => $tenantPrefix,
+        'CACHE_STORE' => 'array',
+        'SESSION_DRIVER' => 'array',
+        'QUEUE_CONNECTION' => 'sync',
+        'ACTIVITYLOG_ENABLED' => 'true',
+        'ACTIVITYLOG_BUFFER_ENABLED' => 'false',
+    ];
+    foreach (['landlord' => 'LANDLORD_DB', 'pgsql_admin' => 'ADMIN_DB'] as $name => $prefix) {
+        $config = config("database.connections.{$name}");
+        foreach (['host', 'port', 'database', 'username', 'password'] as $attribute) {
+            $environment[$prefix.'_'.strtoupper($attribute)] = (string) $config[$attribute];
+        }
+        $environment[$prefix.'_URL'] = false;
+    }
+
+    return $environment;
+}

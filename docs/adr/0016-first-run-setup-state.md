@@ -90,3 +90,13 @@ This amendment adds no migration, setting-schema fields, or response fields.
 ### Revisit Trigger
 
 Revisit this decision when the dedicated **Self-Registration module** begins consuming `signup_policy`, before those preferences enable live student/parent registration or registration-queue approval. Its ADR must reassess whether policy review or explicit confirmation is required, define how existing automatically initialized policies are treated, and retain distinguishable writer provenance.
+
+---
+
+## Implementation Note — 2026-11-14: Shared Setup Write Lock and Synchronous Audit
+
+- **One write-lock protocol:** `SaveSetupStepAction` and `CompleteSetupAction` must acquire the `setup` row lock in a separate first query inside their tenant transaction, before reading or writing any other configuration row. `LockSetupStateAction` provides this shared mutex. Completion subsequently locks the remaining settings in key order; an explicit save locks its target step. The structural lock order remains Stream → Department → Academic Year.
+- **Concurrent first saves:** If `setup` is absent, initialization uses the schema-validated model path and `createOrFirst`'s savepoint-protected unique-key conflict handling, followed by a fresh locking read. Unrecorded step markers do not make a step complete. A failed completion rolls back any newly initialized mutex along with its policy and completion markers.
+- **Fresh configuration snapshot:** Do not combine `setup` and the remaining settings into one locking SELECT. Under PostgreSQL `READ COMMITTED`, that statement can wait on `setup` yet still miss a policy inserted by the transaction it waited for. Acquiring the mutex first and then issuing fresh configuration queries preserves that committed custom policy.
+- **Synchronous audit assumption:** The transactional audit guarantee assumes `activitylog.enabled = true` and `activitylog.buffer.enabled = false` (`ACTIVITYLOG_BUFFER_ENABLED=false`). The `signup_policy.defaults_initialized` event must be persisted synchronously on the tenant connection. Buffered logging flushes outside the completion transaction and does not provide this atomicity guarantee.
+- **Late-failure rollback:** An exception after the audit insert or after the last status query rolls back the policy, setup completion markers, and audit together. Retrying the failed completion creates exactly one policy and one initialization event. Existing policy values and recorded timestamps retain their preservation semantics.
