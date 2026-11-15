@@ -11,7 +11,8 @@ use InvalidArgumentException;
 final class SaveSetupStepAction
 {
     public function __construct(
-        protected GetSetupStatusAction $statusAction
+        protected GetSetupStatusAction $statusAction,
+        protected LockSetupStateAction $lockSetupStateAction
     ) {}
 
     /**
@@ -25,15 +26,16 @@ final class SaveSetupStepAction
         }
 
         DB::connection('tenant')->transaction(function () use ($step, $payload): void {
-            // 1. Write tenant setting for the given step
-            $setting = TenantSetting::firstOrNew(['key' => $step]);
+            // All setup writers acquire the shared mutex before a step row.
+            $setupSetting = $this->lockSetupStateAction->execute();
+
+            // Read the step using a fresh statement after acquiring setup.
+            $setting = TenantSetting::query()->lockForUpdate()->firstOrNew(['key' => $step]);
             $setting->value = $payload;
             $setting->save();
 
-            // 2. Load or initialize setup state setting
-            $setupSetting = TenantSetting::firstOrNew(['key' => 'setup']);
             /** @var array<string, mixed> $setupData */
-            $setupData = ($setupSetting->exists && is_array($setupSetting->value))
+            $setupData = is_array($setupSetting->value)
                 ? $setupSetting->value
                 : [
                     'completed_at' => null,
