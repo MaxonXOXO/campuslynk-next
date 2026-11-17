@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
 import SetupWizardPage from "../src/app/setup/page";
 import type { SetupStatusData, StepId } from "../src/app/setup/logic/step-derivation";
+import { DEFAULT_REGISTRATION_PREFERENCES } from "../src/app/setup/logic/registration-preferences";
 import type {
   StreamItem,
   DepartmentItem,
@@ -73,12 +74,10 @@ function createStatus(overrides: Partial<SetupStatusData> = {}): SetupStatusData
         },
       },
       signup_policy: {
-        ...savedStep,
-        values: {
-          student_self_registration_enabled: false,
-          parent_self_registration_enabled: false,
-          approval_mode: "manual",
-        },
+        is_completed: false,
+        completed_at: null,
+        settings_exist: false,
+        values: null,
       },
     },
     prerequisites: { streams_count: 1, departments_count: 1, academic_years_count: 1 },
@@ -93,6 +92,12 @@ function createCompletedStatus(): SetupStatusData {
     prerequisites: { streams_count: 2, departments_count: 3, academic_years_count: 4 },
   });
   status.steps.institution_profile.values = { name: "Updated College", short_code: "UC" };
+  status.steps.signup_policy = {
+    is_completed: true,
+    completed_at: status.completed_at,
+    settings_exist: true,
+    values: { ...DEFAULT_REGISTRATION_PREFERENCES },
+  };
   return status;
 }
 
@@ -202,11 +207,21 @@ describe("Setup completion conflicts and completed navigation", () => {
     expect(screen.getByRole("button", { name: "Finalizing Setup..." })).toBeDisabled();
 
     const completedStatus = createCompletedStatus();
+    completedStatus.steps.signup_policy.values = {
+      student_self_registration_enabled: true,
+      parent_self_registration_enabled: false,
+      approval_mode: "auto",
+    };
     await act(async () => { refreshed.resolve({ data: completedStatus }); });
 
     expect(await screen.findByRole("heading", { name: "First-Run Setup Completed" })).toBeInTheDocument();
     expect(screen.getByText("Updated College")).toBeInTheDocument();
     expect(screen.getByText(new Date(completedStatus.completed_at ?? "").toLocaleString())).toBeInTheDocument();
+    const preferences = screen.getByRole("region", { name: "Registration preferences" });
+    expect(within(preferences).getByText("Persisted registration preferences")).toBeInTheDocument();
+    expect(within(preferences).getByText("On")).toBeInTheDocument();
+    expect(within(preferences).getByText("Automatic")).toBeInTheDocument();
+    expect(within(preferences).queryByText(/Defaults will be applied/)).not.toBeInTheDocument();
     expect(mocks.toast.info).toHaveBeenCalledWith("Setup was already finalized.");
   });
 
@@ -474,14 +489,12 @@ const stepHeadings: Record<StepId, string> = {
   institution_profile: "Institution Profile",
   organisation_basics: "Organisation Basics",
   calendar_basics: "Academic Calendar Basics",
-  signup_policy: "Sign-up & Registration Policy",
   review_finish: "Review Configuration & Finalize Setup",
 };
 const sidebarTitles: Record<StepId, string> = {
   institution_profile: "Institution Profile",
   organisation_basics: "Organisation Basics",
   calendar_basics: "Academic Calendar",
-  signup_policy: "Sign-up Policy",
   review_finish: "Review and Finish",
 };
 const saveableSteps = [
@@ -491,14 +504,9 @@ const saveableSteps = [
     edit: () => fireEvent.change(screen.getByLabelText(/^Institution Name/), { target: { value: "Edited College" } }),
   },
   {
-    step: "calendar_basics", next: "signup_policy", errorField: "working_days",
+    step: "calendar_basics", next: "review_finish", errorField: "working_days",
     expected: { working_days: ["monday", "tuesday"] },
     edit: () => fireEvent.click(screen.getByRole("button", { name: "tuesday" })),
-  },
-  {
-    step: "signup_policy", next: "review_finish", errorField: "approval_mode",
-    expected: { approval_mode: "auto" },
-    edit: () => fireEvent.click(screen.getByRole("button", { name: /^Automatic Provisioning/ })),
   },
 ] as const;
 
@@ -522,6 +530,142 @@ function documentExitEvent() {
   window.dispatchEvent(event);
   return event;
 }
+
+describe("Four-step setup and legacy policy URLs", () => {
+  it("saves profile and calendar through four screens, finishes with persisted defaults, and opens /home", async () => {
+    const user = userEvent.setup();
+    mocks.requestedStep = "";
+    let status = createStatus();
+    for (const step of ["institution_profile", "calendar_basics"] as const) {
+      status.steps[step] = { is_completed: false, completed_at: null, settings_exist: false, values: null };
+    }
+    mocks.client.setup.status.mockImplementation(async () => ({ data: status }));
+    mocks.client.setup.saveStep.mockImplementation(async (step: keyof SetupStatusData["steps"], values: Record<string, unknown>) => {
+      status = {
+        ...status,
+        steps: {
+          ...status.steps,
+          [step]: { is_completed: true, completed_at: "2026-11-15T12:00:00Z", settings_exist: true, values },
+        },
+      };
+      return { data: status };
+    });
+    mocks.client.setup.complete.mockImplementation(async () => {
+      status = {
+        ...status,
+        is_completed: true,
+        completed_at: "2026-11-15T12:30:00Z",
+        steps: {
+          ...status.steps,
+          signup_policy: {
+            is_completed: true,
+            completed_at: "2026-11-15T12:30:00Z",
+            settings_exist: true,
+            values: { ...DEFAULT_REGISTRATION_PREFERENCES },
+          },
+        },
+      };
+      return { data: status };
+    });
+    renderWizardPage();
+
+    await screen.findByRole("heading", { name: stepHeadings.institution_profile });
+    expect(sidebarButtons()).toHaveLength(4);
+    expect(screen.getByText("Step 01 of 04")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/^Institution Name/), { target: { value: "Test College" } });
+    fireEvent.change(screen.getByLabelText(/^Short Code/), { target: { value: "TC" } });
+    await user.click(screen.getByRole("button", { name: "Save & Continue" }));
+
+    await screen.findByRole("heading", { name: stepHeadings.organisation_basics });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled());
+    expect(screen.getByText("Step 02 of 04")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    await screen.findByRole("heading", { name: stepHeadings.calendar_basics });
+    expect(screen.getByText("Step 03 of 04")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save & Continue" }));
+
+    const finish = await screen.findByRole("button", { name: "Complete First-Run Setup" });
+    expect(finish).toBeEnabled();
+    expect(screen.getByText("Step 04 of 04")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Setup readiness checklist" })).getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.getByText("Defaults will be applied when you finish setup")).toBeInTheDocument();
+    expect(status.steps.signup_policy.values).toBeNull();
+    expect(status.steps.signup_policy.settings_exist).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: /Back to Academic Calendar/ }));
+    await screen.findByRole("heading", { name: stepHeadings.calendar_basics });
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: stepHeadings.review_finish });
+    expect(mocks.client.setup.saveStep.mock.calls.map(([step]) => step)).toEqual(["institution_profile", "calendar_basics"]);
+    expect(documentExitEvent().defaultPrevented).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "Complete First-Run Setup" }));
+    await screen.findByRole("heading", { name: "First-Run Setup Completed" });
+    expect(screen.getByText("Persisted registration preferences")).toBeInTheDocument();
+    expect(screen.queryByText(/Defaults will be applied/)).not.toBeInTheDocument();
+    expect(status.steps.signup_policy.values).toEqual(DEFAULT_REGISTRATION_PREFERENCES);
+    expect(status.steps.signup_policy.settings_exist).toBe(true);
+    const preferences = screen.getByRole("region", { name: "Registration preferences" });
+    expect(within(preferences).getAllByText("Off")).toHaveLength(2);
+    expect(within(preferences).getByText("Manual")).toBeInTheDocument();
+    expect(within(preferences).queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(3);
+    await user.click(screen.getByRole("button", { name: "Go to Portal Home" }));
+    expect(mocks.router.push).toHaveBeenCalledWith("/home");
+    expect(mocks.client.setup.complete).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    { step: "institution_profile", ready: 0, percentage: 0 },
+    { step: "organisation_basics", ready: 1, percentage: 33 },
+    { step: "calendar_basics", ready: 2, percentage: 67 },
+    { step: "review_finish", ready: 3, percentage: 100 },
+  ] as const)("treats ?step=signup_policy as invalid and resumes $step at $percentage%", async ({ step, ready, percentage }) => {
+    mocks.requestedStep = "signup_policy";
+    const status = createStatus();
+    if (ready < 1) status.steps.institution_profile = { is_completed: false, completed_at: null, settings_exist: false, values: null };
+    if (ready < 3) status.steps.calendar_basics = { is_completed: false, completed_at: null, settings_exist: false, values: null };
+    if (ready < 2) {
+      status.prerequisites = { streams_count: 0, departments_count: 0, academic_years_count: 0 };
+      for (const { key } of organisationCases) mocks.client.organisation[key].list.mockResolvedValue({ data: [] });
+    }
+    mocks.client.setup.status.mockResolvedValue({ data: status });
+    renderWizardPage();
+
+    expect(await screen.findByRole("heading", { name: stepHeadings[step] })).toBeInTheDocument();
+    expect(sidebarStepButton(step)).toHaveAttribute("aria-current", "step");
+    expect(sidebarButtons()).toHaveLength(4);
+    expect(screen.getByRole("progressbar", { name: "Setup prerequisite progress" })).toHaveAttribute("aria-valuenow", String(percentage));
+    expect(screen.queryByRole("button", { name: /Sign-up Policy/ })).not.toBeInTheDocument();
+    expect(mocks.client.setup.saveStep).not.toHaveBeenCalled();
+  });
+
+  it("opens the normal completed summary for a legacy policy URL", async () => {
+    mocks.requestedStep = "signup_policy";
+    mocks.client.setup.status.mockResolvedValue({ data: createCompletedStatus() });
+    renderWizardPage();
+
+    expect(await screen.findByRole("heading", { name: "First-Run Setup Completed" })).toBeInTheDocument();
+    expect(screen.getByText("Persisted registration preferences")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: stepHeadings.review_finish })).not.toBeInTheDocument();
+  });
+
+  it("uses normal completed resume when Back reaches a legacy policy URL during the initial GET", async () => {
+    const pending = deferred<{ data: SetupStatusData }>();
+    mocks.requestedStep = "calendar_basics";
+    mocks.client.setup.status.mockReturnValueOnce(pending.promise);
+    window.history.replaceState({ __NA: true }, "", "/setup?step=signup_policy");
+    window.history.pushState({ __NA: true }, "", "/setup?step=calendar_basics");
+    renderWizardPage();
+
+    await act(async () => { window.history.back(); });
+    await waitFor(() => expect(new URLSearchParams(window.location.search).get("step")).toBe("signup_policy"));
+    await act(async () => { pending.resolve({ data: createCompletedStatus() }); });
+    expect(await screen.findByRole("heading", { name: "First-Run Setup Completed" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: stepHeadings.calendar_basics })).not.toBeInTheDocument();
+  });
+});
 
 describe("Save & Continue page integration", () => {
   it.each(saveableSteps)("continues from unchanged $step without a save request", async ({ step, next }) => {
@@ -645,9 +789,6 @@ describe("Save & Continue page integration", () => {
     expect(mocks.client.setup.saveStep).not.toHaveBeenCalled();
     if (testCase.step === "institution_profile") expect(screen.getByLabelText(/^Institution Name/)).toHaveValue("Test College");
     if (testCase.step === "calendar_basics") expect(screen.queryByText(/^Day II$/)).not.toBeInTheDocument();
-    if (testCase.step === "signup_policy") {
-      expect(screen.getByRole("button", { name: /^Manual Verification/ })).toHaveAttribute("aria-pressed", "true");
-    }
   });
 
   it("keeps a dirty calendar mounted when browser Back is canceled, then guards Forward", async () => {
@@ -726,7 +867,8 @@ describe("Save & Continue page integration", () => {
     const user = userEvent.setup();
     const finish = await renderReview();
     expect(screen.getByRole("progressbar", { name: "Setup prerequisite progress" })).toHaveAttribute("aria-valuenow", "100");
-    expect(screen.getByText("4 of 4 prerequisite steps (100%)")).toBeInTheDocument();
+    expect(screen.getByText("3 of 3 prerequisite steps (100%)")).toBeInTheDocument();
+    expect(screen.getAllByText("Ready to Finalize").length).toBeGreaterThan(0);
     expect(screen.queryByText(/80%/)).not.toBeInTheDocument();
     expect(screen.queryByText("Setup Complete")).not.toBeInTheDocument();
 
@@ -744,7 +886,7 @@ describe("Save & Continue page integration", () => {
     await user.click(await renderReview());
 
     expect(screen.getByRole("button", { name: "View Read-only Summary" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /Back to Sign-up Policy/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Back to Academic Calendar/ })).toBeDisabled();
     for (const button of screen.getAllByRole("button", { name: "Edit" })) expect(button).toBeDisabled();
     for (const button of sidebarButtons()) expect(button).toBeDisabled();
     await act(async () => { refreshed.resolve({ data: createCompletedStatus() }); });

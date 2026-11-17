@@ -50,7 +50,7 @@ function GuardHarness() {
         setDirty(dirtyRef.current);
       }} />
       <Button onClick={() => navigation.requestNavigation(() => goTo("calendar_basics"))}>Go to calendar</Button>
-      <Button onClick={() => navigation.requestNavigation(() => goTo("signup_policy"))}>Go to policy</Button>
+      <Button onClick={() => navigation.requestNavigation(() => goTo("review_finish"))}>Go to review</Button>
       <Button onClick={() => { savingRef.current = true; setSaving(true); }}>Start save</Button>
       <Button onClick={() => { savingRef.current = false; setSaving(false); }}>Finish save</Button>
       <Button onClick={() => {
@@ -58,7 +58,7 @@ function GuardHarness() {
         savingRef.current = false;
         setDirty(false);
         setSaving(false);
-        navigation.requestNavigation(() => goTo("signup_policy"), true);
+        navigation.requestNavigation(() => goTo("review_finish"), true);
       }}>Finish save and continue</Button>
       <DirtyStepWarningDialog
         open={navigation.warningOpen}
@@ -114,13 +114,13 @@ describe("Setup history and document-exit guards", () => {
     render(<GuardHarness />);
     expect(window.history.state).toMatchObject({ ...routerState, tenantContext: "preserve-existing-state" });
     await user.click(screen.getByRole("button", { name: "Go to calendar" }));
-    await user.click(screen.getByRole("button", { name: "Go to policy" }));
+    await user.click(screen.getByRole("button", { name: "Go to review" }));
     expect(window.history.state).toMatchObject(routerState);
 
     await act(async () => { window.history.back(); });
     await waitForStep("calendar_basics");
     await act(async () => { window.history.forward(); });
-    await waitForStep("signup_policy");
+    await waitForStep("review_finish");
     expect(routerPopState).toHaveBeenCalledTimes(2);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
@@ -163,7 +163,7 @@ describe("Setup history and document-exit guards", () => {
     const user = userEvent.setup();
     render(<GuardHarness />);
     await user.click(screen.getByRole("button", { name: "Go to calendar" }));
-    await user.click(screen.getByRole("button", { name: "Go to policy" }));
+    await user.click(screen.getByRole("button", { name: "Go to review" }));
     await act(async () => { window.history.back(); });
     await waitForStep("calendar_basics");
     routerPopState.mockClear();
@@ -179,7 +179,7 @@ describe("Setup history and document-exit guards", () => {
     await act(async () => { window.history.forward(); });
     await screen.findByRole("dialog", { name: "Unsaved Changes" });
     await user.click(screen.getByRole("button", { name: "Discard & Leave" }));
-    await waitForStep("signup_policy");
+    await waitForStep("review_finish");
     expect(window.history.length).toBe(length);
     expect(routerPopState).toHaveBeenCalledOnce();
   });
@@ -188,7 +188,7 @@ describe("Setup history and document-exit guards", () => {
     const user = userEvent.setup();
     render(<GuardHarness />);
     await user.click(screen.getByRole("button", { name: "Go to calendar" }));
-    await user.click(screen.getByRole("button", { name: "Go to policy" }));
+    await user.click(screen.getByRole("button", { name: "Go to review" }));
     dirtyDraft();
     const length = window.history.length;
     const go = vi.spyOn(window.history, "go");
@@ -196,7 +196,7 @@ describe("Setup history and document-exit guards", () => {
     await act(async () => { window.history.go(-2); });
     await screen.findByRole("dialog", { name: "Unsaved Changes" });
     expect(go).toHaveBeenCalledWith(2);
-    expect(screen.getByLabelText("Current step")).toHaveTextContent("signup_policy");
+    expect(screen.getByLabelText("Current step")).toHaveTextContent("review_finish");
     await user.click(screen.getByRole("button", { name: "Discard & Leave" }));
     await waitForStep("institution_profile");
     expect(window.history.length).toBe(length);
@@ -225,7 +225,7 @@ describe("Setup history and document-exit guards", () => {
     render(<GuardHarness />);
     await user.click(screen.getByRole("button", { name: "Go to calendar" }));
     await user.click(screen.getByRole("button", { name: "Start save" }));
-    await user.click(screen.getByRole("button", { name: "Go to policy" }));
+    await user.click(screen.getByRole("button", { name: "Go to review" }));
     expect(screen.getByLabelText("Current step")).toHaveTextContent("calendar_basics");
 
     const go = vi.spyOn(window.history, "go");
@@ -259,7 +259,7 @@ describe("Setup history and document-exit guards", () => {
     expect(screen.getByRole("status", { name: "History restoration" })).toHaveTextContent("Restoring history");
 
     await act(async () => { nativeGo(1); });
-    await waitForStep("signup_policy");
+    await waitForStep("review_finish");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("status", { name: "History restoration" })).toHaveTextContent("History idle");
   });

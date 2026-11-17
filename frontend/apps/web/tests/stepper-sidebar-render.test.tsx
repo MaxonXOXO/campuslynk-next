@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Stepper } from "../src/app/setup/components/Stepper";
 import { WIZARD_STEPS, type StepId, type StepState } from "../src/app/setup/logic/step-derivation";
@@ -10,11 +10,10 @@ describe("Guided Sidebar Stepper Component", () => {
     institution_profile: "saved",
     organisation_basics: "current",
     calendar_basics: "not_started",
-    signup_policy: "not_started",
     review_finish: "not_started",
   };
 
-  it("renders all 5 wizard steps with their titles, descriptions, and state badges", () => {
+  it("renders the four wizard steps in order with their titles, descriptions, and state badges", () => {
     const onStepClick = vi.fn();
 
     render(
@@ -27,6 +26,12 @@ describe("Guided Sidebar Stepper Component", () => {
 
     const nav = screen.getByRole("navigation", { name: /first-run setup progress/i });
     expect(nav).toBeInTheDocument();
+    const buttons = within(nav).getAllByRole("button");
+    expect(buttons).toHaveLength(4);
+    for (const [index, title] of ["Institution Profile", "Organisation Basics", "Academic Calendar", "Review and Finish"].entries()) {
+      expect(buttons[index]).toHaveTextContent(title);
+    }
+    expect(within(nav).queryByText("Sign-up Policy")).not.toBeInTheDocument();
 
     for (const step of WIZARD_STEPS) {
       expect(screen.getByText(step.title)).toBeInTheDocument();
@@ -41,7 +46,7 @@ describe("Guided Sidebar Stepper Component", () => {
     // Check state badges
     expect(screen.getByText("Saved")).toBeInTheDocument();
     expect(screen.getByText("Current")).toBeInTheDocument();
-    expect(screen.getAllByText("Not started")).toHaveLength(3);
+    expect(screen.getAllByText("Not started")).toHaveLength(2);
   });
 
   it("invokes onStepClick when an enabled step button is clicked", async () => {

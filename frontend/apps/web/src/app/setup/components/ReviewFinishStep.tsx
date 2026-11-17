@@ -26,13 +26,12 @@ import {
 } from "../logic/step-derivation";
 import type { InstitutionProfileFormValues } from "../logic/validation";
 import type { CalendarFormValues } from "./CalendarStep";
-import type { SignupPolicyFormValues } from "./SignupPolicyStep";
+import { RegistrationPreferencesSummary } from "./RegistrationPreferencesSummary";
 
 interface ReviewFinishStepProps {
   status: SetupStatusData | null;
   profileValues?: Partial<InstitutionProfileFormValues>;
   calendarValues?: Partial<CalendarFormValues>;
-  signupValues?: Partial<SignupPolicyFormValues>;
   isLoading?: boolean;
   isFinishing?: boolean;
   missingPrerequisites?: string[];
@@ -47,7 +46,6 @@ export function ReviewFinishStep({
   status,
   profileValues,
   calendarValues,
-  signupValues,
   isLoading = false,
   isFinishing = false,
   missingPrerequisites = [],
@@ -130,7 +128,7 @@ export function ReviewFinishStep({
           </Badge>
         </div>
 
-        <ul className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+        <ul aria-label="Setup readiness checklist" className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
           {checklist.map((item) => (
             <li
               key={item.id}
@@ -291,50 +289,13 @@ export function ReviewFinishStep({
           </div>
         </div>
 
-        {/* Sign-up Policy Summary */}
-        <div className="border border-border rounded-xl p-5 bg-card">
-          <div className="flex items-center justify-between border-b border-border pb-3">
-            <div>
-              <h4 className="text-sm font-semibold text-foreground">4. Sign-up Policy</h4>
-              <p className="text-xs text-muted-foreground">Registration Governance</p>
-            </div>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onEditStep("signup_policy")}
-              disabled={isFinishing}
-            >
-              <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
-            </Button>
-          </div>
-          <div className="grid grid-cols-3 gap-4 pt-3 text-xs">
-            <div>
-              <span className="text-muted-foreground block">Student Registration:</span>
-              <span className="font-medium text-foreground">
-                {signupValues?.student_self_registration_enabled ? "Enabled" : "Disabled (Default)"}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">Parent Registration:</span>
-              <span className="font-medium text-foreground">
-                {signupValues?.parent_self_registration_enabled ? "Enabled" : "Disabled (Default)"}
-              </span>
-            </div>
-            <div>
-              <span className="text-muted-foreground block">Approval Mode:</span>
-              <span className="font-medium text-foreground capitalize">
-                {signupValues?.approval_mode || "Manual (Default)"}
-              </span>
-            </div>
-          </div>
-        </div>
+        <RegistrationPreferencesSummary status={status} />
       </div>
 
       {/* FINAL FINISH ACTION */}
       <div className="flex items-center justify-between border-t border-border pt-5">
         <Button type="button" variant="outline" onClick={onBack} disabled={isFinishing}>
-          ← Back to Sign-up Policy
+          ← Back to Academic Calendar
         </Button>
         <div className="flex items-center gap-3">
           <Button

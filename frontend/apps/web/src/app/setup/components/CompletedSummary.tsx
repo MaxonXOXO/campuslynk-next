@@ -13,13 +13,12 @@ import {
 import type { SetupStatusData, StepId } from "../logic/step-derivation";
 import type { InstitutionProfileFormValues } from "../logic/validation";
 import type { CalendarFormValues } from "./CalendarStep";
-import type { SignupPolicyFormValues } from "./SignupPolicyStep";
+import { RegistrationPreferencesSummary } from "./RegistrationPreferencesSummary";
 
 interface CompletedSummaryProps {
   status: SetupStatusData;
   profileValues?: Partial<InstitutionProfileFormValues>;
   calendarValues?: Partial<CalendarFormValues>;
-  signupValues?: Partial<SignupPolicyFormValues>;
   onEditStep: (step: StepId) => void;
   onGoToDashboard?: () => void;
 }
@@ -28,7 +27,6 @@ export function CompletedSummary({
   status,
   profileValues,
   calendarValues,
-  signupValues,
   onEditStep,
   onGoToDashboard,
 }: CompletedSummaryProps) {
@@ -58,8 +56,8 @@ export function CompletedSummary({
         </div>
         <p className="text-sm text-muted-foreground">
           Your institution has been initialized. All structural prerequisites and baseline
-          configurations are in place. You can fine-tune any configuration anytime using the
-          edit links below without locking the institution or resetting completion status.
+          configurations are in place. You can revisit the profile, organisation and calendar
+          using the edit links below without locking the institution or resetting completion status.
         </p>
       </div>
 
@@ -160,40 +158,7 @@ export function CompletedSummary({
           </div>
         </div>
 
-        {/* Step 4: Sign-up Policy */}
-        <div className="border border-border rounded-xl p-5 bg-card space-y-3">
-          <div className="flex items-center justify-between border-b border-border pb-2">
-            <h3 className="text-sm font-semibold text-foreground">4. Sign-up Policy</h3>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onEditStep("signup_policy")}
-            >
-              <RiEditLine className="size-3.5 mr-1" aria-hidden="true" /> Edit
-            </Button>
-          </div>
-          <div className="space-y-1.5 text-xs">
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Student Registration:</span>
-              <span className="font-medium text-foreground">
-                {signupValues?.student_self_registration_enabled ? "Enabled" : "Disabled"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Parent Registration:</span>
-              <span className="font-medium text-foreground">
-                {signupValues?.parent_self_registration_enabled ? "Enabled" : "Disabled"}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Approval Mode:</span>
-              <span className="font-medium text-foreground capitalize">
-                {signupValues?.approval_mode || "Manual"}
-              </span>
-            </div>
-          </div>
-        </div>
+        <RegistrationPreferencesSummary status={status} />
       </div>
 
       {onGoToDashboard && (

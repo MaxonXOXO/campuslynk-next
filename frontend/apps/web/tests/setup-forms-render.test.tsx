@@ -4,10 +4,9 @@ import { act, cleanup, fireEvent, render, screen, within } from "@testing-librar
 import userEvent from "@testing-library/user-event";
 import { InstitutionProfileStep } from "../src/app/setup/components/InstitutionProfileStep";
 import { CalendarStep } from "../src/app/setup/components/CalendarStep";
-import { SignupPolicyStep } from "../src/app/setup/components/SignupPolicyStep";
 import { OrganisationBasicsStep } from "../src/app/setup/components/OrganisationBasicsStep";
 import type { CalendarFormValues } from "../src/app/setup/components/CalendarStep";
-import type { InstitutionProfileFormValues, SignupPolicyFormValues } from "../src/app/setup/logic/validation";
+import type { InstitutionProfileFormValues } from "../src/app/setup/logic/validation";
 
 afterEach(cleanup);
 
@@ -186,7 +185,7 @@ interface FormTestProps {
   isPersisted: boolean;
   isSaving?: boolean;
   navigationDisabled?: boolean;
-  onSave: (values: InstitutionProfileFormValues | CalendarFormValues | SignupPolicyFormValues) => Promise<boolean>;
+  onSave: (values: InstitutionProfileFormValues | CalendarFormValues) => Promise<boolean>;
   onNext: () => void;
   onBack: () => void;
   onDirtyChange: (dirty: boolean) => void;
@@ -209,14 +208,6 @@ const formCases = [
     edit: () => fireEvent.change(screen.getByLabelText("Period 1 start time"), { target: { value: "09:15" } }),
     revert: () => fireEvent.change(screen.getByLabelText("Period 1 start time"), { target: { value: "09:00" } }),
   },
-  {
-    step: "policy",
-    render: (props: FormTestProps) => <SignupPolicyStep {...props} initialValues={{
-      student_self_registration_enabled: false, parent_self_registration_enabled: false, approval_mode: "manual",
-    }} />,
-    edit: () => fireEvent.click(screen.getByRole("switch", { name: "Student Self-Registration" })),
-    revert: () => fireEvent.click(screen.getByRole("switch", { name: "Student Self-Registration" })),
-  },
 ];
 
 function formTestProps(overrides: Partial<FormTestProps> = {}) {
@@ -237,7 +228,7 @@ describe("Single Save & Continue flow and persisted dirty snapshots", () => {
     render(testCase.render(props));
 
     expect(props.onDirtyChange).toHaveBeenLastCalledWith(false);
-    expect(screen.queryByRole("button", { name: /Save Profile|Save Calendar|Save Policy|Next Step/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save Profile|Save Calendar|Next Step/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(props.onSave).not.toHaveBeenCalled();
@@ -374,25 +365,6 @@ describe("Single Save & Continue flow and persisted dirty snapshots", () => {
     expect(props.onDirtyChange).toHaveBeenLastCalledWith(true);
     await user.click(screen.getByRole("button", { name: /^Roman Numerals/ }));
     await user.click(screen.getByRole("button", { name: "Auto-fill Defaults" }));
-    expect(props.onDirtyChange).toHaveBeenLastCalledWith(false);
-    expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
-  });
-
-  it("recognizes reverted guardian and approval-policy changes and ignores reselecting the saved choice", async () => {
-    const user = userEvent.setup();
-    const props = formTestProps();
-    render(<SignupPolicyStep {...props} />);
-
-    const parent = screen.getByRole("switch", { name: "Parent & Guardian Self-Registration" });
-    await user.click(parent);
-    expect(props.onDirtyChange).toHaveBeenLastCalledWith(true);
-    await user.click(parent);
-    expect(props.onDirtyChange).toHaveBeenLastCalledWith(false);
-
-    await user.click(screen.getByRole("button", { name: /^Automatic Provisioning/ }));
-    expect(props.onDirtyChange).toHaveBeenLastCalledWith(true);
-    await user.click(screen.getByRole("button", { name: /^Manual Verification/ }));
-    await user.click(screen.getByRole("button", { name: /^Manual Verification/ }));
     expect(props.onDirtyChange).toHaveBeenLastCalledWith(false);
     expect(screen.getByRole("button", { name: "Continue" })).toBeInTheDocument();
   });
