@@ -6,7 +6,6 @@ export type StepId =
   | 'institution_profile'
   | 'organisation_basics'
   | 'calendar_basics'
-  | 'signup_policy'
   | 'review_finish';
 
 export type StepState = 'not_started' | 'saved' | 'current';
@@ -42,18 +41,11 @@ export const WIZARD_STEPS: StepItem[] = [
     stepNumber: 3,
   },
   {
-    id: 'signup_policy',
-    title: 'Sign-up Policy',
-    shortTitle: 'Sign-up',
-    description: 'Student & guardian registration rules',
-    stepNumber: 4,
-  },
-  {
     id: 'review_finish',
     title: 'Review and Finish',
     shortTitle: 'Review',
     description: 'Verify prerequisites & activate portal',
-    stepNumber: 5,
+    stepNumber: 4,
   },
 ];
 
@@ -92,7 +84,6 @@ export function isValidStepId(step: unknown): step is StepId {
     step === 'institution_profile' ||
     step === 'organisation_basics' ||
     step === 'calendar_basics' ||
-    step === 'signup_policy' ||
     step === 'review_finish'
   );
 }
@@ -124,10 +115,6 @@ export function deriveCurrentStep(
     return 'calendar_basics';
   }
 
-  if (!status.steps.signup_policy?.is_completed) {
-    return 'signup_policy';
-  }
-
   return 'review_finish';
 }
 
@@ -146,9 +133,6 @@ export function deriveStepStates(
       : 'not_started',
     organisation_basics: isOrgSaved ? 'saved' : 'not_started',
     calendar_basics: status?.steps?.calendar_basics?.is_completed
-      ? 'saved'
-      : 'not_started',
-    signup_policy: status?.steps?.signup_policy?.is_completed
       ? 'saved'
       : 'not_started',
     review_finish: status?.is_completed ? 'saved' : 'not_started',
@@ -176,7 +160,6 @@ export function deriveSetupProgress(status: SetupStatusData | null | undefined):
     Boolean(status?.steps?.institution_profile?.is_completed),
     organisationReady,
     Boolean(status?.steps?.calendar_basics?.is_completed),
-    Boolean(status?.steps?.signup_policy?.is_completed),
   ];
   const completedRequirements = requirements.filter(Boolean).length;
   const totalRequirements = requirements.length;
@@ -196,7 +179,6 @@ export function isFinishEnabled(status: SetupStatusData | null | undefined): boo
 
   const profileComplete = Boolean(status.steps?.institution_profile?.is_completed);
   const calendarComplete = Boolean(status.steps?.calendar_basics?.is_completed);
-  const signupComplete = Boolean(status.steps?.signup_policy?.is_completed);
 
   const streamsOk = (status.prerequisites?.streams_count ?? 0) >= 1;
   const deptsOk = (status.prerequisites?.departments_count ?? 0) >= 1;
@@ -205,7 +187,6 @@ export function isFinishEnabled(status: SetupStatusData | null | undefined): boo
   return (
     profileComplete &&
     calendarComplete &&
-    signupComplete &&
     streamsOk &&
     deptsOk &&
     yearsOk
@@ -252,12 +233,6 @@ export function getPrerequisiteChecklist(
       label: 'Academic Calendar basics configured and saved',
       satisfied: Boolean(status?.steps?.calendar_basics?.is_completed),
       stepTarget: 'calendar_basics',
-    },
-    {
-      id: 'signup_policy',
-      label: 'Sign-up Policy preferences configured and saved',
-      satisfied: Boolean(status?.steps?.signup_policy?.is_completed),
-      stepTarget: 'signup_policy',
     },
   ];
 }

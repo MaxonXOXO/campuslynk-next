@@ -2,6 +2,9 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  typescript: {
+    tsconfigPath: './tsconfig.build.json',
+  },
   transpilePackages: [
     '@academic-suite/api-client',
     '@academic-suite/core',

@@ -3,17 +3,26 @@ import {
   isFinishEnabled,
   deriveCurrentStep,
   deriveStepStates,
+  deriveSetupProgress,
   getPrerequisiteChecklist,
 } from "../src/app/setup/logic/step-derivation";
 import { isSetupAlreadyCompletedError } from "../src/app/setup/logic/role-routing";
+import { DEFAULT_REGISTRATION_PREFERENCES } from "../src/app/setup/logic/registration-preferences";
+
+interface MockSetupStep {
+  is_completed: boolean;
+  completed_at: string | null;
+  settings_exist: boolean;
+  values: Record<string, unknown> | null;
+}
 
 interface MockSetupState {
   completed_at: string | null;
   is_completed: boolean;
   steps: {
-    institution_profile: { is_completed: boolean; completed_at: string | null; settings_exist: boolean };
-    calendar_basics: { is_completed: boolean; completed_at: string | null; settings_exist: boolean };
-    signup_policy: { is_completed: boolean; completed_at: string | null; settings_exist: boolean };
+    institution_profile: MockSetupStep;
+    calendar_basics: MockSetupStep;
+    signup_policy: MockSetupStep;
   };
   prerequisites: {
     streams_count: number;
@@ -41,7 +50,7 @@ function createMockApiClient(state: MockSetupState) {
           is_completed: true,
           completed_at: new Date().toISOString(),
           settings_exist: true,
-          ...data,
+          values: { ...data },
         };
         return {
           data: {
@@ -54,15 +63,17 @@ function createMockApiClient(state: MockSetupState) {
       }),
       complete: vi.fn(async () => {
         // Enforce backend completion rules
-        if (
-          state.prerequisites.streams_count < 1 ||
-          state.prerequisites.departments_count < 1 ||
-          state.prerequisites.academic_years_count < 1
-        ) {
-          const missing: string[] = [];
-          if (state.prerequisites.streams_count < 1) missing.push("streams");
-          if (state.prerequisites.departments_count < 1) missing.push("departments");
-          if (state.prerequisites.academic_years_count < 1) missing.push("academic_years");
+        const missing: string[] = [];
+        for (const step of ["institution_profile", "calendar_basics"] as const) {
+          if (!state.steps[step].is_completed || !state.steps[step].settings_exist || !state.steps[step].completed_at) {
+            missing.push(step);
+          }
+        }
+        if (state.prerequisites.streams_count < 1) missing.push("streams");
+        if (state.prerequisites.departments_count < 1) missing.push("departments");
+        if (state.prerequisites.academic_years_count < 1) missing.push("academic_years");
+
+        if (missing.length > 0) {
 
           const err = new Error("Prerequisites missing");
           Object.assign(err, {
@@ -84,6 +95,14 @@ function createMockApiClient(state: MockSetupState) {
 
         state.completed_at = new Date().toISOString();
         state.is_completed = true;
+        if (!state.steps.signup_policy.settings_exist) {
+          state.steps.signup_policy = {
+            is_completed: true,
+            completed_at: state.completed_at,
+            settings_exist: true,
+            values: { ...DEFAULT_REGISTRATION_PREFERENCES },
+          };
+        }
 
         return {
           data: {
@@ -132,15 +151,15 @@ function createMockApiClient(state: MockSetupState) {
   };
 }
 
-describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
-  it("executes the full wizard flow: profile, organisation CRUD, calendar, signup, and finish", async () => {
+describe("End-to-End Setup Wizard Happy Path", () => {
+  it("executes the four-step flow and receives persisted defaults without saving a signup policy", async () => {
     const state: MockSetupState = {
       completed_at: null,
       is_completed: false,
       steps: {
-        institution_profile: { is_completed: false, completed_at: null, settings_exist: false },
-        calendar_basics: { is_completed: false, completed_at: null, settings_exist: false },
-        signup_policy: { is_completed: false, completed_at: null, settings_exist: false },
+        institution_profile: { is_completed: false, completed_at: null, settings_exist: false, values: null },
+        calendar_basics: { is_completed: false, completed_at: null, settings_exist: false, values: null },
+        signup_policy: { is_completed: false, completed_at: null, settings_exist: false, values: null },
       },
       prerequisites: {
         streams_count: 0,
@@ -158,6 +177,9 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     const initialStatus = await client.setup.getStatus();
     expect(initialStatus.data.is_completed).toBe(false);
     expect(isFinishEnabled(initialStatus.data)).toBe(false);
+    expect(deriveSetupProgress(initialStatus.data).percentage).toBe(0);
+    expect(initialStatus.data.steps.signup_policy.values).toBeNull();
+    expect(initialStatus.data.steps.signup_policy.settings_exist).toBe(false);
 
     // Initial progression derives step 1 "institution_profile"
     const step1 = deriveCurrentStep(initialStatus.data);
@@ -166,7 +188,6 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     expect(initialStates.institution_profile).toBe("current");
     expect(initialStates.organisation_basics).toBe("not_started");
     expect(initialStates.calendar_basics).toBe("not_started");
-    expect(initialStates.signup_policy).toBe("not_started");
     expect(initialStates.review_finish).toBe("not_started");
 
     // 1. Save Institution Profile (Step 1)
@@ -182,6 +203,7 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     // Step now derives step 2 "organisation_basics"
     const afterProfileStatus = await client.setup.getStatus();
     expect(deriveCurrentStep(afterProfileStatus.data)).toBe("organisation_basics");
+    expect(deriveSetupProgress(afterProfileStatus.data).percentage).toBe(33);
 
     // 2. Organisation Basics (Step 2 Domain Endpoints)
     const streamRes = await client.organisation.streams.create({
@@ -208,6 +230,7 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     // After org basics, step derives calendar_basics
     const afterOrgStatus = await client.setup.getStatus();
     expect(deriveCurrentStep(afterOrgStatus.data)).toBe("calendar_basics");
+    expect(deriveSetupProgress(afterOrgStatus.data).percentage).toBe(67);
 
     // 3. Save Calendar Basics (Step 3)
     await client.setup.saveStep("calendar_basics", {
@@ -222,18 +245,14 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
       day_order_format: "roman",
     });
 
-    // After calendar, step derives signup_policy
+    // Calendar proceeds directly to Review and Finish (Step 4).
     const afterCalStatus = await client.setup.getStatus();
-    expect(deriveCurrentStep(afterCalStatus.data)).toBe("signup_policy");
+    expect(deriveCurrentStep(afterCalStatus.data)).toBe("review_finish");
+    expect(deriveSetupProgress(afterCalStatus.data)).toMatchObject({ percentage: 100, completionState: "ready_to_finalize" });
+    expect(afterCalStatus.data.steps.signup_policy.values).toBeNull();
+    expect(afterCalStatus.data.steps.signup_policy.settings_exist).toBe(false);
 
-    // 4. Save Sign-up Policy (Step 4)
-    await client.setup.saveStep("signup_policy", {
-      student_self_registration: false,
-      parent_self_registration: false,
-      approval_mode: "manual",
-    });
-
-    // 5. Review and Finish (Step 5)
+    // 4. Review and Finish
     const updatedStatus = await client.setup.getStatus();
     const finalStep = deriveCurrentStep(updatedStatus.data);
     expect(finalStep).toBe("review_finish");
@@ -242,10 +261,10 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     expect(finalStates.institution_profile).toBe("saved");
     expect(finalStates.organisation_basics).toBe("saved");
     expect(finalStates.calendar_basics).toBe("saved");
-    expect(finalStates.signup_policy).toBe("saved");
     expect(finalStates.review_finish).toBe("current");
 
     const checklist = getPrerequisiteChecklist(updatedStatus.data);
+    expect(checklist).toHaveLength(5);
     expect(checklist.every((item) => item.satisfied)).toBe(true);
     expect(isFinishEnabled(updatedStatus.data)).toBe(true);
 
@@ -253,6 +272,10 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
     const completeRes = await client.setup.complete();
     expect(completeRes.data.is_completed).toBe(true);
     expect(completeRes.data.completed_at).not.toBeNull();
+    expect(completeRes.data.steps.signup_policy.values).toEqual(DEFAULT_REGISTRATION_PREFERENCES);
+    expect(completeRes.data.steps.signup_policy.settings_exist).toBe(true);
+    expect(deriveSetupProgress(completeRes.data).completionState).toBe("completed");
+    expect(client.setup.saveStep.mock.calls.map(([step]) => step)).toEqual(["institution_profile", "calendar_basics"]);
 
     // Verify 409 handling if complete is called again
     try {
@@ -268,9 +291,9 @@ describe("End-to-End Setup Wizard Happy Path (Prompt 06i Item 14)", () => {
       completed_at: null,
       is_completed: false,
       steps: {
-        institution_profile: { is_completed: true, completed_at: "2026-11-05", settings_exist: true },
-        calendar_basics: { is_completed: true, completed_at: "2026-11-05", settings_exist: true },
-        signup_policy: { is_completed: true, completed_at: "2026-11-05", settings_exist: true },
+        institution_profile: { is_completed: true, completed_at: "2026-11-05", settings_exist: true, values: {} },
+        calendar_basics: { is_completed: true, completed_at: "2026-11-05", settings_exist: true, values: {} },
+        signup_policy: { is_completed: false, completed_at: null, settings_exist: false, values: null },
       },
       prerequisites: {
         streams_count: 0,

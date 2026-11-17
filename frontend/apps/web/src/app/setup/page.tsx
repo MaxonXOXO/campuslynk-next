@@ -65,10 +65,6 @@ import {
   CalendarStep,
   type CalendarFormValues,
 } from "./components/CalendarStep";
-import {
-  SignupPolicyStep,
-} from "./components/SignupPolicyStep";
-import type { SignupPolicyFormValues } from "./logic/validation";
 import { ReviewFinishStep } from "./components/ReviewFinishStep";
 import { CompletedSummary } from "./components/CompletedSummary";
 import { ImpersonationState } from "./components/ImpersonationState";
@@ -108,7 +104,6 @@ function SetupWizardContent() {
   // Cached Step Values for Review Summary
   const [profileValues, setProfileValues] = React.useState<Partial<InstitutionProfileFormValues>>({});
   const [calendarValues, setCalendarValues] = React.useState<Partial<CalendarFormValues>>({});
-  const [signupValues, setSignupValues] = React.useState<Partial<SignupPolicyFormValues>>({});
 
   // Loading & Saving States
   const [isLoadingStatus, setIsLoadingStatus] = React.useState(true);
@@ -131,7 +126,6 @@ function SetupWizardContent() {
     institution_profile: false,
     organisation_basics: false,
     calendar_basics: false,
-    signup_policy: false,
     review_finish: false,
   });
   const dirtyStepsRef = React.useRef(dirtySteps);
@@ -153,7 +147,6 @@ function SetupWizardContent() {
     institution_profile: (dirty: boolean) => setStepDirty("institution_profile", dirty),
     organisation_basics: (dirty: boolean) => setStepDirty("organisation_basics", dirty),
     calendar_basics: (dirty: boolean) => setStepDirty("calendar_basics", dirty),
-    signup_policy: (dirty: boolean) => setStepDirty("signup_policy", dirty),
   }), [setStepDirty]);
 
   const isNavigationSaving = React.useCallback(() =>
@@ -167,7 +160,9 @@ function SetupWizardContent() {
     setIsSavingOrganisation(saving);
   }, []);
 
-  const initialRequestedStepRef = React.useRef<string | null>(requestedStepParam);
+  const initialRequestedStepRef = React.useRef<string | null>(
+    isValidStepId(requestedStepParam) ? requestedStepParam : null
+  );
 
   const navigation = useSetupNavigation({
     hasUnsavedChanges,
@@ -181,7 +176,8 @@ function SetupWizardContent() {
     },
     onHistoryNavigate: (url) => {
       if (url.pathname !== "/setup") return;
-      const requestedStep = url.searchParams.get("step");
+      const stepParam = url.searchParams.get("step");
+      const requestedStep = isValidStepId(stepParam) ? stepParam : null;
       // A traversal during the initial GET must remain the resume target when it resolves.
       initialRequestedStepRef.current = requestedStep;
       setStepDirty(currentStepRef.current, false);
@@ -205,11 +201,6 @@ function SetupWizardContent() {
     if (statusData.steps?.calendar_basics?.values) {
       setCalendarValues(
         statusData.steps.calendar_basics.values as Partial<CalendarFormValues>
-      );
-    }
-    if (statusData.steps?.signup_policy?.values) {
-      setSignupValues(
-        statusData.steps.signup_policy.values as Partial<SignupPolicyFormValues>
       );
     }
   }, []);
@@ -480,36 +471,7 @@ function SetupWizardContent() {
     }
   };
 
-  // STEP 4: SAVE SIGN-UP POLICY
-  const handleSaveSignupPolicy = async (values: SignupPolicyFormValues): Promise<boolean> => {
-    if (isNavigationSaving()) return false;
-    savingStepRef.current = true;
-    setIsSavingStep(true);
-    setStepServerErrors({});
-    setGeneralError(null);
-
-    try {
-      const res = await client.setup.saveStep("signup_policy", values as unknown as Record<string, unknown>);
-      statusRef.current = res.data as SetupStatusData;
-      setStatus(statusRef.current);
-      setSignupValues((statusRef.current.steps?.signup_policy?.values as Partial<SignupPolicyFormValues> | null) ?? values);
-      toast.success("Sign-up policy preferences saved.");
-      setStepDirty("signup_policy", false);
-      return true;
-    } catch (err: unknown) {
-      const fieldErrors = mapProblemFieldErrors(err);
-      if (Object.keys(fieldErrors).length > 0) {
-        setStepServerErrors(fieldErrors);
-      }
-      setGeneralError(getGeneralErrorMessage(err, "Failed to save sign-up policy.") || "Failed to save sign-up policy.");
-      return false;
-    } finally {
-      savingStepRef.current = false;
-      setIsSavingStep(false);
-    }
-  };
-
-  // STEP 5: FINISH SETUP
+  // STEP 4: FINISH SETUP
   const handleFinishSetup = async (refreshStatusOnly = false) => {
     if (isNavigationSaving()) return;
     finishingRef.current = true;
@@ -817,7 +779,6 @@ function SetupWizardContent() {
                     status={status}
                     profileValues={profileValues}
                     calendarValues={calendarValues}
-                    signupValues={signupValues}
                     onEditStep={(step) => navigateToStep(step)}
                     onGoToDashboard={() => navigation.requestNavigation(() => router.push("/home"))}
                   />
@@ -871,25 +832,9 @@ function SetupWizardContent() {
                         serverErrors={stepServerErrors}
                         generalError={generalError}
                         onSave={handleSaveCalendar}
-                        onNext={() => navigateToStep("signup_policy", true)}
+                        onNext={() => navigateToStep("review_finish", true)}
                         onBack={() => navigateToStep("organisation_basics")}
                         onDirtyChange={dirtyChangeHandlers.calendar_basics}
-                      />
-                    )}
-
-                    {currentStep === "signup_policy" && (
-                      <SignupPolicyStep
-                        key={`signup-${draftVersion}`}
-                        initialValues={signupValues}
-                        isSaving={isAnySaving}
-                        isPersisted={Boolean(status?.steps.signup_policy.is_completed && status.steps.signup_policy.settings_exist)}
-                        navigationDisabled={isNavigationDisabled}
-                        serverErrors={stepServerErrors}
-                        generalError={generalError}
-                        onSave={handleSaveSignupPolicy}
-                        onNext={() => navigateToStep("review_finish", true)}
-                        onBack={() => navigateToStep("calendar_basics")}
-                        onDirtyChange={dirtyChangeHandlers.signup_policy}
                       />
                     )}
 
@@ -898,14 +843,13 @@ function SetupWizardContent() {
                         status={status}
                         profileValues={profileValues}
                         calendarValues={calendarValues}
-                        signupValues={signupValues}
                         isFinishing={isFinishing}
                         missingPrerequisites={missingPrerequisites}
                         generalError={generalError}
                         onEditStep={(step) => navigateToStep(step)}
                         onFinish={() => handleFinishSetup()}
                         onRetry={completionRetry ? () => handleFinishSetup(completionRetry === "status") : undefined}
-                        onBack={() => navigateToStep("signup_policy")}
+                        onBack={() => navigateToStep("calendar_basics")}
                       />
                     )}
                   </>
