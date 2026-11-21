@@ -13,9 +13,12 @@ use App\Modules\Identity\Commands\UsersUnlockCommand;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Contracts\ChangesPasswordContract;
 use App\Modules\Identity\Listeners\ArchiveFirstYearBatchAssignmentsListener;
+use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Policies\UserPolicy;
 use App\Modules\Identity\Services\ScopeAuthorizer;
 use App\Modules\Organisation\Events\BatchSemesterPromoted;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -146,6 +149,8 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
 
     public function boot(): void
     {
+        Gate::policy(User::class, UserPolicy::class);
+
         Event::listen(
             BatchSemesterPromoted::class,
             ArchiveFirstYearBatchAssignmentsListener::class

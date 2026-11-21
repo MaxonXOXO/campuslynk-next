@@ -1,5 +1,6 @@
 <?php
 
+use App\Core\Http\ProblemDetails;
 use App\Core\Modules\Middleware\EnforceModuleLicense;
 use App\Core\Tenancy\Middleware\ResolveTenant;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
@@ -10,6 +11,7 @@ use App\Modules\Identity\Middleware\WithoutImpersonation;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -39,5 +41,11 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (AccessDeniedHttpException $exception) {
+            return ProblemDetails::response(
+                title: 'Forbidden',
+                detail: $exception->getMessage(),
+                status: 403
+            );
+        });
     })->create();
