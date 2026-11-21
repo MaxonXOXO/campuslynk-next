@@ -54,7 +54,7 @@ describe("Real /me Bootstrap Super Admin Fixture", () => {
     expect(decision).toEqual({ action: "render" });
   });
 
-  it("routes to /home when setup has already been completed", () => {
+  it("routes to /w/super-admin when setup has already been completed", () => {
     const completedSetup = { completed_at: "2026-11-06T15:30:00Z" };
     expect(shouldRedirectToSetup(meData, completedSetup)).toBe(false);
 
@@ -63,6 +63,7 @@ describe("Real /me Bootstrap Super Admin Fixture", () => {
       user: meData,
       setupStatus: completedSetup,
     });
-    expect(postLoginRoute).toBe(HOME_PATH);
+    expect(postLoginRoute).toBe("/w/super-admin");
+    expect(HOME_PATH).toBe("/home");
   });
 });

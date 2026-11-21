@@ -3,9 +3,14 @@
  */
 
 export interface UserRoleAssignment {
+  id?: string;
   role_key: string;
+  role_name?: string;
   scope_type: string;
+  is_singleton?: boolean;
   is_active?: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
 }
 
 export interface UserWithAssignments {

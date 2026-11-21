@@ -1,3 +1,4 @@
+import { parseMeAssignments } from "../api-narrowing";
 import { createBrowserApiClient } from "./browser-client";
 import {
   SessionHttpError,
@@ -47,7 +48,15 @@ export function createBrowserSessionApi(origin: string, fetchFn?: typeof fetch):
     },
     changePassword: (current_password, new_password) =>
       postSession<PasswordChangeResponse>("/api/session/password", { current_password, new_password }, doFetch),
-    fetchMe: async () => ((await client.me.get()) as unknown as { data: SessionUser }).data,
+    fetchMe: async () => {
+      const envelope = (await client.me.get()) as unknown as {
+        data: SessionUser & { assignments?: unknown };
+      };
+      return {
+        ...envelope.data,
+        assignments: parseMeAssignments(envelope.data.assignments),
+      };
+    },
     fetchSetupStatus: async () => ((await client.setup.status()) as unknown as { data: SetupStatusCheck }).data,
   };
 }
