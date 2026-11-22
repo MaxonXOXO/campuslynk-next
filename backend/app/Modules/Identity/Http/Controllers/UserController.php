@@ -14,15 +14,20 @@ use App\Modules\Identity\Http\Requests\CreateUserRequest;
 use App\Modules\Identity\Http\Requests\UpdateUserRequest;
 use App\Modules\Identity\Http\Resources\UserResource;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Services\ScopeAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 class UserController
 {
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, ScopeAuthorizer $authorizer): JsonResponse
     {
-        $query = User::query()->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+        /** @var User $caller */
+        $caller = $request->user();
+        $query = $authorizer->scopeQuery(User::query(), $caller, 'identity.user.view')
+            ->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
         if ($request->has('type')) {
             $query->where('type', (string) $request->query('type'));
@@ -61,6 +66,8 @@ class UserController
     {
         /** @var User $user */
         $user = User::with(['roleAssignments' => fn ($q) => $q->active()->with('role')])->findOrFail($id);
+
+        Gate::authorize('view', $user);
 
         return response()->json([
             'data' => new UserResource($user),
@@ -105,6 +112,8 @@ class UserController
 
         /** @var User $user */
         $user = User::findOrFail($id);
+
+        Gate::authorize('update', $user);
 
         $updated = $action->execute($caller, $user, $request->validated());
         $updated->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
@@ -154,6 +163,8 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
+        Gate::authorize('unlock', $targetUser);
+
         $action->execute($caller, $targetUser, (string) $request->ip());
 
         return response()->json([
@@ -177,6 +188,8 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
+        Gate::authorize('suspend', $targetUser);
+
         $action->execute($caller, $targetUser);
         $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
@@ -199,6 +212,8 @@ class UserController
 
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
+
+        Gate::authorize('reactivate', $targetUser);
 
         $action->execute($caller, $targetUser);
         $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);

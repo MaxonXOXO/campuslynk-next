@@ -47,6 +47,26 @@ class Role extends Model
     ];
 
     /**
+     * Existing multi-scope roles from docs/role_and_permission_spec.md section 3.
+     * The stored primary scope remains authoritative, including tenant-defined roles.
+     *
+     * @return list<string>
+     */
+    public function allowedScopeTypes(): array
+    {
+        $additional = match ($this->key) {
+            'chairman', 'admin' => ['institution', 'stream'],
+            'mentor' => ['batch', 'sub_batch'],
+            'workshop_superintendent' => ['workshop_section', 'institution'],
+            'workshop_instructor', 'trade_instructor', 'tradesman' => ['department', 'workshop_section'],
+            'physical_instructor' => ['stream', 'institution'],
+            default => [],
+        };
+
+        return array_values(array_unique([$this->scope_type, ...$additional]));
+    }
+
+    /**
      * @return BelongsToMany<Permission, $this>
      */
     public function permissions(): BelongsToMany

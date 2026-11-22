@@ -6,9 +6,14 @@ namespace App\Modules\Organisation;
 
 use App\Core\Modules\Contracts\ModuleManifestContract;
 use App\Modules\Organisation\Contracts\GovernanceResolverContract;
+use App\Modules\Organisation\Contracts\ScopeDirectoryContract;
 use App\Modules\Organisation\Contracts\ScopeTreeContract;
+use App\Modules\Organisation\Models\Department;
+use App\Modules\Organisation\Policies\DepartmentPolicy;
 use App\Modules\Organisation\Services\GovernanceResolver;
+use App\Modules\Organisation\Services\ScopeDirectory;
 use App\Modules\Organisation\Services\ScopePathBuilder;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -185,10 +190,12 @@ class OrganisationModule extends ServiceProvider implements ModuleManifestContra
             ScopeTreeContract::class,
             ScopePathBuilder::class
         );
+
+        $this->app->bind(ScopeDirectoryContract::class, ScopeDirectory::class);
     }
 
     public function boot(): void
     {
-        // Module event listeners or route registrations
+        Gate::policy(Department::class, DepartmentPolicy::class);
     }
 }

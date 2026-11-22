@@ -24,7 +24,7 @@ final class RevokeRoleAction
         bool $bypassAuthorization = false
     ): RoleAssignment {
         if (! $bypassAuthorization) {
-            if (! $this->authorizer->canAtScope($revoker, 'identity.role.assign', $assignment->scope_label)) {
+            if (! $this->authorizer->canAccessAssignment($revoker, 'identity.role.assign', $assignment)) {
                 throw new UnauthorizedDelegationException(
                     "Revoker does not possess role authority at scope [{$assignment->scope_label}]."
                 );

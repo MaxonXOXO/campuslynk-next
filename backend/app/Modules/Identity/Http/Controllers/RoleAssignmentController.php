@@ -14,6 +14,7 @@ use App\Modules\Identity\Http\Resources\RoleAssignmentResource;
 use App\Modules\Identity\Models\Role;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Services\ScopeAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -41,9 +42,12 @@ class RoleAssignmentController
         ]);
     }
 
-    public function listAssignments(Request $request): JsonResponse
+    public function listAssignments(Request $request, ScopeAuthorizer $authorizer): JsonResponse
     {
-        $query = RoleAssignment::query()->with(['role', 'user', 'assignedByUser']);
+        /** @var User $caller */
+        $caller = $request->user();
+        $query = $authorizer->scopeQuery(RoleAssignment::query(), $caller, 'identity.role.assign')
+            ->with(['role', 'user', 'assignedByUser']);
 
         if ($request->has('user_id')) {
             $query->where('user_id', (string) $request->query('user_id'));

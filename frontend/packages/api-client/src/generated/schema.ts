@@ -147,7 +147,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List users with pagination and filtering */
+        /**
+         * List users with pagination and filtering
+         * @description Returns users with current assignments inside the caller's authorized scopes. Institution-wide grants also include unassigned accounts.
+         */
         get: operations["listUsers"];
         put?: never;
         /** Create a new user in the active tenant */
@@ -165,9 +168,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get user details and assigned roles */
+        /**
+         * Get user details and assigned roles
+         * @description Uses the same permission and scope predicates as the user directory.
+         */
         get: operations["getUser"];
-        /** Update user attributes and status */
+        /**
+         * Update user attributes and status
+         * @description Requires user-update permission within the target user's managing scope.
+         */
         put: operations["updateUser"];
         post?: never;
         delete?: never;
@@ -236,10 +245,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List institution departments with stream and academic/administrative kind */
+        /**
+         * List institution departments with stream and academic/administrative kind
+         * @description Returns only departments inside the caller's authorized read scopes.
+         */
         get: operations["listDepartments"];
         put?: never;
-        /** Create a new institution department */
+        /**
+         * Create a new institution department
+         * @description Requires department-management permission over the parent stream.
+         */
         post: operations["createDepartment"];
         delete?: never;
         options?: never;
@@ -254,12 +269,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get department details */
+        /**
+         * Get department details
+         * @description Uses the same permission and scope predicates as the department collection.
+         */
         get: operations["getDepartment"];
-        /** Update department details */
+        /**
+         * Update department details
+         * @description Requires department-management permission within the target department's managing scope.
+         */
         put: operations["updateDepartment"];
         post?: never;
-        /** Delete a department */
+        /**
+         * Delete a department
+         * @description Requires department-management permission within the target department's managing scope.
+         */
         delete: operations["deleteDepartment"];
         options?: never;
         head?: never;
@@ -377,10 +401,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List role assignments with optional filtering by user, role, or scope */
+        /**
+         * List role assignments with optional filtering by user, role, or scope
+         * @description Applies the caller's authorized managing scopes before optional filters, including when listing ended assignment history.
+         */
         get: operations["listRoleAssignments"];
         put?: never;
-        /** Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints */
+        /**
+         * Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints
+         * @description One active grantor assignment must provide role-assignment permission, the target-role delegation rule (including any recorded-order requirement), and authority over the target scope. The scope type must be allowed for the target role.
+         */
         post: operations["createRoleAssignment"];
         delete?: never;
         options?: never;
@@ -1323,6 +1353,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createUser: {
@@ -1370,6 +1401,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserEnvelope"];
                 };
             };
+            403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
         };
     };
@@ -1397,6 +1429,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserEnvelope"];
                 };
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     listRoles: {
@@ -1557,6 +1590,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createDepartment: {
@@ -1609,6 +1643,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
         };
     };
@@ -1876,6 +1911,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createRoleAssignment: {
