@@ -7,6 +7,7 @@ namespace Tests\Feature\Identity;
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Models\Activity;
+use App\Modules\Identity\Models\Permission;
 use App\Modules\Identity\Models\Role;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
@@ -721,6 +722,61 @@ it('evaluates temporary_password_expires_at and locked_until accurately when app
         ])->assertStatus(401);
     } finally {
         date_default_timezone_set($prevTz);
+        $this->tenantContext->forget();
+    }
+});
+
+it('denies POST /users/{id}/reset-password with 403 when target user is outside caller scope', function () {
+    $ctx = provisionIdentityGapTenant($this->provisioner, $this->tenantContext, 'tenant_gap_scope_rst', 'gapscope.test');
+
+    try {
+        $hod = User::create([
+            'type' => 'staff',
+            'name' => 'HOD Civil',
+            'email' => 'hod.ce@gapscope.test',
+            'password' => Hash::make('StrongPass123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $hodRole = Role::where('key', 'hod')->firstOrFail();
+        // Grant identity.user.reset_password to hod role for this test
+        $resetPerm = Permission::where('key', 'identity.user.reset_password')->firstOrFail();
+        $hodRole->permissions()->syncWithoutDetaching([$resetPerm->id]);
+
+        RoleAssignment::create([
+            'user_id' => $hod->id,
+            'role_id' => $hodRole->id,
+            'scope_type' => 'department',
+            'scope_label' => 'd_ce',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $meLecturer = User::create([
+            'type' => 'staff',
+            'name' => 'Lecturer Mechanical',
+            'email' => 'lec.me@gapscope.test',
+            'password' => Hash::make('StrongPass123!'),
+            'status' => 'active',
+            'must_change_password' => false,
+        ]);
+        $lecRole = Role::where('key', 'lecturer')->firstOrFail();
+        RoleAssignment::create([
+            'user_id' => $meLecturer->id,
+            'role_id' => $lecRole->id,
+            'scope_type' => 'department',
+            'scope_label' => 'd_me',
+            'is_singleton' => false,
+            'is_active' => true,
+        ]);
+
+        $hodToken = $hod->createToken('hod_token')->plainTextToken;
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$hodToken}",
+        ])->postJson("http://gapscope.test/api/v1/users/{$meLecturer->id}/reset-password")
+            ->assertStatus(403);
+    } finally {
         $this->tenantContext->forget();
     }
 });

@@ -137,6 +137,8 @@ class UserController
         /** @var User $targetUser */
         $targetUser = User::findOrFail($id);
 
+        Gate::authorize('resetPassword', $targetUser);
+
         $result = $action->execute($caller, $targetUser, (string) $request->ip());
 
         return response()->json([

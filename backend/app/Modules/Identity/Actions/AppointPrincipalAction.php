@@ -11,6 +11,7 @@ use App\Modules\Identity\Models\Role;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\PrincipalActionResult;
+use App\Modules\Identity\Services\ScopeAuthorizer;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -20,6 +21,7 @@ final class AppointPrincipalAction
 {
     public function __construct(
         protected CreateUserAction $createUserAction,
+        protected ScopeAuthorizer $authorizer,
     ) {}
 
     /**
@@ -151,12 +153,9 @@ final class AppointPrincipalAction
     protected function resolveSuperAdminInstitutionAssignment(User $actor): RoleAssignment
     {
         /** @var RoleAssignment|null $assignment */
-        $assignment = RoleAssignment::query()
-            ->where('user_id', $actor->id)
-            ->where('scope_type', 'institution')
-            ->active()
-            ->whereHas('role', fn ($q) => $q->where('key', 'super_admin'))
-            ->first();
+        $assignment = $this->authorizer
+            ->activeAssignmentsForPermission($actor, 'identity.role.assign')
+            ->first(fn (RoleAssignment $a): bool => $a->scope_type === 'institution' && $a->role->key === 'super_admin');
 
         if ($assignment === null) {
             throw new UnauthorizedDelegationException(
