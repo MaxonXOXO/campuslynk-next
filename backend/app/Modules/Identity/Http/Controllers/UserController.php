@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Http\Controllers;
 
 use App\Modules\Identity\Actions\CreateUserAction;
 use App\Modules\Identity\Actions\ReactivateUserAction;
+use App\Modules\Identity\Actions\ResetUserPasswordAction;
 use App\Modules\Identity\Actions\SuspendUserAction;
 use App\Modules\Identity\Actions\UnlockUserAction;
 use App\Modules\Identity\Actions\UpdateUserAction;
@@ -26,7 +27,7 @@ class UserController
         /** @var User $caller */
         $caller = $request->user();
         $query = $authorizer->scopeQuery(User::query(), $caller, 'identity.user.view')
-            ->with('roleAssignments.role');
+            ->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
         if ($request->has('type')) {
             $query->where('type', (string) $request->query('type'));
@@ -64,7 +65,7 @@ class UserController
     public function show(string $id): JsonResponse
     {
         /** @var User $user */
-        $user = User::with('roleAssignments.role')->findOrFail($id);
+        $user = User::with(['roleAssignments' => fn ($q) => $q->active()->with('role')])->findOrFail($id);
 
         Gate::authorize('view', $user);
 
@@ -84,17 +85,24 @@ class UserController
         /** @var array{type: string, name: string, email?: string|null, mobile?: string|null, registration_number?: string|null, password?: string|null} $validated */
         $validated = $request->validated();
 
-        $user = $action->execute($caller, $validated);
+        $result = $action->execute($caller, $validated);
+        $result->user->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+
+        $data = (new UserResource($result->user))->resolve($request);
+        if ($result->temporaryPassword !== null) {
+            $data['temporary_password'] = $result->temporaryPassword;
+            $data['expires_at'] = $result->temporaryPasswordExpiresAt->toIso8601String();
+        }
 
         return response()->json([
-            'data' => new UserResource($user),
+            'data' => $data,
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
             ],
             'links' => [
-                'self' => url("/api/v1/users/{$user->id}"),
+                'self' => url("/api/v1/users/{$result->user->id}"),
             ],
-        ], Response::HTTP_CREATED);
+        ], Response::HTTP_CREATED, ['Cache-Control' => 'no-store']);
     }
 
     public function update(UpdateUserRequest $request, string $id, UpdateUserAction $action): JsonResponse
@@ -108,6 +116,7 @@ class UserController
         Gate::authorize('update', $user);
 
         $updated = $action->execute($caller, $user, $request->validated());
+        $updated->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
         return response()->json([
             'data' => new UserResource($updated),
@@ -118,6 +127,34 @@ class UserController
                 'self' => url("/api/v1/users/{$user->id}"),
             ],
         ]);
+    }
+
+    public function resetPassword(Request $request, string $id, ResetUserPasswordAction $action): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        Gate::authorize('resetPassword', $targetUser);
+
+        $result = $action->execute($caller, $targetUser, (string) $request->ip());
+
+        return response()->json([
+            'data' => [
+                'user_id' => $targetUser->id,
+                'temporary_password' => $result->temporaryPassword,
+                'expires_at' => $result->expiresAt->toIso8601String(),
+                'must_change_password' => true,
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}/reset-password"),
+            ],
+        ], Response::HTTP_OK, ['Cache-Control' => 'no-store']);
     }
 
     public function unlock(Request $request, string $id, UnlockUserAction $action): JsonResponse
@@ -156,6 +193,7 @@ class UserController
         Gate::authorize('suspend', $targetUser);
 
         $action->execute($caller, $targetUser);
+        $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
         return response()->json([
             'data' => new UserResource($targetUser),
@@ -180,6 +218,7 @@ class UserController
         Gate::authorize('reactivate', $targetUser);
 
         $action->execute($caller, $targetUser);
+        $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
         return response()->json([
             'data' => new UserResource($targetUser),

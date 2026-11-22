@@ -35,10 +35,11 @@ final class ChangePasswordAction implements ChangesPasswordContract
             throw new AuthenticationException('Current password is incorrect.');
         }
 
-        // 2. Update password and clear must_change_password
+        // 2. Update password and clear must_change_password + temporary_password_expires_at
         $user->forceFill([
             'password' => Hash::make($newPassword),
             'must_change_password' => false,
+            'temporary_password_expires_at' => null,
         ])->save();
 
         // 3. Grant full abilities to current token and revoke all other tokens of this user (ADR-0011, B3, B4)

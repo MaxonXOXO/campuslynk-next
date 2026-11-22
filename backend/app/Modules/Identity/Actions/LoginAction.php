@@ -56,6 +56,10 @@ final class LoginAction implements AuthenticatesUserContract
         // 1. Check rate limiting per tenant + identifier + IP
         if ($this->rateLimiter->tooManyAttempts($tenant->id, $trimmedIdentifier, $ip)) {
             $seconds = $this->rateLimiter->availableIn($tenant->id, $trimmedIdentifier, $ip);
+            $lockedUser = $this->resolveUser($trimmedIdentifier);
+            if ($lockedUser !== null && $seconds > 0) {
+                $lockedUser->forceFill(['locked_until' => Carbon::now()->addSeconds($seconds)])->save();
+            }
 
             throw new LockoutException($seconds);
         }
@@ -72,21 +76,40 @@ final class LoginAction implements AuthenticatesUserContract
             Hash::check($password, self::DUMMY_HASH);
         }
 
-        // 4. Validate credentials and account status (inactive accounts get the identical generic error)
-        if ($user === null || ! $passwordValid || ! $user->isActive()) {
+        $tempPasswordExpired = $user !== null
+            && $user->must_change_password
+            && $user->temporary_password_expires_at !== null
+            && $user->temporary_password_expires_at->isPast();
+
+        // 4. Validate credentials, temporary password expiry, and account status
+        //    (all failures return the identical generic 401 error to avoid enumeration)
+        if ($user === null || ! $passwordValid || ! $user->isActive() || $tempPasswordExpired) {
             $this->rateLimiter->hit($tenant->id, $trimmedIdentifier, $ip);
+
+            if ($user !== null && $this->rateLimiter->tooManyAttempts($tenant->id, $trimmedIdentifier, $ip)) {
+                $seconds = $this->rateLimiter->availableIn($tenant->id, $trimmedIdentifier, $ip);
+                if ($seconds > 0) {
+                    $user->forceFill(['locked_until' => Carbon::now()->addSeconds($seconds)])->save();
+                }
+            }
+
+            $failureReason = $user === null
+                ? 'unknown_user'
+                : (! $passwordValid
+                    ? 'wrong_password'
+                    : ($tempPasswordExpired ? 'temp_password_expired' : 'inactive_status'));
 
             LoginFailed::dispatch(
                 LoginFailed::maskIdentifier($trimmedIdentifier),
                 $ip,
-                $user === null ? 'unknown_user' : (! $passwordValid ? 'wrong_password' : 'inactive_status'),
+                $failureReason,
                 $tenant->slug
             );
 
             throw new AuthenticationException('Invalid credentials provided.');
         }
 
-        // 5. Successful login: clear throttle attempts
+        // 5. Successful login: clear throttle attempts and timed lockout marker
         $this->rateLimiter->clear($tenant->id, $trimmedIdentifier, $ip);
 
         // 6. Token lifetime per client type (ADR-0011 with tenant_settings override)
@@ -99,8 +122,11 @@ final class LoginAction implements AuthenticatesUserContract
 
         $newAccessToken = $user->createToken($deviceName, $abilities, $expiresAt);
 
-        // 8. Update last login timestamp
-        $user->forceFill(['last_login_at' => Carbon::now()])->save();
+        // 8. Update last login timestamp and clear locked_until
+        $user->forceFill([
+            'last_login_at' => Carbon::now(),
+            'locked_until' => null,
+        ])->save();
 
         LoginSucceeded::dispatch($user, $client, $ip, $tenant->slug);
 

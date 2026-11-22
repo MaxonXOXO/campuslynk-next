@@ -20,6 +20,7 @@ final class RevokeRoleAction
     public function execute(
         User $revoker,
         RoleAssignment $assignment,
+        ?string $reason = null,
         bool $bypassAuthorization = false
     ): RoleAssignment {
         if (! $bypassAuthorization) {
@@ -30,18 +31,28 @@ final class RevokeRoleAction
             }
         }
 
+        $now = Carbon::now();
+        $validTo = ($assignment->valid_from !== null && $assignment->valid_from->gte($now))
+            ? $assignment->valid_from->copy()->addMicrosecond()
+            : $now;
+
         $assignment->is_active = false;
-        $assignment->valid_to = Carbon::now();
+        $assignment->valid_to = $validTo;
+        if ($reason !== null && trim($reason) !== '') {
+            $assignment->reason = trim($reason);
+        }
         $assignment->save();
 
         // Activity audit logging
         activity('rbac')
+            ->event('role_assignment.revoked')
             ->performedOn($assignment)
             ->causedBy($revoker)
             ->withProperties([
                 'user_id' => $assignment->user_id,
                 'role_id' => $assignment->role_id,
                 'scope_label' => $assignment->scope_label,
+                'reason' => $assignment->reason,
             ])
             ->log("Revoked role assignment [{$assignment->id}] at scope [{$assignment->scope_label}].");
 

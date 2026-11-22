@@ -6,6 +6,7 @@ use App\Core\Http\Controllers\MetaController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\ImpersonationController;
 use App\Modules\Identity\Http\Controllers\MeController;
+use App\Modules\Identity\Http\Controllers\PrincipalController;
 use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
@@ -97,12 +98,23 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/users/{id}/unlock', [UserController::class, 'unlock'])
                 ->middleware(RequirePermission::class.':identity.user.unlock')
                 ->name('api.v1.users.unlock');
+            Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])
+                ->middleware(RequirePermission::class.':identity.user.reset_password')
+                ->name('api.v1.users.reset-password');
             Route::post('/users/{id}/suspend', [UserController::class, 'suspend'])
                 ->middleware(RequirePermission::class.':identity.user.suspend')
                 ->name('api.v1.users.suspend');
             Route::post('/users/{id}/reactivate', [UserController::class, 'reactivate'])
                 ->middleware(RequirePermission::class.':identity.user.suspend')
                 ->name('api.v1.users.reactivate');
+
+            // Identity: Principal Governance (Atomic Appointment & Replacement)
+            Route::post('/principal/appoint', [PrincipalController::class, 'appoint'])
+                ->middleware(RequirePermission::class.':identity.role.assign')
+                ->name('api.v1.principal.appoint');
+            Route::post('/principal/replace', [PrincipalController::class, 'replace'])
+                ->middleware(RequirePermission::class.':identity.role.assign')
+                ->name('api.v1.principal.replace');
 
             // Identity: Scoped Roles & Delegation
             Route::get('/roles', [RoleAssignmentController::class, 'index'])

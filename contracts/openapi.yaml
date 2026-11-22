@@ -269,9 +269,19 @@ paths:
           schema:
             type: string
             enum: [staff, student, parent]
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
           description: Paginated users list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUsersEnvelope'
         '403':
           $ref: '#/components/responses/ProblemDetails'
     post:
@@ -287,11 +297,18 @@ paths:
               $ref: '#/components/schemas/CreateUserInput'
       responses:
         '201':
-          description: User created
+          description: User created (returns one-time temporary_password and expires_at when password is omitted; Cache-Control no-store)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserEnvelope'
+                $ref: '#/components/schemas/CreateUserEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
         '422':
           $ref: '#/components/responses/ProblemDetails'
 
@@ -356,6 +373,12 @@ paths:
       responses:
         '200':
           description: List of roles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleListEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
 
   /streams:
     get:
@@ -764,7 +787,42 @@ paths:
       responses:
         '200':
           description: User unlocked successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
         '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/reset-password:
+    post:
+      operationId: resetUserPassword
+      summary: Administratively reset a user's password to a one-time server-generated temporary password (requires identity.user.reset_password; forbids self-reset and equal/higher authority targets)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Temporary password issued once (Cache-Control no-store)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResetPasswordEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
           $ref: '#/components/responses/ProblemDetails'
 
   /users/{id}/suspend:
@@ -779,10 +837,26 @@ paths:
           required: true
           schema:
             type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  nullable: true
       responses:
         '200':
           description: User suspended successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
         '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
           $ref: '#/components/responses/ProblemDetails'
 
   /users/{id}/reactivate:
@@ -800,19 +874,119 @@ paths:
       responses:
         '200':
           description: User reactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
         '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /principal/appoint:
+    post:
+      operationId: appointPrincipal
+      summary: Atomically appoint the initial institution Principal (existing active user or new staff user with one-time temporary password)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AppointPrincipalInput'
+      responses:
+        '201':
+          description: Principal appointed successfully (Cache-Control no-store)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalActionEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /principal/replace:
+    post:
+      operationId: replacePrincipal
+      summary: Atomically end the current institution Principal assignment and appoint a replacement with a recorded reason
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplacePrincipalInput'
+      responses:
+        '201':
+          description: Principal replaced successfully (Cache-Control no-store)
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalActionEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
           $ref: '#/components/responses/ProblemDetails'
 
   /role-assignments:
     get:
       operationId: listRoleAssignments
-      summary: List role assignments with optional filtering by user, role, or scope
+      summary: List role assignments with optional filtering by user, role, scope, or active status
       description: Applies the caller's authorized managing scopes before optional filters, including when listing ended assignment history.
       security:
         - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: role_key
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: scope_label
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: active_only
+          in: query
+          required: false
+          schema:
+            type: boolean
+            default: true
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
       responses:
         '200':
-          description: Role assignments list
+          description: Paginated role assignments list with embedded user and assigner summaries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoleAssignmentsEnvelope'
         '403':
           $ref: '#/components/responses/ProblemDetails'
     post:
@@ -844,7 +1018,7 @@ paths:
   /role-assignments/{id}:
     delete:
       operationId: deleteRoleAssignment
-      summary: Revoke an existing role assignment
+      summary: Revoke an existing role assignment with an optional reason (accepted via JSON body or query parameter)
       security:
         - bearerAuth: []
       parameters:
@@ -853,6 +1027,23 @@ paths:
           required: true
           schema:
             type: string
+        - name: reason
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 500
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+                  maxLength: 500
+                  nullable: true
       responses:
         '200':
           description: Role assignment revoked successfully
@@ -863,6 +1054,8 @@ paths:
         '403':
           $ref: '#/components/responses/ProblemDetails'
         '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
           $ref: '#/components/responses/ProblemDetails'
 
   /programs:
@@ -1638,9 +1831,62 @@ components:
             self:
               type: string
 
+    PaginationMeta:
+      type: object
+      required: [current_page, last_page, per_page, total]
+      properties:
+        current_page:
+          type: integer
+        last_page:
+          type: integer
+        per_page:
+          type: integer
+        total:
+          type: integer
+
+    UserAssignmentSummary:
+      type: object
+      required: [id, role_key, role_name, scope_type, scope_label]
+      properties:
+        id:
+          type: string
+        role_key:
+          type: string
+        role_name:
+          type: string
+        scope_type:
+          type: string
+        scope_label:
+          type: string
+
+    CurrentUserAssignment:
+      type: object
+      required: [id, role_key, role_name, scope_type, scope_label, is_singleton]
+      properties:
+        id:
+          type: string
+        role_key:
+          type: string
+        role_name:
+          type: string
+        scope_type:
+          type: string
+        scope_label:
+          type: string
+        is_singleton:
+          type: boolean
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_to:
+          type: string
+          format: date-time
+          nullable: true
+
     UserSchema:
       type: object
-      required: [id, type, name, status, must_change_password]
+      required: [id, type, name, status, must_change_password, is_locked, assignments]
       properties:
         id:
           type: string
@@ -1670,7 +1916,29 @@ components:
           enum: [active, suspended, pending]
         must_change_password:
           type: boolean
+        temporary_password_expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        is_locked:
+          type: boolean
+        locked_until:
+          type: string
+          format: date-time
+          nullable: true
         last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        assignments:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAssignmentSummary'
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+        updated_at:
           type: string
           format: date-time
           nullable: true
@@ -1743,12 +2011,12 @@ components:
               nullable: true
             assignments:
               type: array
-              description: Placeholder for Step 4 Scoped RBAC
+              description: Active time-valid scoped role assignments for the current user
               items:
-                type: object
+                $ref: '#/components/schemas/CurrentUserAssignment'
             capabilities:
               type: array
-              description: Placeholder for Step 4 Scoped RBAC
+              description: Effective permission union across active assignments
               items:
                 type: string
         meta:
@@ -1818,7 +2086,7 @@ components:
 
     CreateUserInput:
       type: object
-      required: [type, name, password]
+      required: [type, name]
       properties:
         type:
           type: string
@@ -1838,8 +2106,202 @@ components:
         password:
           type: string
           format: password
+          nullable: true
+          description: Optional; when omitted, the server generates a one-time temporary password returned once in the 201 response.
         must_change_password:
           type: boolean
+
+    CreateUserEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/UserSchema'
+            - type: object
+              properties:
+                temporary_password:
+                  type: string
+                  description: Server-generated one-time temporary password (present only on creation when password was omitted; never returned again).
+                expires_at:
+                  type: string
+                  format: date-time
+                  description: Expiration timestamp of the one-time temporary password.
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    ResetPasswordEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [user_id, temporary_password, expires_at, must_change_password]
+          properties:
+            user_id:
+              type: string
+            temporary_password:
+              type: string
+              description: Newly generated one-time temporary password (never returned again).
+            expires_at:
+              type: string
+              format: date-time
+            must_change_password:
+              type: boolean
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    PaginatedUsersEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserSchema'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    RoleSummary:
+      type: object
+      required: [id, key, name, scope_type, stream, is_singleton, permissions]
+      properties:
+        id:
+          type: string
+        key:
+          type: string
+        name:
+          type: string
+        scope_type:
+          type: string
+        stream:
+          type: string
+        is_singleton:
+          type: boolean
+        permissions:
+          type: array
+          items:
+            type: string
+
+    RoleListEnvelope:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleSummary'
+        meta:
+          type: object
+          required: [total]
+          properties:
+            total:
+              type: integer
+
+    PrincipalNewUserInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+        registration_number:
+          type: string
+          nullable: true
+
+    AppointPrincipalInput:
+      type: object
+      properties:
+        user_id:
+          type: string
+          nullable: true
+        new_user:
+          $ref: '#/components/schemas/PrincipalNewUserInput'
+          nullable: true
+        order_record:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+
+    ReplacePrincipalInput:
+      type: object
+      required: [reason]
+      properties:
+        user_id:
+          type: string
+          nullable: true
+        new_user:
+          $ref: '#/components/schemas/PrincipalNewUserInput'
+          nullable: true
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+        order_record:
+          type: string
+          nullable: true
+
+    PrincipalActionEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [assignment, previous_assignment_id]
+          properties:
+            assignment:
+              $ref: '#/components/schemas/RoleAssignmentSchema'
+            previous_assignment_id:
+              type: string
+              nullable: true
+            temporary_password:
+              type: string
+              description: Returned once when a new_user account was created.
+            expires_at:
+              type: string
+              format: date-time
+        meta:
+          type: object
+          properties:
+            timestamp:
+              type: string
+              format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
 
     UpdateUserInput:
       type: object
@@ -1904,43 +2366,103 @@ components:
           type: string
           nullable: true
 
+    RoleAssignmentUserSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+
+    RoleAssignmentActorSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
+    RoleAssignmentSchema:
+      type: object
+      required: [id, user_id, role_id, role_key, scope_type, scope_label, is_singleton, is_active]
+      properties:
+        id:
+          type: string
+        user_id:
+          type: string
+        role_id:
+          type: string
+        role_key:
+          type: string
+        role_name:
+          type: string
+          nullable: true
+        scope_type:
+          type: string
+        scope_label:
+          type: string
+        is_singleton:
+          type: boolean
+        is_active:
+          type: boolean
+        valid_from:
+          type: string
+          format: date-time
+          nullable: true
+        valid_to:
+          type: string
+          format: date-time
+          nullable: true
+        order_record:
+          type: string
+          nullable: true
+        reason:
+          type: string
+          nullable: true
+        user:
+          $ref: '#/components/schemas/RoleAssignmentUserSummary'
+          nullable: true
+        assigned_by:
+          $ref: '#/components/schemas/RoleAssignmentActorSummary'
+          nullable: true
+
     RoleAssignmentEnvelope:
       type: object
-      required: [data, meta, links]
+      required: [data, meta]
       properties:
         data:
-          type: object
-          required: [id, user_id, role_id, role_key, scope_type, scope_label, is_singleton, is_active]
-          properties:
-            id:
-              type: string
-            user_id:
-              type: string
-            role_id:
-              type: string
-            role_key:
-              type: string
-            scope_type:
-              type: string
-            scope_label:
-              type: string
-            is_singleton:
-              type: boolean
-            is_active:
-              type: boolean
-            valid_from:
-              type: string
-              format: date-time
-            valid_to:
-              type: string
-              format: date-time
-              nullable: true
+          $ref: '#/components/schemas/RoleAssignmentSchema'
         meta:
           type: object
           properties:
             timestamp:
               type: string
               format: date-time
+        links:
+          type: object
+          properties:
+            self:
+              type: string
+
+    PaginatedRoleAssignmentsEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleAssignmentSchema'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
         links:
           type: object
           properties:

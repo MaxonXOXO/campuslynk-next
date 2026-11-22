@@ -12,10 +12,12 @@ use App\Modules\Identity\Commands\PermissionsSyncCommand;
 use App\Modules\Identity\Commands\UsersUnlockCommand;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Contracts\ChangesPasswordContract;
+use App\Modules\Identity\Contracts\IssuesTemporaryPasswordContract;
 use App\Modules\Identity\Listeners\ArchiveFirstYearBatchAssignmentsListener;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Policies\UserPolicy;
 use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Modules\Identity\Services\TemporaryPasswordIssuer;
 use App\Modules\Organisation\Events\BatchSemesterPromoted;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
@@ -144,6 +146,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
     {
         $this->app->bind(AuthenticatesUserContract::class, LoginAction::class);
         $this->app->bind(ChangesPasswordContract::class, ChangePasswordAction::class);
+        $this->app->bind(IssuesTemporaryPasswordContract::class, TemporaryPasswordIssuer::class);
         $this->app->singleton(ScopeAuthorizerContract::class, ScopeAuthorizer::class);
     }
 

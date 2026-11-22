@@ -36,4 +36,9 @@ final class UserPolicy
     {
         return $this->suspend($caller, $target);
     }
+
+    public function resetPassword(Authenticatable $caller, User $target): bool
+    {
+        return $this->authorizer->canAccessUser($caller, 'identity.user.reset_password', $target);
+    }
 }
