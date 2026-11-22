@@ -46,6 +46,7 @@ describe("SuperAdminOverview", () => {
         {
           id: "01RA_PRINCIPAL",
           user_id: "01USER_PRINCIPAL",
+          role_id: "01R_PRIN",
           role_key: "principal",
           scope_type: "institution",
           scope_label: "i_dev",
@@ -53,6 +54,12 @@ describe("SuperAdminOverview", () => {
           is_active: true,
           valid_from: "2026-11-11T09:00:00Z",
           valid_to: null,
+          user: {
+            id: "01USER_PRINCIPAL",
+            name: "Dr. Meera Menon",
+            email: "principal@dev.test",
+            mobile: "+919876543210",
+          },
         },
       ],
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 1 },
@@ -60,19 +67,6 @@ describe("SuperAdminOverview", () => {
     mocks.client.users.list.mockResolvedValue({
       data: [],
       meta: { current_page: 1, last_page: 2, per_page: 25, total: 32 },
-    });
-    mocks.client.users.get.mockResolvedValue({
-      data: {
-        id: "01USER_PRINCIPAL",
-        type: "staff",
-        name: "Dr. Meera Menon",
-        email: "principal@dev.test",
-        mobile: "+919876543210",
-        registration_number: null,
-        status: "active",
-        must_change_password: false,
-        last_login_at: null,
-      },
     });
 
     render(<SuperAdminOverview />);
@@ -83,7 +77,7 @@ describe("SuperAdminOverview", () => {
 
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.getByText("32 total")).toBeInTheDocument();
-    expect(mocks.client.users.get).toHaveBeenCalledWith("01USER_PRINCIPAL");
+    expect(mocks.client.users.get).not.toHaveBeenCalled();
 
     const links = screen.getAllByRole("link");
     expect(links.map((el) => el.getAttribute("href"))).toEqual([

@@ -22,7 +22,12 @@ import {
   RiFileCopyLine,
   RiKey2Line,
 } from "@remixicon/react";
-import type { TemporaryPasswordPayload } from "@/lib/api-narrowing";
+import { formatDisplayDateTime } from "@/lib/format-date";
+
+export interface TemporaryPasswordPayload {
+  temporary_password: string;
+  expires_at?: string | null;
+}
 
 export interface TemporaryPasswordRevealProps {
   recipientName: string;
@@ -78,11 +83,10 @@ export function TemporaryPasswordReveal({
     onDismiss();
   }
 
-  const formattedExpiry = React.useMemo(() => {
-    if (!payload.expires_at) return null;
-    const parsed = new Date(payload.expires_at);
-    return Number.isNaN(parsed.getTime()) ? payload.expires_at : parsed.toLocaleString();
-  }, [payload.expires_at]);
+  const formattedExpiry = React.useMemo(
+    () => (payload.expires_at ? formatDisplayDateTime(payload.expires_at) : null),
+    [payload.expires_at]
+  );
 
   return (
     <Card className="border-primary/40 bg-primary/5" data-slot="temporary-password-reveal">

@@ -26,20 +26,16 @@ import {
   RiShieldUserLine,
   RiUserSettingsLine,
 } from "@remixicon/react";
+import type { components } from "@academic-suite/api-client";
 import { useApiClient } from "@/lib/auth/session-provider";
-import {
-  parsePaginatedRoleAssignments,
-  parsePaginatedUsers,
-  parseUserEnvelope,
-  type RoleAssignmentRecord,
-  type UserRecord,
-} from "@/lib/api-narrowing";
+import { formatDisplayDate } from "@/lib/format-date";
 import { getGeneralErrorMessage } from "@/app/setup/logic/error-mapping";
+
+type RoleAssignmentSchema = components["schemas"]["RoleAssignmentSchema"];
 
 interface OverviewState {
   setupCompletedAt: string | null;
-  activePrincipalAssignment: RoleAssignmentRecord | null;
-  activePrincipalUser: UserRecord | null;
+  activePrincipalAssignment: RoleAssignmentSchema | null;
   totalUsers: number;
 }
 
@@ -61,43 +57,13 @@ export function SuperAdminOverview() {
       ]);
 
       const setupData = (setupRes as { data?: { completed_at?: string | null } }).data;
-      const parsedAssignments = parsePaginatedRoleAssignments(assignmentsRes);
       const activePrincipal =
-        parsedAssignments.data.find((a) => a.is_active !== false) ?? null;
-
-      let principalUser: UserRecord | null = null;
-      if (activePrincipal) {
-        if (activePrincipal.user) {
-          principalUser = {
-            id: activePrincipal.user.id,
-            type: "staff",
-            name: activePrincipal.user.name,
-            email: activePrincipal.user.email ?? null,
-            mobile: activePrincipal.user.mobile ?? null,
-            registration_number: null,
-            status: "active",
-            must_change_password: false,
-            last_login_at: null,
-            created_at: null,
-            updated_at: null,
-          };
-        } else {
-          try {
-            const userRes = await client.users.get(activePrincipal.user_id);
-            principalUser = parseUserEnvelope(userRes);
-          } catch {
-            principalUser = null;
-          }
-        }
-      }
-
-      const parsedUsers = parsePaginatedUsers(usersRes);
+        assignmentsRes.data.find((a) => a.is_active !== false) ?? null;
 
       setData({
         setupCompletedAt: setupData?.completed_at ?? null,
         activePrincipalAssignment: activePrincipal,
-        activePrincipalUser: principalUser,
-        totalUsers: parsedUsers.meta.total,
+        totalUsers: usersRes.meta.total,
       });
     } catch (err: unknown) {
       setError(getGeneralErrorMessage(err, "Failed to load Super Admin overview."));
@@ -157,7 +123,7 @@ export function SuperAdminOverview() {
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               {data.setupCompletedAt
-                ? `Finalized on ${new Date(data.setupCompletedAt).toLocaleDateString()}.`
+                ? `Finalized on ${formatDisplayDate(data.setupCompletedAt)}.`
                 : "Required setup steps are still pending completion."}
             </CardContent>
             <CardFooter className="mt-auto">
@@ -181,7 +147,12 @@ export function SuperAdminOverview() {
                   <RiShieldUserLine className="size-4 text-primary" aria-hidden="true" />
                   Current Principal
                 </CardTitle>
-                <StatusBadge status={data.activePrincipalAssignment ? "success" : "warning"}>
+                <StatusBadge
+                  status={data.activePrincipalAssignment ? "success" : "warning"}
+                  className={
+                    !data.activePrincipalAssignment ? "dark:text-foreground" : undefined
+                  }
+                >
                   {data.activePrincipalAssignment ? "Appointed" : "Vacant"}
                 </StatusBadge>
               </div>
@@ -193,17 +164,18 @@ export function SuperAdminOverview() {
               {data.activePrincipalAssignment ? (
                 <div className="space-y-1">
                   <p className="font-medium text-foreground">
-                    {data.activePrincipalUser?.name ?? data.activePrincipalAssignment.user_id}
+                    {data.activePrincipalAssignment.user?.name ??
+                      data.activePrincipalAssignment.user_id}
                   </p>
-                  {data.activePrincipalUser?.email && (
+                  {data.activePrincipalAssignment.user?.email && (
                     <p className="text-xs text-muted-foreground truncate">
-                      {data.activePrincipalUser.email}
+                      {data.activePrincipalAssignment.user.email}
                     </p>
                   )}
                   {data.activePrincipalAssignment.valid_from && (
                     <p className="text-xs text-muted-foreground">
                       Active since{" "}
-                      {new Date(data.activePrincipalAssignment.valid_from).toLocaleDateString()}
+                      {formatDisplayDate(data.activePrincipalAssignment.valid_from)}
                     </p>
                   )}
                 </div>

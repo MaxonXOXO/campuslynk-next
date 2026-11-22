@@ -144,11 +144,12 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
               <Badge variant="secondary" className="text-xs">
                 {meta.shortLabel}
               </Badge>
-              {activeWorkspace?.scopeLabels.map((scope) => (
-                <Badge key={scope} variant="outline" className="text-[11px] font-mono">
-                  {scope}
-                </Badge>
-              ))}
+              {process.env.NODE_ENV === "development" &&
+                activeWorkspace?.scopeLabels.map((scope) => (
+                  <Badge key={scope} variant="outline" className="text-[11px] font-mono">
+                    {scope}
+                  </Badge>
+                ))}
             </div>
           </div>
         </SidebarFooter>

@@ -1,11 +1,11 @@
 "use client";
 
 import * as React from "react";
+import type { components } from "@academic-suite/api-client";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
-  Badge,
   Button,
   Card,
   CardContent,
@@ -13,6 +13,12 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
   Input,
   Label,
   PageHeader,
@@ -29,6 +35,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Textarea,
   cn,
 } from "@academic-suite/ui";
 import {
@@ -42,28 +49,74 @@ import {
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
-import {
-  parsePaginatedRoleAssignments,
-  parsePaginatedUsers,
-  parseUserEnvelope,
-  type RoleAssignmentRecord,
-  type TemporaryPasswordPayload,
-  type UserRecord,
-} from "@/lib/api-narrowing";
 import { problemStatus } from "@/lib/auth/problem";
+import { formatDisplayDateTime } from "@/lib/format-date";
 import { getInstitutionScopeLabel } from "@/lib/workspaces/workspaces";
 import {
   getGeneralErrorMessage,
   mapProblemFieldErrors,
 } from "@/app/setup/logic/error-mapping";
-import { TemporaryPasswordReveal } from "./TemporaryPasswordReveal";
+import {
+  TemporaryPasswordReveal,
+  type TemporaryPasswordPayload,
+} from "./TemporaryPasswordReveal";
 
+type RoleAssignmentSchema = components["schemas"]["RoleAssignmentSchema"];
+type UserSchema = components["schemas"]["UserSchema"];
 type AppointMode = "existing" | "create";
 
-function formatDateTime(value: string | null): string {
-  if (!value) return "—";
-  const parsed = new Date(value);
-  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString();
+interface NewUserFieldsState {
+  name: string;
+  email: string;
+  mobile: string;
+  registration_number: string;
+}
+
+const EMPTY_NEW_USER: NewUserFieldsState = {
+  name: "",
+  email: "",
+  mobile: "",
+  registration_number: "",
+};
+
+function validateNewUserFields(
+  fields: NewUserFieldsState,
+  prefix: "new_user." | "" = "new_user."
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const name = fields.name.trim();
+  const email = fields.email.trim();
+  const mobile = fields.mobile.trim();
+  const regNo = fields.registration_number.trim();
+
+  if (name.length < 2) {
+    errors[`${prefix}name`] = "Name must be at least 2 characters.";
+  }
+  if (!email && !mobile && !regNo) {
+    errors[`${prefix}email`] =
+      "Provide at least one identifier (email, mobile, or registration number).";
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors[`${prefix}email`] = "Enter a valid email address.";
+  }
+  if (mobile && !/^[0-9+\-\s]{10,20}$/.test(mobile)) {
+    errors[`${prefix}mobile`] = "Enter a valid mobile number (10-20 digits/symbols).";
+  }
+  if (regNo && !/^[a-zA-Z0-9\-_/]{3,32}$/.test(regNo)) {
+    errors[`${prefix}registration_number`] =
+      "Registration number must be 3-32 characters.";
+  }
+
+  return errors;
+}
+
+function buildNewUserPayload(fields: NewUserFieldsState) {
+  return {
+    name: fields.name.trim(),
+    email: fields.email.trim() || null,
+    mobile: fields.mobile.trim() || null,
+    registration_number: fields.registration_number.trim() || null,
+  };
 }
 
 export function SuperAdminPrincipalPage() {
@@ -75,19 +128,34 @@ export function SuperAdminPrincipalPage() {
     [state.user]
   );
 
-  const [assignments, setAssignments] = React.useState<RoleAssignmentRecord[]>([]);
-  const [hydratedUsers, setHydratedUsers] = React.useState<Record<string, UserRecord>>({});
-  const [staffOptions, setStaffOptions] = React.useState<UserRecord[]>([]);
+  const [assignments, setAssignments] = React.useState<RoleAssignmentSchema[]>([]);
+  const [staffOptions, setStaffOptions] = React.useState<UserSchema[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
   // Appoint form state
   const [appointMode, setAppointMode] = React.useState<AppointMode>("existing");
   const [selectedUserId, setSelectedUserId] = React.useState("");
+  const [appointNewUser, setAppointNewUser] =
+    React.useState<NewUserFieldsState>(EMPTY_NEW_USER);
   const [orderRecord, setOrderRecord] = React.useState("");
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [submitError, setSubmitError] = React.useState<string | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
+
+  // Replace Principal dialog state
+  const [replaceOpen, setReplaceOpen] = React.useState(false);
+  const [replaceMode, setReplaceMode] = React.useState<AppointMode>("existing");
+  const [replaceUserId, setReplaceUserId] = React.useState("");
+  const [replaceNewUser, setReplaceNewUser] =
+    React.useState<NewUserFieldsState>(EMPTY_NEW_USER);
+  const [replaceReason, setReplaceReason] = React.useState("");
+  const [replaceOrderRecord, setReplaceOrderRecord] = React.useState("");
+  const [replaceFieldErrors, setReplaceFieldErrors] = React.useState<
+    Record<string, string>
+  >({});
+  const [replaceSubmitError, setReplaceSubmitError] = React.useState<string | null>(null);
+  const [replacing, setReplacing] = React.useState(false);
 
   // Ephemeral one-time temporary password state (cleared on dismiss/unmount; never persisted)
   const [revealedTempPassword, setRevealedTempPassword] = React.useState<{
@@ -111,59 +179,8 @@ export function SuperAdminPrincipalPage() {
         client.users.list({ type: "staff", status: "active" }),
       ]);
 
-      const parsedAssignments = parsePaginatedRoleAssignments(assignmentsRes).data;
-      const parsedStaff = parsePaginatedUsers(staffRes).data;
-
-      const userMap: Record<string, UserRecord> = {};
-      for (const staff of parsedStaff) {
-        userMap[staff.id] = staff;
-      }
-
-      for (const assignment of parsedAssignments) {
-        if (assignment.user) {
-          userMap[assignment.user.id] = {
-            id: assignment.user.id,
-            type: "staff",
-            name: assignment.user.name,
-            email: assignment.user.email ?? null,
-            mobile: assignment.user.mobile ?? null,
-            registration_number: null,
-            status: "active",
-            must_change_password: false,
-            last_login_at: null,
-            created_at: null,
-            updated_at: null,
-          };
-        }
-      }
-
-      // TODO: Remove per-user hydration once GET /role-assignments embeds user summary.
-      const missingUserIds = Array.from(
-        new Set(
-          parsedAssignments
-            .map((a) => a.user_id)
-            .filter((uid) => Boolean(uid) && !userMap[uid])
-        )
-      );
-
-      if (missingUserIds.length > 0) {
-        const fetched = await Promise.allSettled(
-          missingUserIds.map(async (uid) => {
-            const res = await client.users.get(uid);
-            return parseUserEnvelope(res);
-          })
-        );
-
-        for (const result of fetched) {
-          if (result.status === "fulfilled" && result.value) {
-            userMap[result.value.id] = result.value;
-          }
-        }
-      }
-
-      setAssignments(parsedAssignments);
-      setHydratedUsers(userMap);
-      setStaffOptions(parsedStaff);
+      setAssignments(assignmentsRes.data);
+      setStaffOptions(staffRes.data);
     } catch (err: unknown) {
       setLoadError(getGeneralErrorMessage(err, "Failed to load Principal assignments."));
     } finally {
@@ -198,17 +215,44 @@ export function SuperAdminPrincipalPage() {
     });
   }
 
+  function clearReplaceFieldError(field: string) {
+    setReplaceFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
+
+  function formatMutationError(
+    err: unknown,
+    fallback: string,
+    wasCreatingUser: boolean
+  ): string {
+    const status = problemStatus(err);
+    if (status === 403) {
+      return getGeneralErrorMessage(
+        err,
+        "You do not have permission to perform this Principal action."
+      );
+    }
+    if (status === undefined && wasCreatingUser) {
+      return "The response was lost or timed out after submitting. Check Principal Assignment History below; if the user account was created without displaying the password, use Reset temporary password on the Users page.";
+    }
+    return getGeneralErrorMessage(err, fallback);
+  }
+
   async function handleAppointSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (submitting || appointMode !== "existing") return;
+    if (submitting) return;
 
     const nextErrors: Record<string, string> = {};
-    if (!selectedUserId) {
-      nextErrors.user_id = "Select a staff member to appoint as Principal.";
-    }
-    if (!institutionScopeLabel) {
-      nextErrors.scope_label =
-        "Institution scope is unavailable on your active Super Admin assignment.";
+    if (appointMode === "existing") {
+      if (!selectedUserId) {
+        nextErrors.user_id = "Select a staff member to appoint as Principal.";
+      }
+    } else {
+      Object.assign(nextErrors, validateNewUserFields(appointNewUser, "new_user."));
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -222,21 +266,38 @@ export function SuperAdminPrincipalPage() {
     setSubmitError(null);
 
     try {
-      await client.roleAssignments.create({
-        user_id: selectedUserId,
-        role_key: "principal",
-        scope_type: "institution",
-        scope_label: institutionScopeLabel!,
-        order_record: orderRecord.trim() ? orderRecord.trim() : null,
-      });
+      const payload =
+        appointMode === "existing"
+          ? {
+              user_id: selectedUserId,
+              order_record: orderRecord.trim() || null,
+            }
+          : {
+              new_user: buildNewUserPayload(appointNewUser),
+              order_record: orderRecord.trim() || null,
+            };
 
-      const appointedUser = hydratedUsers[selectedUserId];
-      toast.success(
-        appointedUser
-          ? `${appointedUser.name} appointed as Principal.`
-          : "Principal appointed successfully."
-      );
+      const res = await client.identity.principal.appoint(payload);
+      const appointedName =
+        res.data.assignment.user?.name ??
+        (appointMode === "create"
+          ? appointNewUser.name.trim()
+          : staffOptions.find((s) => s.id === selectedUserId)?.name) ??
+        "Principal";
+
+      if (res.data.temporary_password) {
+        setRevealedTempPassword({
+          recipientName: appointedName,
+          payload: {
+            temporary_password: res.data.temporary_password,
+            expires_at: res.data.expires_at ?? null,
+          },
+        });
+      }
+
+      toast.success(`${appointedName} appointed as Principal.`);
       setSelectedUserId("");
+      setAppointNewUser(EMPTY_NEW_USER);
       setOrderRecord("");
       await loadPrincipalData();
     } catch (err: unknown) {
@@ -245,7 +306,8 @@ export function SuperAdminPrincipalPage() {
         setFieldErrors(mapped);
       }
 
-      if (problemStatus(err) === 409) {
+      const status = problemStatus(err);
+      if (status === 409) {
         setSubmitError(
           getGeneralErrorMessage(
             err,
@@ -255,7 +317,11 @@ export function SuperAdminPrincipalPage() {
         await loadPrincipalData();
       } else {
         setSubmitError(
-          getGeneralErrorMessage(err, "Could not complete Principal appointment.")
+          formatMutationError(
+            err,
+            "Could not complete Principal appointment.",
+            appointMode === "create"
+          )
         );
       }
     } finally {
@@ -263,11 +329,113 @@ export function SuperAdminPrincipalPage() {
     }
   }
 
+  function openReplaceDialog() {
+    setReplaceMode("existing");
+    setReplaceUserId("");
+    setReplaceNewUser(EMPTY_NEW_USER);
+    setReplaceReason("");
+    setReplaceOrderRecord("");
+    setReplaceFieldErrors({});
+    setReplaceSubmitError(null);
+    setReplaceOpen(true);
+  }
+
+  async function handleReplaceSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (replacing) return;
+
+    const nextErrors: Record<string, string> = {};
+    if (replaceMode === "existing") {
+      if (!replaceUserId) {
+        nextErrors.user_id = "Select a replacement staff member.";
+      }
+    } else {
+      Object.assign(nextErrors, validateNewUserFields(replaceNewUser, "new_user."));
+    }
+
+    const trimmedReason = replaceReason.trim();
+    if (trimmedReason.length < 5 || trimmedReason.length > 500) {
+      nextErrors.reason = "Transition reason must be between 5 and 500 characters.";
+    }
+
+    if (Object.keys(nextErrors).length > 0) {
+      setReplaceFieldErrors(nextErrors);
+      setReplaceSubmitError(null);
+      return;
+    }
+
+    setReplacing(true);
+    setReplaceFieldErrors({});
+    setReplaceSubmitError(null);
+
+    try {
+      const payload =
+        replaceMode === "existing"
+          ? {
+              user_id: replaceUserId,
+              reason: trimmedReason,
+              order_record: replaceOrderRecord.trim() || null,
+            }
+          : {
+              new_user: buildNewUserPayload(replaceNewUser),
+              reason: trimmedReason,
+              order_record: replaceOrderRecord.trim() || null,
+            };
+
+      const res = await client.identity.principal.replace(payload);
+      const replacedName =
+        res.data.assignment.user?.name ??
+        (replaceMode === "create"
+          ? replaceNewUser.name.trim()
+          : staffOptions.find((s) => s.id === replaceUserId)?.name) ??
+        "Principal";
+
+      if (res.data.temporary_password) {
+        setRevealedTempPassword({
+          recipientName: replacedName,
+          payload: {
+            temporary_password: res.data.temporary_password,
+            expires_at: res.data.expires_at ?? null,
+          },
+        });
+      }
+
+      toast.success(`Replaced Principal with ${replacedName}.`);
+      setReplaceOpen(false);
+      await loadPrincipalData();
+    } catch (err: unknown) {
+      const mapped = mapProblemFieldErrors(err);
+      if (Object.keys(mapped).length > 0) {
+        setReplaceFieldErrors(mapped);
+      }
+
+      const status = problemStatus(err);
+      if (status === 409) {
+        const msg = getGeneralErrorMessage(
+          err,
+          "Could not replace Principal due to a conflict."
+        );
+        setReplaceSubmitError(msg);
+        await loadPrincipalData();
+      } else {
+        setReplaceSubmitError(
+          formatMutationError(
+            err,
+            "Could not complete Principal replacement.",
+            replaceMode === "create"
+          )
+        );
+      }
+    } finally {
+      setReplacing(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         title="Principal Management"
-        description="Appoint the institution Principal and review past Principal assignments."
+        description="Appoint or replace the institution Principal and review past Principal assignments."
       />
 
       {revealedTempPassword && (
@@ -319,7 +487,10 @@ export function SuperAdminPrincipalPage() {
                     Only one active Principal assignment is permitted at institution scope.
                   </CardDescription>
                 </div>
-                <StatusBadge status={activePrincipal ? "success" : "warning"}>
+                <StatusBadge
+                  status={activePrincipal ? "success" : "warning"}
+                  className={!activePrincipal ? "dark:text-foreground" : undefined}
+                >
                   {activePrincipal ? "Active" : "Vacant"}
                 </StatusBadge>
               </div>
@@ -327,49 +498,37 @@ export function SuperAdminPrincipalPage() {
 
             <CardContent className="space-y-4">
               {activePrincipal ? (
-                <>
-                  <div className="grid grid-cols-1 gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Person</p>
-                      <p className="text-sm font-semibold text-foreground">
-                        {hydratedUsers[activePrincipal.user_id]?.name ?? activePrincipal.user_id}
+                <div className="grid grid-cols-1 gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Person</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {activePrincipal.user?.name ?? activePrincipal.user_id}
+                    </p>
+                    {activePrincipal.user?.email && (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {activePrincipal.user.email}
                       </p>
-                      {hydratedUsers[activePrincipal.user_id]?.email && (
-                        <p className="text-xs text-muted-foreground truncate">
-                          {hydratedUsers[activePrincipal.user_id]?.email}
-                        </p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Contact</p>
-                      <p className="text-sm text-foreground">
-                        {hydratedUsers[activePrincipal.user_id]?.mobile ??
-                          hydratedUsers[activePrincipal.user_id]?.email ??
-                          "—"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Effective From</p>
-                      <p className="text-sm font-mono text-foreground">
-                        {formatDateTime(activePrincipal.valid_from)}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Scope</p>
-                      <p className="text-sm font-mono text-foreground">
-                        {activePrincipal.scope_label || activePrincipal.scope_type}
-                      </p>
-                    </div>
+                    )}
                   </div>
-
-                  <Alert>
-                    <AlertTitle>Replace Principal</AlertTitle>
-                    <AlertDescription>
-                      Awaiting backend support: atomic Principal replacement with a recorded
-                      transition reason (<code>POST /principal/replace</code>) is pending.
-                    </AlertDescription>
-                  </Alert>
-                </>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Contact</p>
+                    <p className="text-sm text-foreground">
+                      {activePrincipal.user?.mobile ?? activePrincipal.user?.email ?? "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Effective From</p>
+                    <p className="text-sm font-mono text-foreground">
+                      {formatDisplayDateTime(activePrincipal.valid_from)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Scope</p>
+                    <p className="text-sm font-mono text-foreground">
+                      {activePrincipal.scope_label || activePrincipal.scope_type}
+                    </p>
+                  </div>
+                </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   No active Principal is currently assigned. Use the appointment panel below to
@@ -379,11 +538,8 @@ export function SuperAdminPrincipalPage() {
             </CardContent>
 
             {activePrincipal && (
-              <CardFooter className="border-t border-border/60 pt-4 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground">
-                  Awaiting backend support
-                </span>
-                <Button type="button" variant="outline" disabled>
+              <CardFooter className="border-t border-border/60 pt-4 flex flex-wrap items-center justify-end gap-2">
+                <Button type="button" variant="outline" onClick={openReplaceDialog}>
                   Replace Principal
                 </Button>
               </CardFooter>
@@ -414,7 +570,11 @@ export function SuperAdminPrincipalPage() {
                     role="radio"
                     aria-checked={appointMode === "existing"}
                     data-selected={appointMode === "existing" ? "true" : "false"}
-                    onClick={() => setAppointMode("existing")}
+                    onClick={() => {
+                      setAppointMode("existing");
+                      setFieldErrors({});
+                      setSubmitError(null);
+                    }}
                     className={cn(
                       "flex items-start justify-between gap-3 rounded-xl border p-4 text-left transition-colors",
                       "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -424,12 +584,9 @@ export function SuperAdminPrincipalPage() {
                     )}
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">
-                          Appoint existing staff user
-                        </span>
-                        <Badge variant="default">Available</Badge>
-                      </div>
+                      <span className="text-sm font-semibold text-foreground">
+                        Appoint existing staff user
+                      </span>
                       <p className="text-xs text-muted-foreground">
                         Assign the singleton Principal role at institution scope to an active
                         staff account.
@@ -446,24 +603,36 @@ export function SuperAdminPrincipalPage() {
                   <button
                     type="button"
                     role="radio"
-                    aria-checked={false}
-                    aria-disabled="true"
-                    data-selected="false"
-                    disabled
-                    className="flex items-start justify-between gap-3 rounded-xl border border-border bg-muted/40 p-4 text-left opacity-65 cursor-not-allowed"
+                    aria-checked={appointMode === "create"}
+                    data-selected={appointMode === "create" ? "true" : "false"}
+                    onClick={() => {
+                      setAppointMode("create");
+                      setFieldErrors({});
+                      setSubmitError(null);
+                    }}
+                    className={cn(
+                      "flex items-start justify-between gap-3 rounded-xl border p-4 text-left transition-colors",
+                      "outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
+                      appointMode === "create"
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-card hover:bg-muted/50"
+                    )}
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-semibold text-foreground">
-                          Create new account &amp; appoint
-                        </span>
-                        <Badge variant="outline">Awaiting backend support</Badge>
-                      </div>
+                      <span className="text-sm font-semibold text-foreground">
+                        Create new account &amp; appoint
+                      </span>
                       <p className="text-xs text-muted-foreground">
-                        Requires backend support to generate and return a one-time temporary
-                        password on user creation.
+                        Atomically create a new staff account with a one-time temporary password
+                        and appoint as Principal.
                       </p>
                     </div>
+                    {appointMode === "create" && (
+                      <RiCheckLine
+                        className="size-4 shrink-0 text-primary mt-0.5"
+                        aria-hidden="true"
+                      />
+                    )}
                   </button>
                 </div>
 
@@ -475,54 +644,151 @@ export function SuperAdminPrincipalPage() {
                     </Alert>
                   )}
 
-                  {fieldErrors.scope_label && (
-                    <Alert variant="destructive">
-                      <RiAlertLine className="size-4" aria-hidden="true" />
-                      <AlertDescription>{fieldErrors.scope_label}</AlertDescription>
-                    </Alert>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="principal-staff-select">Active staff user</Label>
-                    <Select
-                      value={selectedUserId || null}
-                      onValueChange={(value) => {
-                        setSelectedUserId(typeof value === "string" ? value : "");
-                        clearFieldError("user_id");
-                      }}
-                      items={staffSelectItems}
-                      disabled={submitting || staffOptions.length === 0}
-                    >
-                      <SelectTrigger
-                        id="principal-staff-select"
-                        className="w-full"
-                        aria-invalid={Boolean(fieldErrors.user_id)}
-                        aria-describedby={
-                          fieldErrors.user_id ? "principal-user-error" : undefined
-                        }
+                  {appointMode === "existing" ? (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="principal-staff-select">Active staff user</Label>
+                      <Select
+                        value={selectedUserId || null}
+                        onValueChange={(value) => {
+                          setSelectedUserId(typeof value === "string" ? value : "");
+                          clearFieldError("user_id");
+                        }}
+                        items={staffSelectItems}
+                        disabled={submitting || staffOptions.length === 0}
                       >
-                        <SelectValue
-                          placeholder={
-                            staffOptions.length === 0
-                              ? "No active staff accounts available"
-                              : "Select a staff member..."
+                        <SelectTrigger
+                          id="principal-staff-select"
+                          className="w-full"
+                          aria-invalid={Boolean(fieldErrors.user_id)}
+                          aria-describedby={
+                            fieldErrors.user_id ? "principal-user-error" : undefined
+                          }
+                        >
+                          <SelectValue
+                            placeholder={
+                              staffOptions.length === 0
+                                ? "No active staff accounts available"
+                                : "Select a staff member..."
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {staffOptions.map((staff) => (
+                            <SelectItem key={staff.id} value={staff.id}>
+                              {staff.email ? `${staff.name} (${staff.email})` : staff.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {fieldErrors.user_id && (
+                        <p id="principal-user-error" className="text-xs text-destructive">
+                          {fieldErrors.user_id}
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="appoint-new-name">Full Name</Label>
+                        <Input
+                          id="appoint-new-name"
+                          value={appointNewUser.name}
+                          onChange={(e) => {
+                            setAppointNewUser((prev) => ({ ...prev, name: e.target.value }));
+                            clearFieldError("new_user.name");
+                          }}
+                          placeholder="Dr. Meera Krishnan"
+                          disabled={submitting}
+                          aria-invalid={Boolean(fieldErrors["new_user.name"])}
+                          aria-describedby={
+                            fieldErrors["new_user.name"] ? "appoint-new-name-error" : undefined
                           }
                         />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {staffOptions.map((staff) => (
-                          <SelectItem key={staff.id} value={staff.id}>
-                            {staff.email ? `${staff.name} (${staff.email})` : staff.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {fieldErrors.user_id && (
-                      <p id="principal-user-error" className="text-xs text-destructive">
-                        {fieldErrors.user_id}
-                      </p>
-                    )}
-                  </div>
+                        {fieldErrors["new_user.name"] && (
+                          <p id="appoint-new-name-error" className="text-xs text-destructive">
+                            {fieldErrors["new_user.name"]}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="appoint-new-email">Email</Label>
+                        <Input
+                          id="appoint-new-email"
+                          type="email"
+                          value={appointNewUser.email}
+                          onChange={(e) => {
+                            setAppointNewUser((prev) => ({ ...prev, email: e.target.value }));
+                            clearFieldError("new_user.email");
+                          }}
+                          placeholder="principal@college.edu"
+                          disabled={submitting}
+                          aria-invalid={Boolean(fieldErrors["new_user.email"])}
+                          aria-describedby={
+                            fieldErrors["new_user.email"] ? "appoint-new-email-error" : undefined
+                          }
+                        />
+                        {fieldErrors["new_user.email"] && (
+                          <p id="appoint-new-email-error" className="text-xs text-destructive">
+                            {fieldErrors["new_user.email"]}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="appoint-new-mobile">Mobile (optional)</Label>
+                        <Input
+                          id="appoint-new-mobile"
+                          value={appointNewUser.mobile}
+                          onChange={(e) => {
+                            setAppointNewUser((prev) => ({ ...prev, mobile: e.target.value }));
+                            clearFieldError("new_user.mobile");
+                          }}
+                          placeholder="+919876543210"
+                          disabled={submitting}
+                          aria-invalid={Boolean(fieldErrors["new_user.mobile"])}
+                          aria-describedby={
+                            fieldErrors["new_user.mobile"]
+                              ? "appoint-new-mobile-error"
+                              : undefined
+                          }
+                        />
+                        {fieldErrors["new_user.mobile"] && (
+                          <p id="appoint-new-mobile-error" className="text-xs text-destructive">
+                            {fieldErrors["new_user.mobile"]}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label htmlFor="appoint-new-regno">Staff ID (optional)</Label>
+                        <Input
+                          id="appoint-new-regno"
+                          value={appointNewUser.registration_number}
+                          onChange={(e) => {
+                            setAppointNewUser((prev) => ({
+                              ...prev,
+                              registration_number: e.target.value,
+                            }));
+                            clearFieldError("new_user.registration_number");
+                          }}
+                          placeholder="STF-001"
+                          disabled={submitting}
+                          aria-invalid={Boolean(fieldErrors["new_user.registration_number"])}
+                          aria-describedby={
+                            fieldErrors["new_user.registration_number"]
+                              ? "appoint-new-regno-error"
+                              : undefined
+                          }
+                        />
+                        {fieldErrors["new_user.registration_number"] && (
+                          <p id="appoint-new-regno-error" className="text-xs text-destructive">
+                            {fieldErrors["new_user.registration_number"]}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="space-y-1.5">
                     <Label htmlFor="principal-order-record">
@@ -555,19 +821,19 @@ export function SuperAdminPrincipalPage() {
                     <p className="text-xs text-muted-foreground">
                       Scope:{" "}
                       <span className="font-mono text-foreground">
-                        {institutionScopeLabel ?? "Unavailable"}
+                        {institutionScopeLabel ?? "Institution"}
                       </span>
                     </p>
                     <Button
                       type="submit"
-                      disabled={submitting || staffOptions.length === 0}
+                      disabled={
+                        submitting ||
+                        (appointMode === "existing" && staffOptions.length === 0)
+                      }
                     >
                       {submitting ? (
                         <>
-                          <RiLoader4Line
-                            className="size-4 animate-spin"
-                            aria-hidden="true"
-                          />
+                          <RiLoader4Line className="size-4 animate-spin" aria-hidden="true" />
                           Appointing...
                         </>
                       ) : (
@@ -607,92 +873,114 @@ export function SuperAdminPrincipalPage() {
                           <TableHead>Status</TableHead>
                           <TableHead>Effective From</TableHead>
                           <TableHead>Ended At</TableHead>
-                          <TableHead>Scope</TableHead>
+                          <TableHead>Order / Reason</TableHead>
+                          <TableHead>Assigned By</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {assignments.map((row) => {
-                          const person = hydratedUsers[row.user_id];
-                          return (
-                            <TableRow key={row.id}>
-                              <TableCell className="whitespace-normal">
-                                <div className="font-medium text-foreground">
-                                  {person?.name ?? row.user_id}
+                        {assignments.map((row) => (
+                          <TableRow key={row.id}>
+                            <TableCell className="whitespace-normal">
+                              <div className="font-medium text-foreground">
+                                {row.user?.name ?? row.user_id}
+                              </div>
+                              {row.user?.email && (
+                                <div className="text-xs text-muted-foreground">
+                                  {row.user.email}
                                 </div>
-                                {person?.email && (
-                                  <div className="text-xs text-muted-foreground">
-                                    {person.email}
-                                  </div>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <StatusBadge status={row.is_active ? "success" : "neutral"}>
-                                  {row.is_active ? "Active" : "Ended"}
-                                </StatusBadge>
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {formatDateTime(row.valid_from)}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {formatDateTime(row.valid_to)}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs">
-                                {row.scope_label || row.scope_type}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <StatusBadge status={row.is_active ? "success" : "neutral"}>
+                                {row.is_active ? "Active" : "Ended"}
+                              </StatusBadge>
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {formatDisplayDateTime(row.valid_from)}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs">
+                              {formatDisplayDateTime(row.valid_to)}
+                            </TableCell>
+                            <TableCell className="whitespace-normal text-xs">
+                              {row.order_record && (
+                                <div className="font-mono text-foreground">
+                                  {row.order_record}
+                                </div>
+                              )}
+                              {row.reason && (
+                                <div className="text-muted-foreground">{row.reason}</div>
+                              )}
+                              {!row.order_record && !row.reason && (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-muted-foreground">
+                              {row.assigned_by?.name ?? "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
                   </div>
 
                   {/* Mobile cards (375px+) */}
                   <div className="space-y-3 md:hidden">
-                    {assignments.map((row) => {
-                      const person = hydratedUsers[row.user_id];
-                      return (
-                        <div
-                          key={row.id}
-                          className="rounded-lg border border-border p-3.5 space-y-2"
-                        >
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium text-foreground truncate">
-                                {person?.name ?? row.user_id}
+                    {assignments.map((row) => (
+                      <div
+                        key={row.id}
+                        className="rounded-lg border border-border p-3.5 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-foreground truncate">
+                              {row.user?.name ?? row.user_id}
+                            </p>
+                            {row.user?.email && (
+                              <p className="text-xs text-muted-foreground truncate">
+                                {row.user.email}
                               </p>
-                              {person?.email && (
-                                <p className="text-xs text-muted-foreground truncate">
-                                  {person.email}
-                                </p>
-                              )}
-                            </div>
-                            <StatusBadge status={row.is_active ? "success" : "neutral"}>
-                              {row.is_active ? "Active" : "Ended"}
-                            </StatusBadge>
+                            )}
                           </div>
-                          <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground">
-                            <div>
-                              From:{" "}
-                              <span className="font-mono text-foreground">
-                                {formatDateTime(row.valid_from)}
-                              </span>
-                            </div>
-                            <div>
-                              Ended:{" "}
-                              <span className="font-mono text-foreground">
-                                {formatDateTime(row.valid_to)}
-                              </span>
-                            </div>
-                            <div>
-                              Scope:{" "}
-                              <span className="font-mono text-foreground">
-                                {row.scope_label || row.scope_type}
-                              </span>
-                            </div>
-                          </div>
+                          <StatusBadge status={row.is_active ? "success" : "neutral"}>
+                            {row.is_active ? "Active" : "Ended"}
+                          </StatusBadge>
                         </div>
-                      );
-                    })}
+                        <div className="grid grid-cols-1 gap-1 text-xs text-muted-foreground">
+                          <div>
+                            From:{" "}
+                            <span className="font-mono text-foreground">
+                              {formatDisplayDateTime(row.valid_from)}
+                            </span>
+                          </div>
+                          <div>
+                            Ended:{" "}
+                            <span className="font-mono text-foreground">
+                              {formatDisplayDateTime(row.valid_to)}
+                            </span>
+                          </div>
+                          {row.order_record && (
+                            <div>
+                              Order:{" "}
+                              <span className="font-mono text-foreground">
+                                {row.order_record}
+                              </span>
+                            </div>
+                          )}
+                          {row.reason && (
+                            <div>
+                              Reason:{" "}
+                              <span className="text-foreground">{row.reason}</span>
+                            </div>
+                          )}
+                          {row.assigned_by?.name && (
+                            <div>
+                              Assigned by:{" "}
+                              <span className="text-foreground">{row.assigned_by.name}</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
@@ -700,7 +988,262 @@ export function SuperAdminPrincipalPage() {
           </Card>
         </>
       )}
+
+      {/* Replace Principal Dialog */}
+      <Dialog
+        open={replaceOpen}
+        onOpenChange={(open) => {
+          if (!open && !replacing) setReplaceOpen(false);
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <form onSubmit={handleReplaceSubmit} noValidate className="space-y-4">
+            <DialogHeader>
+              <DialogTitle>Replace Principal</DialogTitle>
+              <DialogDescription>
+                Atomically end the current Principal assignment and appoint a replacement with
+                a recorded transition reason.
+              </DialogDescription>
+            </DialogHeader>
+
+            {replaceSubmitError && (
+              <Alert variant="destructive">
+                <RiAlertLine className="size-4" aria-hidden="true" />
+                <AlertDescription className="space-y-2">
+                  <p>{replaceSubmitError}</p>
+                  {!activePrincipal && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setReplaceOpen(false)}
+                    >
+                      Go to Appoint Principal
+                    </Button>
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
+
+            <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Replacement method">
+              <Button
+                type="button"
+                size="sm"
+                variant={replaceMode === "existing" ? "default" : "outline"}
+                role="radio"
+                aria-checked={replaceMode === "existing"}
+                onClick={() => {
+                  setReplaceMode("existing");
+                  setReplaceFieldErrors({});
+                  setReplaceSubmitError(null);
+                }}
+              >
+                Existing staff user
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={replaceMode === "create" ? "default" : "outline"}
+                role="radio"
+                aria-checked={replaceMode === "create"}
+                onClick={() => {
+                  setReplaceMode("create");
+                  setReplaceFieldErrors({});
+                  setReplaceSubmitError(null);
+                }}
+              >
+                Create new account
+              </Button>
+            </div>
+
+            {replaceMode === "existing" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="replace-staff-select">Replacement staff user</Label>
+                <Select
+                  value={replaceUserId || null}
+                  onValueChange={(value) => {
+                    setReplaceUserId(typeof value === "string" ? value : "");
+                    clearReplaceFieldError("user_id");
+                  }}
+                  items={staffSelectItems}
+                  disabled={replacing || staffOptions.length === 0}
+                >
+                  <SelectTrigger
+                    id="replace-staff-select"
+                    className="w-full"
+                    aria-invalid={Boolean(replaceFieldErrors.user_id)}
+                    aria-describedby={
+                      replaceFieldErrors.user_id ? "replace-user-error" : undefined
+                    }
+                  >
+                    <SelectValue placeholder="Select replacement staff member..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {staffOptions.map((staff) => (
+                      <SelectItem key={staff.id} value={staff.id}>
+                        {staff.email ? `${staff.name} (${staff.email})` : staff.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {replaceFieldErrors.user_id && (
+                  <p id="replace-user-error" className="text-xs text-destructive">
+                    {replaceFieldErrors.user_id}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="replace-new-name">Full Name</Label>
+                  <Input
+                    id="replace-new-name"
+                    value={replaceNewUser.name}
+                    onChange={(e) => {
+                      setReplaceNewUser((prev) => ({ ...prev, name: e.target.value }));
+                      clearReplaceFieldError("new_user.name");
+                    }}
+                    disabled={replacing}
+                    aria-invalid={Boolean(replaceFieldErrors["new_user.name"])}
+                  />
+                  {replaceFieldErrors["new_user.name"] && (
+                    <p className="text-xs text-destructive">
+                      {replaceFieldErrors["new_user.name"]}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="replace-new-email">Email</Label>
+                  <Input
+                    id="replace-new-email"
+                    type="email"
+                    value={replaceNewUser.email}
+                    onChange={(e) => {
+                      setReplaceNewUser((prev) => ({ ...prev, email: e.target.value }));
+                      clearReplaceFieldError("new_user.email");
+                    }}
+                    disabled={replacing}
+                    aria-invalid={Boolean(replaceFieldErrors["new_user.email"])}
+                  />
+                  {replaceFieldErrors["new_user.email"] && (
+                    <p className="text-xs text-destructive">
+                      {replaceFieldErrors["new_user.email"]}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="replace-new-mobile">Mobile (optional)</Label>
+                  <Input
+                    id="replace-new-mobile"
+                    value={replaceNewUser.mobile}
+                    onChange={(e) => {
+                      setReplaceNewUser((prev) => ({ ...prev, mobile: e.target.value }));
+                      clearReplaceFieldError("new_user.mobile");
+                    }}
+                    disabled={replacing}
+                    aria-invalid={Boolean(replaceFieldErrors["new_user.mobile"])}
+                  />
+                  {replaceFieldErrors["new_user.mobile"] && (
+                    <p className="text-xs text-destructive">
+                      {replaceFieldErrors["new_user.mobile"]}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="replace-new-regno">Staff ID (optional)</Label>
+                  <Input
+                    id="replace-new-regno"
+                    value={replaceNewUser.registration_number}
+                    onChange={(e) => {
+                      setReplaceNewUser((prev) => ({
+                        ...prev,
+                        registration_number: e.target.value,
+                      }));
+                      clearReplaceFieldError("new_user.registration_number");
+                    }}
+                    disabled={replacing}
+                    aria-invalid={Boolean(replaceFieldErrors["new_user.registration_number"])}
+                  />
+                  {replaceFieldErrors["new_user.registration_number"] && (
+                    <p className="text-xs text-destructive">
+                      {replaceFieldErrors["new_user.registration_number"]}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label htmlFor="replace-reason">Transition Reason</Label>
+              <Textarea
+                id="replace-reason"
+                value={replaceReason}
+                onChange={(e) => {
+                  setReplaceReason(e.target.value);
+                  clearReplaceFieldError("reason");
+                }}
+                placeholder="e.g. Retirement transition effective end of term"
+                rows={3}
+                maxLength={500}
+                disabled={replacing}
+                aria-invalid={Boolean(replaceFieldErrors.reason)}
+                aria-describedby={
+                  replaceFieldErrors.reason ? "replace-reason-error" : undefined
+                }
+              />
+              {replaceFieldErrors.reason && (
+                <p id="replace-reason-error" className="text-xs text-destructive">
+                  {replaceFieldErrors.reason}
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="replace-order-record">
+                Official Order Reference (optional)
+              </Label>
+              <Input
+                id="replace-order-record"
+                value={replaceOrderRecord}
+                onChange={(e) => {
+                  setReplaceOrderRecord(e.target.value);
+                  clearReplaceFieldError("order_record");
+                }}
+                placeholder="e.g. GO-2026-099"
+                maxLength={255}
+                disabled={replacing}
+                aria-invalid={Boolean(replaceFieldErrors.order_record)}
+              />
+              {replaceFieldErrors.order_record && (
+                <p className="text-xs text-destructive">
+                  {replaceFieldErrors.order_record}
+                </p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setReplaceOpen(false)}
+                disabled={replacing}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={replacing}>
+                {replacing ? (
+                  <>
+                    <RiLoader4Line className="size-4 animate-spin" aria-hidden="true" />
+                    Replacing...
+                  </>
+                ) : (
+                  "Confirm Replacement"
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-
