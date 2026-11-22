@@ -35,14 +35,29 @@ it('verifies populated tenant migration lifecycle forward and rollback', functio
     /** @var Migration $migration */
     $migration = require base_path('database/migrations/tenant/2026_11_03_000001_generalise_tenant_spine_and_identifiers.php');
 
+    $tenantMigrations = glob(database_path('migrations/tenant/*.php')) ?: [];
+    sort($tenantMigrations);
+    $targetIndex = array_search(
+        database_path('migrations/tenant/2026_11_03_000001_generalise_tenant_spine_and_identifiers.php'),
+        $tenantMigrations,
+        true
+    );
+    expect($targetIndex)->not->toBeFalse();
+    $stepsToRollback = count($tenantMigrations) - (int) $targetIndex;
+
     // 1. Roll back to state BEFORE migration 2026_11_03_000001 (on unshared tenant, down() must succeed)
     $rollbackExit = Artisan::call('migrate:rollback', [
         '--database' => 'tenant',
         '--path' => 'database/migrations/tenant',
-        '--step' => 2,
+        '--step' => $stepsToRollback,
         '--force' => true,
     ]);
     expect($rollbackExit)->toBe(0);
+
+    // Verify new identity-api-gap columns are gone after rollback
+    expect(Schema::connection('tenant')->hasColumn('users', 'temporary_password_expires_at'))->toBeFalse()
+        ->and(Schema::connection('tenant')->hasColumn('users', 'locked_until'))->toBeFalse()
+        ->and(Schema::connection('tenant')->hasColumn('role_assignments', 'reason'))->toBeFalse();
 
     // Verify pre-migration state:
     // - funding_stream column exists on departments
@@ -114,11 +129,11 @@ it('verifies populated tenant migration lifecycle forward and rollback', functio
         ->and($bothCe->pluck('scope_label')->all())->toContain('d_ce', 'd_ce_sf');
 
     // 4. Confirm rollback fails cleanly with uniqueness violation once two departments share a code across streams
-    expect(function (): void {
+    expect(function () use ($stepsToRollback): void {
         Artisan::call('migrate:rollback', [
             '--database' => 'tenant',
             '--path' => 'database/migrations/tenant',
-            '--step' => 2,
+            '--step' => $stepsToRollback,
             '--force' => true,
         ]);
     })->toThrow(UniqueConstraintViolationException::class);
