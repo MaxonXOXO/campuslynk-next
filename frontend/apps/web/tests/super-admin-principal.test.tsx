@@ -244,6 +244,24 @@ describe("SuperAdminPrincipalPage", () => {
     await user.click(await screen.findByText("Prof. Thomas Kurian (thomas@dev.test)"));
     await user.type(within(dialog).getByLabelText("Transition Reason"), "Term completed");
 
+    // 422 per-field validation error from API
+    mocks.client.identity.principal.replace.mockRejectedValueOnce(
+      new ApiError({
+        type: "https://errors.campuslynk.net/validation",
+        title: "Validation Failed",
+        status: 422,
+        detail: "The given data was invalid.",
+        errors: {
+          reason: ["The reason must not be generic."],
+        },
+      })
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Confirm Replacement" }));
+    expect(
+      await within(dialog).findByText("The reason must not be generic.")
+    ).toBeInTheDocument();
+
+    // 409 conflict
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
       new ApiError({
         type: "https://errors.campuslynk.net/conflict",
