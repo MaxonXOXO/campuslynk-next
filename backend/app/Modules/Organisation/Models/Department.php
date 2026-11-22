@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Models;
 
+use App\Core\Concerns\HasScopedVisibility;
+use App\Core\Contracts\ScopedResource;
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
+use App\Modules\Organisation\Contracts\ScopeDirectoryContract;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,8 +26,9 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $updated_at
  * @property-read Stream $stream
  */
-class Department extends Model
+class Department extends Model implements ScopedResource
 {
+    use HasScopedVisibility;
     use HasUlids;
     use UsesTenantConnection;
 
@@ -63,5 +67,18 @@ class Department extends Model
     public function programs(): HasMany
     {
         return $this->hasMany(Program::class);
+    }
+
+    public function getManagingScopePath(): string
+    {
+        return (string) app(ScopeDirectoryContract::class)->query()
+            ->where('scope_type', 'department')
+            ->where('scope_id', $this->id)
+            ->value('managing_path');
+    }
+
+    public function getHomeScopePath(): string
+    {
+        return $this->getManagingScopePath();
     }
 }

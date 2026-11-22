@@ -248,6 +248,7 @@ paths:
     get:
       operationId: listUsers
       summary: List users with pagination and filtering
+      description: Returns users with current assignments inside the caller's authorized scopes. Institution-wide grants also include unassigned accounts.
       security:
         - bearerAuth: []
       parameters:
@@ -271,6 +272,8 @@ paths:
       responses:
         '200':
           description: Paginated users list
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
     post:
       operationId: createUser
       summary: Create a new user in the active tenant
@@ -296,6 +299,7 @@ paths:
     get:
       operationId: getUser
       summary: Get user details and assigned roles
+      description: Uses the same permission and scope predicates as the user directory.
       security:
         - bearerAuth: []
       parameters:
@@ -313,9 +317,12 @@ paths:
                 $ref: '#/components/schemas/UserEnvelope'
         '404':
           $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
     put:
       operationId: updateUser
       summary: Update user attributes and status
+      description: Requires user-update permission within the target user's managing scope.
       security:
         - bearerAuth: []
       parameters:
@@ -337,6 +344,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
 
   /roles:
     get:
@@ -494,14 +503,18 @@ paths:
     get:
       operationId: listDepartments
       summary: List institution departments with stream and academic/administrative kind
+      description: Returns only departments inside the caller's authorized read scopes.
       security:
         - bearerAuth: []
       responses:
         '200':
           description: List of departments
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
     post:
       operationId: createDepartment
       summary: Create a new institution department
+      description: Requires department-management permission over the parent stream.
       security:
         - bearerAuth: []
       requestBody:
@@ -536,6 +549,7 @@ paths:
     get:
       operationId: getDepartment
       summary: Get department details
+      description: Uses the same permission and scope predicates as the department collection.
       security:
         - bearerAuth: []
       parameters:
@@ -547,11 +561,14 @@ paths:
       responses:
         '200':
           description: Department details
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
         '404':
           $ref: '#/components/responses/ProblemDetails'
     put:
       operationId: updateDepartment
       summary: Update department details
+      description: Requires department-management permission within the target department's managing scope.
       security:
         - bearerAuth: []
       parameters:
@@ -587,6 +604,7 @@ paths:
     delete:
       operationId: deleteDepartment
       summary: Delete a department
+      description: Requires department-management permission within the target department's managing scope.
       security:
         - bearerAuth: []
       parameters:
@@ -789,14 +807,18 @@ paths:
     get:
       operationId: listRoleAssignments
       summary: List role assignments with optional filtering by user, role, or scope
+      description: Applies the caller's authorized managing scopes before optional filters, including when listing ended assignment history.
       security:
         - bearerAuth: []
       responses:
         '200':
           description: Role assignments list
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
     post:
       operationId: createRoleAssignment
       summary: Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints
+      description: One active grantor assignment must provide role-assignment permission, the target-role delegation rule (including any recorded-order requirement), and authority over the target scope. The scope type must be allowed for the target role.
       security:
         - bearerAuth: []
       requestBody:

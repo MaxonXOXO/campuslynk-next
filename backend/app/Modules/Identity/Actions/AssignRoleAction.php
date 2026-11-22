@@ -39,6 +39,14 @@ final class AssignRoleAction
             throw new InvalidArgumentException("Malformed scope label [{$scopeLabel}]. Scope labels must match /^[a-zA-Z0-9_]{1,63}$/.");
         }
 
+        if (! in_array($scopeType, $targetRole->allowedScopeTypes(), true)) {
+            throw new InvalidArgumentException("Scope type [{$scopeType}] is not allowed for role [{$targetRole->key}].");
+        }
+
+        if (! $targetRole->is_active) {
+            throw new InvalidArgumentException("Role [{$targetRole->key}] is disabled.");
+        }
+
         // 1. Delegation matrix verification (unless explicitly bypassed during system bootstrap)
         if (! $bypassDelegationCheck) {
             $this->verifyDelegation($assigner, $targetRole, $scopeType, $scopeLabel, $scopeId, $orderRecord);
@@ -98,38 +106,37 @@ final class AssignRoleAction
         ?string $scopeId,
         ?string $orderRecord
     ): void {
-        /** @var list<string> $assignerRoleKeys */
-        $assignerRoleKeys = Role::whereIn(
-            'id',
-            RoleAssignment::where('user_id', $assigner->id)->active()->pluck('role_id')
-        )->pluck('key')->all();
+        $assignments = $this->authorizer->activeAssignmentsForPermission($assigner, 'identity.role.assign');
+        $rules = DelegationRule::where('assignee_role_key', $targetRole->key)->get()->keyBy('assigner_role_key');
+        $missingOrder = false;
 
-        if (empty($assignerRoleKeys)) {
-            throw new UnauthorizedDelegationException('Assigner holds no active roles.');
+        foreach ($assignments as $grantor) {
+            $rule = $rules->get($grantor->role->key);
+            if ($rule === null) {
+                continue;
+            }
+
+            if (! $this->authorizer->canAtScopeForAssignment(
+                $assigner, 'identity.role.assign', $grantor, $scopeLabel, $scopeType, $scopeId
+            )) {
+                continue;
+            }
+
+            if ($rule->requires_order_record && ($orderRecord === null || trim($orderRecord) === '')) {
+                $missingOrder = true;
+
+                continue;
+            }
+
+            return;
         }
 
-        /** @var DelegationRule|null $rule */
-        $rule = DelegationRule::whereIn('assigner_role_key', $assignerRoleKeys)
-            ->where('assignee_role_key', $targetRole->key)
-            ->first();
-
-        if ($rule === null) {
-            throw new UnauthorizedDelegationException(
-                "None of the assigner's roles are permitted to assign role [{$targetRole->key}]."
-            );
+        if ($missingOrder) {
+            throw new InvalidArgumentException("Assigning role [{$targetRole->key}] requires an official order reference.");
         }
 
-        if ($rule->requires_order_record && (empty($orderRecord) || trim($orderRecord) === '')) {
-            throw new InvalidArgumentException(
-                "Assigning role [{$targetRole->key}] requires an official order reference."
-            );
-        }
-
-        // Check if assigner has authority over scope
-        if (! $this->authorizer->canAtScope($assigner, 'identity.role.assign', $scopeLabel, $scopeType, $scopeId)) {
-            throw new UnauthorizedDelegationException(
-                "Assigner does not possess role assignment authority at scope [{$scopeLabel}]."
-            );
-        }
+        throw new UnauthorizedDelegationException(
+            "No single active assignment permits assigning role [{$targetRole->key}] at scope [{$scopeLabel}]."
+        );
     }
 }
