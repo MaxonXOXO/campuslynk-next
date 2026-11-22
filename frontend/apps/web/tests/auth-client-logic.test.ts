@@ -98,9 +98,9 @@ describe("post-login routing", () => {
     expect(resolvePostLoginRoute({ mustChangePassword: true, user: superAdmin, setupStatus: { completed_at: null } })).toBe("/change-password");
   });
 
-  it("sends an institution super_admin to /setup until setup completes", () => {
+  it("sends an institution super_admin to /setup until setup completes, then to /w/super-admin", () => {
     expect(resolvePostLoginRoute({ mustChangePassword: false, user: superAdmin, setupStatus: { completed_at: null }, returnTo: "/home" })).toBe("/setup");
-    expect(resolvePostLoginRoute({ mustChangePassword: false, user: superAdmin, setupStatus: { completed_at: "2026-01-01" } })).toBe("/home");
+    expect(resolvePostLoginRoute({ mustChangePassword: false, user: superAdmin, setupStatus: { completed_at: "2026-01-01" } })).toBe("/w/super-admin");
   });
 
   it("never redirects other roles to setup and honours a safe return URL", () => {

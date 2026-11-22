@@ -1,4 +1,5 @@
-import type { SetupStatusCheck, UserWithAssignments } from "../../app/setup/logic/role-routing";
+import type { SetupStatusCheck } from "../../app/setup/logic/role-routing";
+import type { UserWithWorkspaceAssignments } from "../workspaces/workspaces";
 import {
   classifyLoginFailure,
   classifyPasswordFailure,
@@ -16,7 +17,7 @@ import {
 } from "./redirect";
 import { isSuperAdminAtInstitutionScope } from "../../app/setup/logic/role-routing";
 
-export interface SessionUser extends UserWithAssignments {
+export interface SessionUser extends UserWithWorkspaceAssignments {
   id?: string;
   name?: string;
   email?: string | null;

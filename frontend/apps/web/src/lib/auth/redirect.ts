@@ -1,4 +1,5 @@
 import { shouldRedirectToSetup, type SetupStatusCheck, type UserWithAssignments } from "../../app/setup/logic/role-routing";
+import { getLandingRoute } from "../workspaces/workspaces";
 
 export type SessionStatus = "loading" | "authenticated" | "unauthenticated" | "must_change_password" | "error";
 
@@ -50,7 +51,7 @@ export interface PostLoginInput {
 export function resolvePostLoginRoute({ mustChangePassword, user, setupStatus, returnTo }: PostLoginInput): string {
   if (mustChangePassword) return CHANGE_PASSWORD_PATH;
   if (shouldRedirectToSetup(user, setupStatus)) return SETUP_PATH;
-  return sanitizeReturnUrl(returnTo) ?? HOME_PATH;
+  return sanitizeReturnUrl(returnTo) ?? getLandingRoute(user, undefined, HOME_PATH);
 }
 
 export type GuardDecision =

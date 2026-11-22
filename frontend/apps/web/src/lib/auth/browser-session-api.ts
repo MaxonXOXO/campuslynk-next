@@ -47,7 +47,10 @@ export function createBrowserSessionApi(origin: string, fetchFn?: typeof fetch):
     },
     changePassword: (current_password, new_password) =>
       postSession<PasswordChangeResponse>("/api/session/password", { current_password, new_password }, doFetch),
-    fetchMe: async () => ((await client.me.get()) as unknown as { data: SessionUser }).data,
+    fetchMe: async () => {
+      const envelope = await client.me.get();
+      return envelope.data as SessionUser;
+    },
     fetchSetupStatus: async () => ((await client.setup.status()) as unknown as { data: SetupStatusCheck }).data,
   };
 }
