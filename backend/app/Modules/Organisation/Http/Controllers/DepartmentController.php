@@ -7,17 +7,24 @@ namespace App\Modules\Organisation\Http\Controllers;
 use App\Modules\Organisation\Actions\CreateDepartmentAction;
 use App\Modules\Organisation\Actions\DeleteDepartmentAction;
 use App\Modules\Organisation\Actions\UpdateDepartmentAction;
+use App\Modules\Organisation\Http\Requests\CreateDepartmentRequest;
+use App\Modules\Organisation\Http\Requests\UpdateDepartmentRequest;
 use App\Modules\Organisation\Http\Resources\DepartmentResource;
 use App\Modules\Organisation\Models\Department;
+use App\Modules\Organisation\Models\Stream;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Symfony\Component\HttpFoundation\Response;
 
 class DepartmentController
 {
     public function index(Request $request): JsonResponse
     {
-        $query = Department::query()->with('stream');
+        /** @var Authenticatable $caller */
+        $caller = $request->user();
+        $query = Department::visibleTo($caller, 'organisation.batch.view')->with('stream');
 
         if ($request->has('stream')) {
             $stream = (string) $request->query('stream');
@@ -47,6 +54,8 @@ class DepartmentController
     {
         $dept = Department::with('stream')->findOrFail($id);
 
+        Gate::authorize('view', $dept);
+
         return response()->json([
             'data' => new DepartmentResource($dept),
             'links' => [
@@ -55,14 +64,12 @@ class DepartmentController
         ]);
     }
 
-    public function store(Request $request, CreateDepartmentAction $action): JsonResponse
+    public function store(CreateDepartmentRequest $request, CreateDepartmentAction $action): JsonResponse
     {
-        $validated = $request->validate([
-            'code' => ['required', 'string', 'max:16'],
-            'name' => ['required', 'string', 'max:255'],
-            'stream_id' => ['required', 'string', 'max:36'],
-            'kind' => ['nullable', 'string', 'in:academic,general,administrative'],
-        ]);
+        $validated = $request->validated();
+        $stream = Stream::findOrFail((string) $validated['stream_id']);
+
+        Gate::authorize('create', [Department::class, $stream]);
 
         $dept = $action->execute(
             code: (string) $validated['code'],
@@ -81,16 +88,15 @@ class DepartmentController
         ], Response::HTTP_CREATED);
     }
 
-    public function update(Request $request, string $id, UpdateDepartmentAction $action): JsonResponse
+    public function update(UpdateDepartmentRequest $request, string $id, UpdateDepartmentAction $action): JsonResponse
     {
         /** @var Department $dept */
         $dept = Department::with('stream')->findOrFail($id);
 
-        $validated = $request->validate([
-            'name' => ['sometimes', 'string', 'max:255'],
-            'kind' => ['sometimes', 'string', 'in:academic,general,administrative'],
-            'is_active' => ['sometimes', 'boolean'],
-        ]);
+        Gate::authorize('update', $dept);
+
+        /** @var array{name?: string, kind?: string, is_active?: bool} $validated */
+        $validated = $request->validated();
 
         $updated = $action->execute($dept, $validated);
         $updated->load('stream');
@@ -107,6 +113,8 @@ class DepartmentController
     {
         /** @var Department $dept */
         $dept = Department::findOrFail($id);
+
+        Gate::authorize('delete', $dept);
 
         $action->execute($dept);
 

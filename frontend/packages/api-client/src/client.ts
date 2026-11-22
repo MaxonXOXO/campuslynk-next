@@ -191,6 +191,11 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'POST',
         ...options,
       }),
+    resetPassword: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['resetUserPassword']>>(`/users/${id}/reset-password`, {
+        method: 'POST',
+        ...options,
+      }),
   };
 
   const roles = {
@@ -214,9 +219,25 @@ export function createApiClient(config: ApiClientConfig) {
         body,
         ...options,
       }),
-    delete: (id: string, options?: RequestOptions) =>
-      request<void>(`/role-assignments/${id}`, {
+    delete: (id: string, reason?: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['deleteRoleAssignment']>>(`/role-assignments/${id}`, {
         method: 'DELETE',
+        body: reason !== undefined ? { reason } : undefined,
+        ...options,
+      }),
+  };
+
+  const principal = {
+    appoint: (body: OperationRequestBody<operations['appointPrincipal']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['appointPrincipal']>>('/principal/appoint', {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+    replace: (body: OperationRequestBody<operations['replacePrincipal']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['replacePrincipal']>>('/principal/replace', {
+        method: 'POST',
+        body,
         ...options,
       }),
   };
@@ -239,6 +260,7 @@ export function createApiClient(config: ApiClientConfig) {
     users,
     roles,
     roleAssignments,
+    principal,
     impersonation,
   };
 

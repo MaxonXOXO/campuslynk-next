@@ -147,7 +147,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List users with pagination and filtering */
+        /**
+         * List users with pagination and filtering
+         * @description Returns users with current assignments inside the caller's authorized scopes. Institution-wide grants also include unassigned accounts.
+         */
         get: operations["listUsers"];
         put?: never;
         /** Create a new user in the active tenant */
@@ -165,9 +168,15 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get user details and assigned roles */
+        /**
+         * Get user details and assigned roles
+         * @description Uses the same permission and scope predicates as the user directory.
+         */
         get: operations["getUser"];
-        /** Update user attributes and status */
+        /**
+         * Update user attributes and status
+         * @description Requires user-update permission within the target user's managing scope.
+         */
         put: operations["updateUser"];
         post?: never;
         delete?: never;
@@ -236,10 +245,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List institution departments with stream and academic/administrative kind */
+        /**
+         * List institution departments with stream and academic/administrative kind
+         * @description Returns only departments inside the caller's authorized read scopes.
+         */
         get: operations["listDepartments"];
         put?: never;
-        /** Create a new institution department */
+        /**
+         * Create a new institution department
+         * @description Requires department-management permission over the parent stream.
+         */
         post: operations["createDepartment"];
         delete?: never;
         options?: never;
@@ -254,12 +269,21 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get department details */
+        /**
+         * Get department details
+         * @description Uses the same permission and scope predicates as the department collection.
+         */
         get: operations["getDepartment"];
-        /** Update department details */
+        /**
+         * Update department details
+         * @description Requires department-management permission within the target department's managing scope.
+         */
         put: operations["updateDepartment"];
         post?: never;
-        /** Delete a department */
+        /**
+         * Delete a department
+         * @description Requires department-management permission within the target department's managing scope.
+         */
         delete: operations["deleteDepartment"];
         options?: never;
         head?: never;
@@ -336,6 +360,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/{id}/reset-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Administratively reset a user's password to a one-time server-generated temporary password (requires identity.user.reset_password; forbids self-reset and equal/higher authority targets) */
+        post: operations["resetUserPassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}/suspend": {
         parameters: {
             query?: never;
@@ -370,6 +411,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/principal/appoint": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Atomically appoint the initial institution Principal (existing active user or new staff user with one-time temporary password) */
+        post: operations["appointPrincipal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/principal/replace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Atomically end the current institution Principal assignment and appoint a replacement with a recorded reason */
+        post: operations["replacePrincipal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/role-assignments": {
         parameters: {
             query?: never;
@@ -377,10 +452,16 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List role assignments with optional filtering by user, role, or scope */
+        /**
+         * List role assignments with optional filtering by user, role, scope, or active status
+         * @description Applies the caller's authorized managing scopes before optional filters, including when listing ended assignment history.
+         */
         get: operations["listRoleAssignments"];
         put?: never;
-        /** Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints */
+        /**
+         * Assign a role to a user within a specific scope subject to delegation matrix and singleton constraints
+         * @description One active grantor assignment must provide role-assignment permission, the target-role delegation rule (including any recorded-order requirement), and authority over the target scope. The scope type must be allowed for the target role.
+         */
         post: operations["createRoleAssignment"];
         delete?: never;
         options?: never;
@@ -398,7 +479,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Revoke an existing role assignment */
+        /** Revoke an existing role assignment with an optional reason (accepted via JSON body or query parameter) */
         delete: operations["deleteRoleAssignment"];
         options?: never;
         head?: never;
@@ -706,6 +787,31 @@ export interface components {
                 self?: string;
             };
         };
+        PaginationMeta: {
+            current_page: number;
+            last_page: number;
+            per_page: number;
+            total: number;
+        };
+        UserAssignmentSummary: {
+            id: string;
+            role_key: string;
+            role_name: string;
+            scope_type: string;
+            scope_label: string;
+        };
+        CurrentUserAssignment: {
+            id: string;
+            role_key: string;
+            role_name: string;
+            scope_type: string;
+            scope_label: string;
+            is_singleton: boolean;
+            /** Format: date-time */
+            valid_from?: string | null;
+            /** Format: date-time */
+            valid_to?: string | null;
+        };
         UserSchema: {
             /**
              * @description ULID identifier
@@ -729,7 +835,17 @@ export interface components {
             status: "active" | "suspended" | "pending";
             must_change_password: boolean;
             /** Format: date-time */
+            temporary_password_expires_at?: string | null;
+            is_locked: boolean;
+            /** Format: date-time */
+            locked_until?: string | null;
+            /** Format: date-time */
             last_login_at?: string | null;
+            assignments: components["schemas"]["UserAssignmentSummary"][];
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: date-time */
+            updated_at?: string | null;
         };
         LoginSuccessEnvelope: {
             data: {
@@ -764,9 +880,9 @@ export interface components {
                 must_change_password: boolean;
                 /** Format: date-time */
                 last_login_at?: string | null;
-                /** @description Placeholder for Step 4 Scoped RBAC */
-                assignments: Record<string, never>[];
-                /** @description Placeholder for Step 4 Scoped RBAC */
+                /** @description Active time-valid scoped role assignments for the current user */
+                assignments: components["schemas"]["CurrentUserAssignment"][];
+                /** @description Effective permission union across active assignments */
                 capabilities: string[];
             };
             meta: {
@@ -814,9 +930,105 @@ export interface components {
             email?: string | null;
             mobile?: string | null;
             registration_number?: string | null;
-            /** Format: password */
-            password: string;
+            /**
+             * Format: password
+             * @description Optional; when omitted, the server generates a one-time temporary password returned once in the 201 response.
+             */
+            password?: string | null;
             must_change_password?: boolean;
+        };
+        CreateUserEnvelope: {
+            data: components["schemas"]["UserSchema"] & {
+                /** @description Server-generated one-time temporary password (present only on creation when password was omitted; never returned again). */
+                temporary_password?: string;
+                /**
+                 * Format: date-time
+                 * @description Expiration timestamp of the one-time temporary password.
+                 */
+                expires_at?: string;
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
+        ResetPasswordEnvelope: {
+            data: {
+                user_id: string;
+                /** @description Newly generated one-time temporary password (never returned again). */
+                temporary_password: string;
+                /** Format: date-time */
+                expires_at: string;
+                must_change_password: boolean;
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
+        PaginatedUsersEnvelope: {
+            data: components["schemas"]["UserSchema"][];
+            meta: components["schemas"]["PaginationMeta"];
+            links: {
+                self?: string;
+            };
+        };
+        RoleSummary: {
+            id: string;
+            key: string;
+            name: string;
+            scope_type: string;
+            stream: string;
+            is_singleton: boolean;
+            permissions: string[];
+        };
+        RoleListEnvelope: {
+            data: components["schemas"]["RoleSummary"][];
+            meta: {
+                total: number;
+            };
+        };
+        PrincipalNewUserInput: {
+            name: string;
+            /** Format: email */
+            email?: string | null;
+            mobile?: string | null;
+            registration_number?: string | null;
+        };
+        AppointPrincipalInput: {
+            user_id?: string | null;
+            new_user?: components["schemas"]["PrincipalNewUserInput"];
+            order_record?: string | null;
+            reason?: string | null;
+        };
+        ReplacePrincipalInput: {
+            user_id?: string | null;
+            new_user?: components["schemas"]["PrincipalNewUserInput"];
+            reason: string;
+            order_record?: string | null;
+        };
+        PrincipalActionEnvelope: {
+            data: {
+                assignment: components["schemas"]["RoleAssignmentSchema"];
+                previous_assignment_id: string | null;
+                /** @description Returned once when a new_user account was created. */
+                temporary_password?: string;
+                /** Format: date-time */
+                expires_at?: string;
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
         };
         UpdateUserInput: {
             name?: string;
@@ -850,25 +1062,49 @@ export interface components {
             valid_to?: string | null;
             order_record?: string | null;
         };
+        RoleAssignmentUserSummary: {
+            id: string;
+            name: string;
+            /** Format: email */
+            email?: string | null;
+            mobile?: string | null;
+        };
+        RoleAssignmentActorSummary: {
+            id: string;
+            name: string;
+        };
+        RoleAssignmentSchema: {
+            id: string;
+            user_id: string;
+            role_id: string;
+            role_key: string;
+            role_name?: string | null;
+            scope_type: string;
+            scope_label: string;
+            is_singleton: boolean;
+            is_active: boolean;
+            /** Format: date-time */
+            valid_from?: string | null;
+            /** Format: date-time */
+            valid_to?: string | null;
+            order_record?: string | null;
+            reason?: string | null;
+            user?: components["schemas"]["RoleAssignmentUserSummary"];
+            assigned_by?: components["schemas"]["RoleAssignmentActorSummary"];
+        };
         RoleAssignmentEnvelope: {
-            data: {
-                id: string;
-                user_id: string;
-                role_id: string;
-                role_key: string;
-                scope_type: string;
-                scope_label: string;
-                is_singleton: boolean;
-                is_active: boolean;
-                /** Format: date-time */
-                valid_from?: string;
-                /** Format: date-time */
-                valid_to?: string | null;
-            };
+            data: components["schemas"]["RoleAssignmentSchema"];
             meta: {
                 /** Format: date-time */
                 timestamp?: string;
             };
+            links?: {
+                self?: string;
+            };
+        };
+        PaginatedRoleAssignmentsEnvelope: {
+            data: components["schemas"]["RoleAssignmentSchema"][];
+            meta: components["schemas"]["PaginationMeta"];
             links: {
                 self?: string;
             };
@@ -1309,6 +1545,7 @@ export interface operations {
                 search?: string;
                 status?: "active" | "suspended" | "pending";
                 type?: "staff" | "student" | "parent";
+                page?: number;
             };
             header?: never;
             path?: never;
@@ -1321,8 +1558,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PaginatedUsersEnvelope"];
+                };
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createUser: {
@@ -1338,15 +1578,17 @@ export interface operations {
             };
         };
         responses: {
-            /** @description User created */
+            /** @description User created (returns one-time temporary_password and expires_at when password is omitted; Cache-Control no-store) */
             201: {
                 headers: {
+                    "Cache-Control"?: string;
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserEnvelope"];
+                    "application/json": components["schemas"]["CreateUserEnvelope"];
                 };
             };
+            403: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
         };
     };
@@ -1370,6 +1612,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserEnvelope"];
                 };
             };
+            403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
         };
     };
@@ -1397,6 +1640,7 @@ export interface operations {
                     "application/json": components["schemas"]["UserEnvelope"];
                 };
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     listRoles: {
@@ -1413,8 +1657,11 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["RoleListEnvelope"];
+                };
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     listStreams: {
@@ -1557,6 +1804,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createDepartment: {
@@ -1609,6 +1857,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
         };
     };
@@ -1813,9 +2062,37 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["MessageEnvelope"];
+                };
             };
             403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+        };
+    };
+    resetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Temporary password issued once (Cache-Control no-store) */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPasswordEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
         };
     };
     suspendUserAccount: {
@@ -1827,16 +2104,25 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string | null;
+                };
+            };
+        };
         responses: {
             /** @description User suspended successfully */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
             };
             403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
         };
     };
     reactivateUserAccount: {
@@ -1855,27 +2141,95 @@ export interface operations {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
             };
             403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
         };
     };
-    listRoleAssignments: {
+    appointPrincipal: {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AppointPrincipalInput"];
+            };
+        };
+        responses: {
+            /** @description Principal appointed successfully (Cache-Control no-store) */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalActionEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    replacePrincipal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplacePrincipalInput"];
+            };
+        };
+        responses: {
+            /** @description Principal replaced successfully (Cache-Control no-store) */
+            201: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrincipalActionEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    listRoleAssignments: {
+        parameters: {
+            query?: {
+                user_id?: string;
+                role_key?: string;
+                scope_label?: string;
+                active_only?: boolean;
+                page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         requestBody?: never;
         responses: {
-            /** @description Role assignments list */
+            /** @description Paginated role assignments list with embedded user and assigner summaries */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["PaginatedRoleAssignmentsEnvelope"];
+                };
             };
+            403: components["responses"]["ProblemDetails"];
         };
     };
     createRoleAssignment: {
@@ -1907,14 +2261,22 @@ export interface operations {
     };
     deleteRoleAssignment: {
         parameters: {
-            query?: never;
+            query?: {
+                reason?: string;
+            };
             header?: never;
             path: {
                 id: string;
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": {
+                    reason?: string | null;
+                };
+            };
+        };
         responses: {
             /** @description Role assignment revoked successfully */
             200: {
@@ -1927,6 +2289,7 @@ export interface operations {
             };
             403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
         };
     };
     listPrograms: {

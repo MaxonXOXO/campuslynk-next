@@ -310,6 +310,9 @@ describe('Academic Suite API Client', () => {
       unlockUserAccount: () => client.identity.users.unlock,
       suspendUserAccount: () => client.identity.users.suspend,
       reactivateUserAccount: () => client.identity.users.reactivate,
+      resetUserPassword: () => client.identity.users.resetPassword,
+      appointPrincipal: () => client.identity.principal.appoint,
+      replacePrincipal: () => client.identity.principal.replace,
       listRoles: () => client.identity.roles.list,
       listRoleAssignments: () => client.identity.roleAssignments.list,
       createRoleAssignment: () => client.identity.roleAssignments.create,
@@ -358,5 +361,200 @@ describe('Academic Suite API Client', () => {
     }
 
     expect(missingOperations).toEqual([]);
+  });
+
+  it('calls users.resetPassword, principal.appoint, principal.replace, and roleAssignments.delete with expected method, path, body, and typed response', async () => {
+    const calls: Array<{ url: string; method?: string; body?: string }> = [];
+    const mockFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({
+        url,
+        method: init?.method,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+
+      if (url.endsWith('/users/01U1/reset-password')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              user_id: '01U1',
+              temporary_password: 'Temp#Reset99!',
+              expires_at: '2026-11-24T12:00:00Z',
+              must_change_password: true,
+            },
+            meta: { timestamp: '2026-11-22T12:00:00Z' },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (url.endsWith('/principal/appoint') || url.endsWith('/principal/replace')) {
+        return new Response(
+          JSON.stringify({
+            data: {
+              assignment: {
+                id: '01A1',
+                user_id: '01U2',
+                role_id: '01R1',
+                role_key: 'principal',
+                role_name: 'Principal',
+                scope_type: 'institution',
+                scope_label: 'i_carmel',
+                is_active: true,
+                user: { id: '01U2', name: 'Dr. Rao', email: 'rao@dev.test', mobile: null },
+                assigned_by: { id: '01SA', name: 'IT Head' },
+                reason: url.endsWith('/principal/replace') ? 'Retirement' : null,
+              },
+              previous_assignment_id: url.endsWith('/principal/replace') ? '01A0' : null,
+              temporary_password: 'Temp#Prin88!',
+              expires_at: '2026-11-24T12:00:00Z',
+            },
+            meta: { timestamp: '2026-11-22T12:00:00Z' },
+          }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          data: { message: 'Role assignment revoked successfully.', assignment_id: '01A1' },
+          meta: { timestamp: '2026-11-22T12:00:00Z' },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const client = createApiClient({
+      baseUrl: 'https://api.carmelpoly.in/api/v1',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    const resetRes = await client.identity.users.resetPassword('01U1');
+    expect(resetRes.data.temporary_password).toBe('Temp#Reset99!');
+
+    const appointRes = await client.identity.principal.appoint({
+      new_user: { name: 'Dr. Rao', email: 'rao@dev.test' },
+    });
+    expect(appointRes.data.assignment.role_key).toBe('principal');
+    expect(appointRes.data.temporary_password).toBe('Temp#Prin88!');
+
+    const replaceRes = await client.identity.principal.replace({
+      user_id: '01U2',
+      reason: 'Retirement',
+    });
+    expect(replaceRes.data.previous_assignment_id).toBe('01A0');
+
+    await client.identity.roleAssignments.delete('01A1', 'Term ended');
+
+    expect(calls).toEqual([
+      {
+        url: 'https://api.carmelpoly.in/api/v1/users/01U1/reset-password',
+        method: 'POST',
+        body: undefined,
+      },
+      {
+        url: 'https://api.carmelpoly.in/api/v1/principal/appoint',
+        method: 'POST',
+        body: JSON.stringify({ new_user: { name: 'Dr. Rao', email: 'rao@dev.test' } }),
+      },
+      {
+        url: 'https://api.carmelpoly.in/api/v1/principal/replace',
+        method: 'POST',
+        body: JSON.stringify({ user_id: '01U2', reason: 'Retirement' }),
+      },
+      {
+        url: 'https://api.carmelpoly.in/api/v1/role-assignments/01A1',
+        method: 'DELETE',
+        body: JSON.stringify({ reason: 'Term ended' }),
+      },
+    ]);
+  });
+
+  it('maps 403, 409, and 422 ProblemDetails errors for resetPassword and principal endpoints', async () => {
+    for (const status of [403, 409, 422] as const) {
+      const mockFetch = vi.fn(async () => {
+        return new Response(
+          JSON.stringify({
+            type: `https://errors.campuslynk.net/err-${status}`,
+            title: `Error ${status}`,
+            status,
+            detail: `Detail ${status}`,
+          }),
+          { status, headers: { 'Content-Type': 'application/problem+json' } }
+        );
+      });
+
+      const client = createApiClient({
+        baseUrl: 'https://api.carmelpoly.in/api/v1',
+        fetchFn: mockFetch as unknown as typeof fetch,
+      });
+
+      await expect(client.identity.users.resetPassword('01U1')).rejects.toMatchObject({
+        status,
+        detail: `Detail ${status}`,
+      });
+      await expect(client.identity.principal.appoint({ user_id: '01U1' })).rejects.toMatchObject({
+        status,
+        detail: `Detail ${status}`,
+      });
+      await expect(
+        client.identity.principal.replace({ user_id: '01U1', reason: 'Test' })
+      ).rejects.toMatchObject({
+        status,
+        detail: `Detail ${status}`,
+      });
+    }
+  });
+
+  it('never logs or captures temporary_password from create, resetPassword, appoint, or replace responses', async () => {
+    const secrets = ['Sec#Create1', 'Sec#Reset2', 'Sec#Appoint3', 'Sec#Replace4'];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const mockFetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.endsWith('/users')) {
+        return new Response(
+          JSON.stringify({ data: { id: '01U', temporary_password: secrets[0], expires_at: '2026-11-24T00:00:00Z' } }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/reset-password')) {
+        return new Response(
+          JSON.stringify({ data: { user_id: '01U', temporary_password: secrets[1], expires_at: '2026-11-24T00:00:00Z', must_change_password: true } }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      if (url.endsWith('/principal/appoint')) {
+        return new Response(
+          JSON.stringify({ data: { assignment: { id: '01A' }, temporary_password: secrets[2], expires_at: '2026-11-24T00:00:00Z' } }),
+          { status: 201, headers: { 'Content-Type': 'application/json' } }
+        );
+      }
+      return new Response(
+        JSON.stringify({ data: { assignment: { id: '01B' }, temporary_password: secrets[3], expires_at: '2026-11-24T00:00:00Z' } }),
+        { status: 201, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const client = createApiClient({
+      baseUrl: 'https://api.carmelpoly.in/api/v1',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.identity.users.create({ type: 'staff', name: 'A', email: 'a@dev.test' });
+    await client.identity.users.resetPassword('01U');
+    await client.identity.principal.appoint({ new_user: { name: 'B', email: 'b@dev.test' } });
+    await client.identity.principal.replace({ new_user: { name: 'C', email: 'c@dev.test' }, reason: 'Transition' });
+
+    const allLogged = [logSpy, infoSpy, warnSpy, errorSpy]
+      .flatMap((s) => s.mock.calls.flat().map(String))
+      .join(' ');
+    for (const secret of secrets) {
+      expect(allLogged).not.toContain(secret);
+    }
+    vi.restoreAllMocks();
   });
 });

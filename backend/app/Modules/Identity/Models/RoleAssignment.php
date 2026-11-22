@@ -24,6 +24,7 @@ use Illuminate\Support\Carbon;
  * @property bool $is_active
  * @property string|null $assigned_by_user_id
  * @property string|null $order_record
+ * @property string|null $reason
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property-read User $user
@@ -51,6 +52,7 @@ class RoleAssignment extends Model
         'is_active',
         'assigned_by_user_id',
         'order_record',
+        'reason',
     ];
 
     protected $casts = [

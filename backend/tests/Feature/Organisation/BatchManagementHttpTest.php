@@ -76,13 +76,29 @@ it('allows authorized users to list departments and view scoped batches', functi
 
         $ceToken = $ceHod->createToken('ce_token')->plainTextToken;
 
-        // 1. List departments
+        // 1. Department directory and point reads stay inside the CE HOD scope.
         $deptResponse = $this->withHeaders([
             'Authorization' => "Bearer {$ceToken}",
         ])->getJson('http://batchhttp.test/api/v1/departments');
 
-        $deptResponse->assertStatus(200);
-        expect($deptResponse->json('meta.total'))->toBeGreaterThanOrEqual(6);
+        $deptResponse->assertStatus(200)
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $deptCE->id)
+            ->assertJsonPath('meta.total', 1);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$ceToken}",
+        ])->getJson("http://batchhttp.test/api/v1/departments/{$deptCE->id}")
+            ->assertStatus(200)
+            ->assertJsonPath('data.id', $deptCE->id);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$ceToken}",
+        ])->getJson("http://batchhttp.test/api/v1/departments/{$deptME->id}")
+            ->assertStatus(403)
+            ->assertHeader('Content-Type', 'application/problem+json');
 
         // 2. List batches for CE HOD:
         // CE HOD sees CE S1 and CE S3 (home_path contains d_ce), but DOES NOT see ME S1!

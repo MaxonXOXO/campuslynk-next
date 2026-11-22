@@ -8,10 +8,13 @@ use App\Core\Http\ProblemDetails;
 use App\Modules\Identity\Actions\AssignRoleAction;
 use App\Modules\Identity\Actions\RevokeRoleAction;
 use App\Modules\Identity\Http\Requests\AssignRoleRequest;
+use App\Modules\Identity\Http\Requests\RevokeRoleAssignmentRequest;
 use App\Modules\Identity\Http\Requests\RevokeRoleRequest;
+use App\Modules\Identity\Http\Resources\RoleAssignmentResource;
 use App\Modules\Identity\Models\Role;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Services\ScopeAuthorizer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -39,9 +42,12 @@ class RoleAssignmentController
         ]);
     }
 
-    public function listAssignments(Request $request): JsonResponse
+    public function listAssignments(Request $request, ScopeAuthorizer $authorizer): JsonResponse
     {
-        $query = RoleAssignment::query()->with('role');
+        /** @var User $caller */
+        $caller = $request->user();
+        $query = $authorizer->scopeQuery(RoleAssignment::query(), $caller, 'identity.role.assign')
+            ->with(['role', 'user', 'assignedByUser']);
 
         if ($request->has('user_id')) {
             $query->where('user_id', (string) $request->query('user_id'));
@@ -63,18 +69,7 @@ class RoleAssignmentController
         $assignments = $query->orderByDesc('created_at')->paginate(25);
 
         return response()->json([
-            'data' => collect($assignments->items())->map(fn (RoleAssignment $a) => [
-                'id' => $a->id,
-                'user_id' => $a->user_id,
-                'role_key' => $a->role->key,
-                'role_name' => $a->role->name,
-                'scope_type' => $a->scope_type,
-                'scope_label' => $a->scope_label,
-                'is_singleton' => (bool) $a->is_singleton,
-                'valid_from' => $a->valid_from?->toIso8601String(),
-                'valid_to' => $a->valid_to?->toIso8601String(),
-                'is_active' => (bool) $a->is_active,
-            ]),
+            'data' => RoleAssignmentResource::collection($assignments->items()),
             'meta' => [
                 'current_page' => $assignments->currentPage(),
                 'last_page' => $assignments->lastPage(),
@@ -87,7 +82,7 @@ class RoleAssignmentController
         ]);
     }
 
-    public function destroy(Request $request, string $id, RevokeRoleAction $action): JsonResponse
+    public function destroy(RevokeRoleAssignmentRequest $request, string $id, RevokeRoleAction $action): JsonResponse
     {
         /** @var User $revoker */
         $revoker = $request->user();
@@ -95,9 +90,11 @@ class RoleAssignmentController
         /** @var RoleAssignment $assignment */
         $assignment = RoleAssignment::findOrFail($id);
 
+        $reason = $request->validated('reason');
         $action->execute(
             revoker: $revoker,
-            assignment: $assignment
+            assignment: $assignment,
+            reason: is_string($reason) ? $reason : null,
         );
 
         return response()->json([
@@ -151,18 +148,10 @@ class RoleAssignmentController
             ], Response::HTTP_UNPROCESSABLE_ENTITY, ['Content-Type' => 'application/problem+json']);
         }
 
+        $assignment->load(['role', 'user', 'assignedByUser']);
+
         return response()->json([
-            'data' => [
-                'id' => $assignment->id,
-                'user_id' => $assignment->user_id,
-                'role_key' => $role->key,
-                'scope_type' => $assignment->scope_type,
-                'scope_label' => $assignment->scope_label,
-                'is_singleton' => $assignment->is_singleton,
-                'valid_from' => $assignment->valid_from?->toIso8601String(),
-                'valid_to' => $assignment->valid_to?->toIso8601String(),
-                'is_active' => $assignment->is_active,
-            ],
+            'data' => new RoleAssignmentResource($assignment),
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
             ],
