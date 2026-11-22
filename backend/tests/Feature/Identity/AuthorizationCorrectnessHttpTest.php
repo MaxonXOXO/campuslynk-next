@@ -137,14 +137,159 @@ it('isolates HOD department reads, writes, appointments and collection filters o
         ->assertOk()->assertJsonPath('data.name', 'Own department');
 });
 
+it('enforces individual HOD department boundaries over HTTP', function (bool $reverse, string $operation) {
+    $own = $reverse ? $this->departmentB : $this->departmentA;
+    $other = $reverse ? $this->departmentA : $this->departmentB;
+    $this->authorizationGrant($this->caller, 'hod', 'department', $own);
+    $this->authorizationActAs($this->caller);
+
+    $request = fn (Department $department) => match ($operation) {
+        'read' => $this->getJson('http://authorization-b1.test/api/v1/departments/'.$department->id),
+        'update' => $this->putJson('http://authorization-b1.test/api/v1/departments/'.$department->id, [
+            'name' => 'HOD boundary update',
+        ]),
+        'appoint' => $this->postJson('http://authorization-b1.test/api/v1/role-assignments',
+            $this->authorizationAppointment($this->candidate, 'lecturer', 'department', $department)
+        ),
+    };
+
+    $request($own)->assertStatus($operation === 'appoint' ? 201 : 200);
+    $this->authorizationWrites = [];
+    $this->captureAuthorizationWrites = true;
+    try {
+        $request($other)->assertForbidden();
+        expect($this->authorizationWrites)->toBeEmpty();
+    } finally {
+        $this->captureAuthorizationWrites = false;
+    }
+})->with([
+    'A HOD reads B' => [false, 'read'],
+    'B HOD reads A' => [true, 'read'],
+    'A HOD updates B' => [false, 'update'],
+    'B HOD updates A' => [true, 'update'],
+    'A HOD appoints in B' => [false, 'appoint'],
+    'B HOD appoints in A' => [true, 'appoint'],
+]);
+
+it('scopes HOD directory filters independently over HTTP', function (bool $reverse, string $filter) {
+    $own = $reverse ? $this->departmentB : $this->departmentA;
+    $other = $reverse ? $this->departmentA : $this->departmentB;
+    $ownUser = $reverse ? $this->memberB : $this->memberA;
+    $otherUser = $reverse ? $this->memberA : $this->memberB;
+    $ownAssignment = $reverse ? $this->assignmentB : $this->assignmentA;
+    $bothAssignment = $reverse ? $this->assignmentBothB : $this->assignmentBothA;
+    $grant = $this->authorizationGrant($this->caller, 'hod', 'department', $own);
+    $this->authorizationActAs($this->caller);
+
+    $path = match ($filter) {
+        'users' => '/users',
+        'users search' => '/users?search='.rawurlencode($otherUser->name),
+        'assignments' => '/role-assignments?active_only=false',
+        'assignment scope' => '/role-assignments?scope_label='.$other->scope_label,
+        'assignment user' => '/role-assignments?user_id='.$otherUser->id,
+    };
+    $expectedIds = match ($filter) {
+        'users' => [$this->caller->id, $ownUser->id, $this->memberBoth->id],
+        'assignments' => [$grant->id, $ownAssignment->id, $bothAssignment->id],
+        default => [],
+    };
+
+    $response = $this->getJson('http://authorization-b1.test/api/v1'.$path)->assertOk()
+        ->assertJsonPath('meta.total', count($expectedIds))
+        ->assertJsonCount(count($expectedIds), 'data');
+    expect(array_column($response->json('data'), 'id'))->toEqualCanonicalizing($expectedIds);
+})->with([
+    'A HOD users list' => [false, 'users'],
+    'B HOD users list' => [true, 'users'],
+    'A HOD searches for B user' => [false, 'users search'],
+    'B HOD searches for A user' => [true, 'users search'],
+    'A HOD assignments list' => [false, 'assignments'],
+    'B HOD assignments list' => [true, 'assignments'],
+    'A HOD filters B scope' => [false, 'assignment scope'],
+    'B HOD filters A scope' => [true, 'assignment scope'],
+    'A HOD filters B assignee' => [false, 'assignment user'],
+    'B HOD filters A assignee' => [true, 'assignment user'],
+]);
+
+it('matches HTTP point checks to explicit scoped visibility', function (bool $reverse, string $resource) {
+    $own = $reverse ? $this->departmentB : $this->departmentA;
+    $other = $reverse ? $this->departmentA : $this->departmentB;
+    $ownUser = $reverse ? $this->memberB : $this->memberA;
+    $otherUser = $reverse ? $this->memberA : $this->memberB;
+    $ownAssignment = $reverse ? $this->assignmentB : $this->assignmentA;
+    $otherAssignment = $reverse ? $this->assignmentA : $this->assignmentB;
+    $this->authorizationGrant($this->caller, 'hod', 'department', $own);
+    $this->authorizationActAs($this->caller);
+
+    $path = $resource === 'assignments' ? '/role-assignments' : '/'.$resource;
+    $listedIds = array_column($this->getJson('http://authorization-b1.test/api/v1'.$path)->assertOk()->json('data'), 'id');
+    [$ownId, $otherId] = match ($resource) {
+        'departments' => [$own->id, $other->id],
+        'users' => [$ownUser->id, $otherUser->id],
+        'assignments' => [$ownAssignment->id, $otherAssignment->id],
+    };
+    $pointRequest = fn (string $id) => $resource === 'assignments'
+        ? $this->deleteJson('http://authorization-b1.test/api/v1'.$path.'/'.$id)
+        : $this->getJson('http://authorization-b1.test/api/v1'.$path.'/'.$id);
+
+    $pointRequest($ownId)->assertOk();
+    expect(in_array($ownId, $listedIds, true))->toBeTrue();
+    $this->authorizationWrites = [];
+    $this->captureAuthorizationWrites = true;
+    try {
+        $response = $pointRequest($otherId);
+        expect([
+            'listed' => in_array($otherId, $listedIds, true),
+            'status' => $response->status(),
+        ])->toBe(['listed' => false, 'status' => 403]);
+        expect($this->authorizationWrites)->toBeEmpty();
+    } finally {
+        $this->captureAuthorizationWrites = false;
+    }
+})->with([
+    'A HOD department point/query agreement' => [false, 'departments'],
+    'B HOD department point/query agreement' => [true, 'departments'],
+    'A HOD user point/query agreement' => [false, 'users'],
+    'B HOD user point/query agreement' => [true, 'users'],
+    'A HOD assignment point/query agreement' => [false, 'assignments'],
+    'B HOD assignment point/query agreement' => [true, 'assignments'],
+]);
+
+it('isolates HOD user updates after an explicit permission grant', function (bool $reverse) {
+    $own = $reverse ? $this->departmentB : $this->departmentA;
+    $ownUser = $reverse ? $this->memberB : $this->memberA;
+    $otherUser = $reverse ? $this->memberA : $this->memberB;
+    // Enable this endpoint only in the test tenant so both requests exercise target scoping.
+    Role::where('key', 'hod')->firstOrFail()->permissions()->attach(
+        Permission::where('key', 'identity.user.update')->firstOrFail()->id
+    );
+    $this->authorizationGrant($this->caller, 'hod', 'department', $own);
+    $this->authorizationActAs($this->caller);
+
+    $this->putJson('http://authorization-b1.test/api/v1/users/'.$ownUser->id, ['name' => 'Allowed user update'])
+        ->assertOk()->assertJsonPath('data.name', 'Allowed user update');
+    $this->authorizationWrites = [];
+    $this->captureAuthorizationWrites = true;
+    try {
+        $this->putJson('http://authorization-b1.test/api/v1/users/'.$otherUser->id, ['name' => 'Rejected user update'])
+            ->assertForbidden();
+        expect($this->authorizationWrites)->toBeEmpty();
+    } finally {
+        $this->captureAuthorizationWrites = false;
+    }
+    $this->tenantContext->setTenant($this->tenant);
+    expect($otherUser->fresh()->name)->toBe($otherUser->name);
+})->with(['A HOD updates a B user' => false, 'B HOD updates an A user' => true]);
+
 it('applies user target policies with exactly the same predicates as user collection queries', function () {
     $permission = Permission::where('key', 'identity.user.update')->firstOrFail();
     Role::where('key', 'hod')->firstOrFail()->permissions()->attach($permission->id);
     $this->authorizationGrant($this->caller, 'hod', 'department', $this->departmentA);
     $this->authorizationActAs($this->caller);
 
-    $list = $this->getJson('http://authorization-b1.test/api/v1/users')->assertOk();
+    $list = $this->getJson('http://authorization-b1.test/api/v1/users')->assertOk()->assertJsonCount(3, 'data');
     $visibleIds = array_column($list->json('data'), 'id');
+    expect($visibleIds)->toEqualCanonicalizing([$this->caller->id, $this->memberA->id, $this->memberBoth->id]);
 
     foreach ([$this->memberA, $this->memberB, $this->memberBoth, $this->candidate] as $user) {
         $visible = in_array($user->id, $visibleIds, true);
@@ -162,10 +307,14 @@ it('applies user target policies with exactly the same predicates as user collec
 });
 
 it('makes department and assignment point checks agree with scoped collections', function () {
-    $this->authorizationGrant($this->caller, 'hod', 'department', $this->departmentA);
+    $grant = $this->authorizationGrant($this->caller, 'hod', 'department', $this->departmentA);
     $this->authorizationActAs($this->caller);
-    $departmentIds = array_column($this->getJson('http://authorization-b1.test/api/v1/departments')->assertOk()->json('data'), 'id');
-    $assignmentIds = array_column($this->getJson('http://authorization-b1.test/api/v1/role-assignments')->assertOk()->json('data'), 'id');
+    $departmentsResponse = $this->getJson('http://authorization-b1.test/api/v1/departments')->assertOk()->assertJsonCount(1, 'data');
+    $assignmentsResponse = $this->getJson('http://authorization-b1.test/api/v1/role-assignments')->assertOk()->assertJsonCount(3, 'data');
+    $departmentIds = array_column($departmentsResponse->json('data'), 'id');
+    $assignmentIds = array_column($assignmentsResponse->json('data'), 'id');
+    expect($departmentIds)->toBe([$this->departmentA->id]);
+    expect($assignmentIds)->toEqualCanonicalizing([$grant->id, $this->assignmentA->id, $this->assignmentBothA->id]);
     $this->tenantContext->setTenant($this->tenant);
     $departments = Department::whereIn('code', ['CE', 'ME', 'EEE', 'EL', 'CT', 'AU'])->get();
     expect($departments)->toHaveCount(6);
