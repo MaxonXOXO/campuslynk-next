@@ -21,8 +21,10 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $registration_number
  * @property string $password
  * @property bool $must_change_password
+ * @property Carbon|null $temporary_password_expires_at
  * @property string $status
  * @property Carbon|null $last_login_at
+ * @property Carbon|null $locked_until
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  */
@@ -67,8 +69,10 @@ class User extends Authenticatable
         'registration_number',
         'password',
         'must_change_password',
+        'temporary_password_expires_at',
         'status',
         'last_login_at',
+        'locked_until',
     ];
 
     /**
@@ -88,9 +92,19 @@ class User extends Authenticatable
      */
     protected $casts = [
         'must_change_password' => 'boolean',
+        'temporary_password_expires_at' => 'datetime',
         'last_login_at' => 'datetime',
+        'locked_until' => 'datetime',
         'password' => 'hashed',
     ];
+
+    /**
+     * Check if the account is currently within a timed lockout window.
+     */
+    public function isLocked(): bool
+    {
+        return $this->locked_until !== null && $this->locked_until->isFuture();
+    }
 
     /**
      * Check if the user is active.

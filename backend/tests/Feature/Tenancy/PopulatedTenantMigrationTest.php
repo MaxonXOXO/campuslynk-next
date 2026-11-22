@@ -39,7 +39,7 @@ it('verifies populated tenant migration lifecycle forward and rollback', functio
     $rollbackExit = Artisan::call('migrate:rollback', [
         '--database' => 'tenant',
         '--path' => 'database/migrations/tenant',
-        '--step' => 1,
+        '--step' => 2,
         '--force' => true,
     ]);
     expect($rollbackExit)->toBe(0);
@@ -118,7 +118,7 @@ it('verifies populated tenant migration lifecycle forward and rollback', functio
         Artisan::call('migrate:rollback', [
             '--database' => 'tenant',
             '--path' => 'database/migrations/tenant',
-            '--step' => 1,
+            '--step' => 2,
             '--force' => true,
         ]);
     })->toThrow(UniqueConstraintViolationException::class);

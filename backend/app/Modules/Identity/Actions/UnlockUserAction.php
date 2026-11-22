@@ -26,6 +26,8 @@ final class UnlockUserAction
             $this->rateLimiter->unlock($tenant->id, $normalised, $ip);
         }
 
+        $targetUser->forceFill(['locked_until' => null])->save();
+
         activity('security')
             ->performedOn($targetUser)
             ->causedBy($caller)
