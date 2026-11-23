@@ -442,7 +442,7 @@ it('supports lookups for programs, academic years, regulations, workshop section
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        $principalRole = Role::where('key', 'super_admin')->firstOrFail();
         RoleAssignment::create([
             'user_id' => $principal->id,
             'role_id' => $principalRole->id,
@@ -523,7 +523,7 @@ it('supports full CRUD lifecycle for departments (allowed, unauthorized, cross-t
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        $principalRole = Role::where('key', 'super_admin')->firstOrFail();
         RoleAssignment::create([
             'user_id' => $principalA->id,
             'role_id' => $principalRole->id,
@@ -612,7 +612,7 @@ it('supports full CRUD lifecycle for departments (allowed, unauthorized, cross-t
         $this->tenantContext->setTenant($tenantB);
         app(KeralaPolytechnicProfileSeeder::class)->run();
 
-        $principalRoleB = Role::where('key', 'principal')->firstOrFail();
+        $principalRoleB = Role::where('key', 'super_admin')->firstOrFail();
         $principalB = User::create([
             'type' => 'staff',
             'name' => 'Principal Bob',
@@ -662,7 +662,7 @@ it('supports full CRUD lifecycle for programs (allowed, unauthorized, cross-tena
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        $principalRole = Role::where('key', 'super_admin')->firstOrFail();
         RoleAssignment::create([
             'user_id' => $principalA->id,
             'role_id' => $principalRole->id,
@@ -742,7 +742,7 @@ it('supports full CRUD lifecycle for programs (allowed, unauthorized, cross-tena
         $this->tenantContext->setTenant($tenantB);
         app(KeralaPolytechnicProfileSeeder::class)->run();
 
-        $principalRoleB = Role::where('key', 'principal')->firstOrFail();
+        $principalRoleB = Role::where('key', 'super_admin')->firstOrFail();
         $principalB = User::create([
             'type' => 'staff',
             'name' => 'Principal Bob',
@@ -792,7 +792,7 @@ it('supports full CRUD lifecycle for academic years (allowed, unauthorized, cros
             'status' => 'active',
             'must_change_password' => false,
         ]);
-        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        $principalRole = Role::where('key', 'super_admin')->firstOrFail();
         RoleAssignment::create([
             'user_id' => $principalA->id,
             'role_id' => $principalRole->id,
@@ -868,7 +868,7 @@ it('supports full CRUD lifecycle for academic years (allowed, unauthorized, cros
         $this->tenantContext->setTenant($tenantB);
         app(KeralaPolytechnicProfileSeeder::class)->run();
 
-        $principalRoleB = Role::where('key', 'principal')->firstOrFail();
+        $principalRoleB = Role::where('key', 'super_admin')->firstOrFail();
         $principalB = User::create([
             'type' => 'staff',
             'name' => 'Principal Bob',

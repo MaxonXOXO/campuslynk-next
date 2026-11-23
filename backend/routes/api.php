@@ -107,6 +107,15 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/users/{id}/reactivate', [UserController::class, 'reactivate'])
                 ->middleware(RequirePermission::class.':identity.user.suspend')
                 ->name('api.v1.users.reactivate');
+            Route::post('/users/{id}/approve', [UserController::class, 'approve'])
+                ->middleware(RequirePermission::class.':identity.user.approve')
+                ->name('api.v1.users.approve');
+            Route::post('/users/{id}/reject', [UserController::class, 'reject'])
+                ->middleware(RequirePermission::class.':identity.user.approve')
+                ->name('api.v1.users.reject');
+            Route::post('/users/{id}/deactivate', [UserController::class, 'deactivate'])
+                ->middleware(RequirePermission::class.':identity.user.deactivate')
+                ->name('api.v1.users.deactivate');
 
             // Identity: Principal Governance (Atomic Appointment & Replacement)
             Route::post('/principal/appoint', [PrincipalController::class, 'appoint'])
@@ -198,7 +207,7 @@ Route::prefix('v1')->group(function (): void {
 
             // Organisation: Governance Rules
             Route::get('/governance-rules', [GovernanceRuleController::class, 'index'])
-                ->middleware(RequirePermission::class.':organisation.department.manage')
+                ->middleware(RequirePermission::class.':organisation.batch.view')
                 ->name('api.v1.governance-rules.index');
             Route::put('/governance-rules/{id}', [GovernanceRuleController::class, 'update'])
                 ->middleware(RequirePermission::class.':organisation.department.manage')

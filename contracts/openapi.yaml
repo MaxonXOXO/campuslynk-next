@@ -262,13 +262,23 @@ paths:
           required: false
           schema:
             type: string
-            enum: [active, suspended, pending]
+            enum: [active, suspended, pending, deactivated, rejected]
         - name: type
           in: query
           required: false
           schema:
             type: string
             enum: [staff, student, parent]
+        - name: role_key
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: department_id
+          in: query
+          required: false
+          schema:
+            type: string
         - name: page
           in: query
           required: false
@@ -862,7 +872,7 @@ paths:
   /users/{id}/reactivate:
     post:
       operationId: reactivateUserAccount
-      summary: Reactivate a previously suspended user account
+      summary: Reactivate a previously suspended or deactivated user account
       security:
         - bearerAuth: []
       parameters:
@@ -881,6 +891,102 @@ paths:
         '403':
           $ref: '#/components/responses/ProblemDetails'
         '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/approve:
+    post:
+      operationId: approveUserAccount
+      summary: Approve a pending user account
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User approved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/reject:
+    post:
+      operationId: rejectUserAccount
+      summary: Reject a pending user account with reason
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequiredInput'
+      responses:
+        '200':
+          description: User rejected successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/{id}/deactivate:
+    post:
+      operationId: deactivateUserAccount
+      summary: Soft-deactivate a user account with reason, revoking tokens and end-dating active role assignments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReasonRequiredInput'
+      responses:
+        '200':
+          description: User deactivated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
           $ref: '#/components/responses/ProblemDetails'
 
   /principal/appoint:
@@ -1884,9 +1990,40 @@ components:
           format: date-time
           nullable: true
 
+    ReasonRequiredInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+          example: No longer employed at institution
+
+    UserAbilities:
+      type: object
+      required: [update, suspend, reactivate, deactivate, reset_password, unlock, approve, reject]
+      properties:
+        update:
+          type: boolean
+        suspend:
+          type: boolean
+        reactivate:
+          type: boolean
+        deactivate:
+          type: boolean
+        reset_password:
+          type: boolean
+        unlock:
+          type: boolean
+        approve:
+          type: boolean
+        reject:
+          type: boolean
+
     UserSchema:
       type: object
-      required: [id, type, name, status, must_change_password, is_locked, assignments]
+      required: [id, type, name, status, must_change_password, is_locked, assignments, abilities]
       properties:
         id:
           type: string
@@ -1913,7 +2050,14 @@ components:
           example: REG-2026-001
         status:
           type: string
-          enum: [active, suspended, pending]
+          enum: [active, suspended, pending, deactivated, rejected]
+        status_reason:
+          type: string
+          nullable: true
+        deactivated_at:
+          type: string
+          format: date-time
+          nullable: true
         must_change_password:
           type: boolean
         temporary_password_expires_at:
@@ -1934,6 +2078,8 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/UserAssignmentSummary'
+        abilities:
+          $ref: '#/components/schemas/UserAbilities'
         created_at:
           type: string
           format: date-time

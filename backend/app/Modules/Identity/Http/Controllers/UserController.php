@@ -4,17 +4,24 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Modules\Identity\Actions\ApproveUserAction;
 use App\Modules\Identity\Actions\CreateUserAction;
+use App\Modules\Identity\Actions\DeactivateUserAction;
 use App\Modules\Identity\Actions\ReactivateUserAction;
+use App\Modules\Identity\Actions\RejectUserAction;
 use App\Modules\Identity\Actions\ResetUserPasswordAction;
 use App\Modules\Identity\Actions\SuspendUserAction;
 use App\Modules\Identity\Actions\UnlockUserAction;
 use App\Modules\Identity\Actions\UpdateUserAction;
 use App\Modules\Identity\Http\Requests\CreateUserRequest;
+use App\Modules\Identity\Http\Requests\DeactivateUserRequest;
+use App\Modules\Identity\Http\Requests\RejectUserRequest;
 use App\Modules\Identity\Http\Requests\UpdateUserRequest;
 use App\Modules\Identity\Http\Resources\UserResource;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\ScopeAuthorizer;
+use App\Modules\Organisation\Contracts\ScopeDirectoryContract;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -22,22 +29,56 @@ use Symfony\Component\HttpFoundation\Response;
 
 class UserController
 {
-    public function index(Request $request, ScopeAuthorizer $authorizer): JsonResponse
+    public function index(Request $request, ScopeAuthorizer $authorizer, ScopeDirectoryContract $scopeDirectory): JsonResponse
     {
         /** @var User $caller */
         $caller = $request->user();
         $query = $authorizer->scopeQuery(User::query(), $caller, 'identity.user.view')
             ->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
-        if ($request->has('type')) {
+        if ($request->filled('type')) {
             $query->where('type', (string) $request->query('type'));
         }
 
-        if ($request->has('status')) {
+        if ($request->filled('status')) {
             $query->where('status', (string) $request->query('status'));
         }
 
-        if ($request->has('search')) {
+        if ($request->filled('role_key')) {
+            $roleKey = (string) $request->query('role_key');
+            $query->whereHas('roleAssignments', function (Builder $assignments) use ($roleKey): void {
+                $assignments->active()->whereHas('role', fn (Builder $roles) => $roles->where('key', $roleKey));
+            });
+        }
+
+        if ($request->filled('department_id')) {
+            $departmentId = (string) $request->query('department_id');
+            $deptScope = $scopeDirectory->query()
+                ->where('scope_type', 'department')
+                ->where('scope_id', $departmentId)
+                ->first();
+
+            if ($deptScope === null || ! is_string($deptScope->scope_label ?? null)) {
+                $query->whereRaw('1 = 0');
+            } else {
+                $deptLabel = $deptScope->scope_label;
+                $matchingLabels = $scopeDirectory->query()
+                    ->whereRaw('managing_path ~ ?::lquery', ["*.{$deptLabel}.*"])
+                    ->orWhereRaw('home_path ~ ?::lquery', ["*.{$deptLabel}.*"])
+                    ->pluck('scope_label')
+                    ->all();
+
+                if ($matchingLabels === []) {
+                    $query->whereRaw('1 = 0');
+                } else {
+                    $query->whereHas('roleAssignments', function (Builder $assignments) use ($matchingLabels): void {
+                        $assignments->active()->whereIn('scope_label', $matchingLabels);
+                    });
+                }
+            }
+        }
+
+        if ($request->filled('search')) {
             $search = (string) $request->query('search');
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
@@ -225,6 +266,83 @@ class UserController
             'meta' => [
                 'timestamp' => now()->toIso8601String(),
                 'message' => 'User reactivated successfully.',
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}"),
+            ],
+        ]);
+    }
+
+    public function approve(Request $request, string $id, ApproveUserAction $action): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        Gate::authorize('approve', $targetUser);
+
+        $action->execute($caller, $targetUser);
+        $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+
+        return response()->json([
+            'data' => new UserResource($targetUser),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+                'message' => 'User approved successfully.',
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}"),
+            ],
+        ]);
+    }
+
+    public function reject(RejectUserRequest $request, string $id, RejectUserAction $action): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        Gate::authorize('reject', $targetUser);
+
+        $reason = (string) $request->validated('reason');
+        $action->execute($caller, $targetUser, $reason);
+        $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+
+        return response()->json([
+            'data' => new UserResource($targetUser),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+                'message' => 'User rejected successfully.',
+            ],
+            'links' => [
+                'self' => url("/api/v1/users/{$targetUser->id}"),
+            ],
+        ]);
+    }
+
+    public function deactivate(DeactivateUserRequest $request, string $id, DeactivateUserAction $action): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var User $targetUser */
+        $targetUser = User::findOrFail($id);
+
+        Gate::authorize('deactivate', $targetUser);
+
+        $reason = (string) $request->validated('reason');
+        $action->execute($caller, $targetUser, $reason);
+        $targetUser->load(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+
+        return response()->json([
+            'data' => new UserResource($targetUser),
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+                'message' => 'User deactivated successfully.',
             ],
             'links' => [
                 'self' => url("/api/v1/users/{$targetUser->id}"),

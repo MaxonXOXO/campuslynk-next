@@ -21,6 +21,10 @@ describe('Academic Suite API Client', () => {
     expect(typeof client.identity.users.suspend).toBe('function');
     expect(typeof client.identity.users.reactivate).toBe('function');
     expect(typeof client.identity.users.unlock).toBe('function');
+    expect(typeof client.identity.users.resetPassword).toBe('function');
+    expect(typeof client.identity.users.approve).toBe('function');
+    expect(typeof client.identity.users.reject).toBe('function');
+    expect(typeof client.identity.users.deactivate).toBe('function');
 
     expect(typeof client.identity.roles.list).toBe('function');
 
@@ -311,6 +315,9 @@ describe('Academic Suite API Client', () => {
       suspendUserAccount: () => client.identity.users.suspend,
       reactivateUserAccount: () => client.identity.users.reactivate,
       resetUserPassword: () => client.identity.users.resetPassword,
+      approveUserAccount: () => client.identity.users.approve,
+      rejectUserAccount: () => client.identity.users.reject,
+      deactivateUserAccount: () => client.identity.users.deactivate,
       appointPrincipal: () => client.identity.principal.appoint,
       replacePrincipal: () => client.identity.principal.replace,
       listRoles: () => client.identity.roles.list,
@@ -556,5 +563,51 @@ describe('Academic Suite API Client', () => {
       expect(allLogged).not.toContain(secret);
     }
     vi.restoreAllMocks();
+  });
+
+  it('calls approve, reject, deactivate, and role_key/department_id user list filters', async () => {
+    const calls: Array<{ url: string; method: string; body?: string }> = [];
+    const mockFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({
+        url,
+        method: init?.method ?? 'GET',
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      });
+      return new Response(
+        JSON.stringify({
+          data: url.includes('/users?') ? [] : { id: '01U', status: 'active' },
+          meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const client = createApiClient({
+      baseUrl: 'https://api.carmelpoly.in/api/v1',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.identity.users.approve('01U');
+    await client.identity.users.reject('01U', { reason: 'Incomplete verification' });
+    await client.identity.users.deactivate('01U', { reason: 'Retired from service' });
+    await client.identity.users.list({ role_key: 'hod', department_id: '01DEPT' });
+
+    expect(calls[0]).toMatchObject({
+      url: 'https://api.carmelpoly.in/api/v1/users/01U/approve',
+      method: 'POST',
+    });
+    expect(calls[1]).toMatchObject({
+      url: 'https://api.carmelpoly.in/api/v1/users/01U/reject',
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Incomplete verification' }),
+    });
+    expect(calls[2]).toMatchObject({
+      url: 'https://api.carmelpoly.in/api/v1/users/01U/deactivate',
+      method: 'POST',
+      body: JSON.stringify({ reason: 'Retired from service' }),
+    });
+    expect(calls[3]?.url).toContain('role_key=hod');
+    expect(calls[3]?.url).toContain('department_id=01DEPT');
   });
 });

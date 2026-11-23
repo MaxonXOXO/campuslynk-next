@@ -403,8 +403,59 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Reactivate a previously suspended user account */
+        /** Reactivate a previously suspended or deactivated user account */
         post: operations["reactivateUserAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a pending user account */
+        post: operations["approveUserAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a pending user account with reason */
+        post: operations["rejectUserAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/deactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Soft-deactivate a user account with reason, revoking tokens and end-dating active role assignments */
+        post: operations["deactivateUserAccount"];
         delete?: never;
         options?: never;
         head?: never;
@@ -812,6 +863,20 @@ export interface components {
             /** Format: date-time */
             valid_to?: string | null;
         };
+        ReasonRequiredInput: {
+            /** @example No longer employed at institution */
+            reason: string;
+        };
+        UserAbilities: {
+            update: boolean;
+            suspend: boolean;
+            reactivate: boolean;
+            deactivate: boolean;
+            reset_password: boolean;
+            unlock: boolean;
+            approve: boolean;
+            reject: boolean;
+        };
         UserSchema: {
             /**
              * @description ULID identifier
@@ -832,7 +897,10 @@ export interface components {
             /** @example REG-2026-001 */
             registration_number?: string | null;
             /** @enum {string} */
-            status: "active" | "suspended" | "pending";
+            status: "active" | "suspended" | "pending" | "deactivated" | "rejected";
+            status_reason?: string | null;
+            /** Format: date-time */
+            deactivated_at?: string | null;
             must_change_password: boolean;
             /** Format: date-time */
             temporary_password_expires_at?: string | null;
@@ -842,6 +910,7 @@ export interface components {
             /** Format: date-time */
             last_login_at?: string | null;
             assignments: components["schemas"]["UserAssignmentSummary"][];
+            abilities: components["schemas"]["UserAbilities"];
             /** Format: date-time */
             created_at?: string | null;
             /** Format: date-time */
@@ -1543,8 +1612,10 @@ export interface operations {
         parameters: {
             query?: {
                 search?: string;
-                status?: "active" | "suspended" | "pending";
+                status?: "active" | "suspended" | "pending" | "deactivated" | "rejected";
                 type?: "staff" | "student" | "parent";
+                role_key?: string;
+                department_id?: string;
                 page?: number;
             };
             header?: never;
@@ -2147,6 +2218,92 @@ export interface operations {
             };
             403: components["responses"]["ProblemDetails"];
             404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+        };
+    };
+    approveUserAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description User approved successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+        };
+    };
+    rejectUserAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequiredInput"];
+            };
+        };
+        responses: {
+            /** @description User rejected successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    deactivateUserAccount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReasonRequiredInput"];
+            };
+        };
+        responses: {
+            /** @description User deactivated successfully */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
         };
     };
     appointPrincipal: {

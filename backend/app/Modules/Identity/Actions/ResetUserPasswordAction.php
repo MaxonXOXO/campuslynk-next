@@ -12,6 +12,7 @@ use App\Modules\Identity\Models\UserIdentifier;
 use App\Modules\Identity\Services\LoginRateLimiter;
 use App\Modules\Identity\Services\RoleAuthorityRank;
 use App\Modules\Identity\Services\TemporaryPasswordResult;
+use App\Modules\Identity\Services\UserAuditScopeResolver;
 
 final class ResetUserPasswordAction
 {
@@ -20,6 +21,7 @@ final class ResetUserPasswordAction
         protected RoleAuthorityRank $authorityRank,
         protected LoginRateLimiter $rateLimiter,
         protected TenantContext $tenantContext,
+        private readonly UserAuditScopeResolver $scopeResolver,
     ) {}
 
     public function execute(User $actor, User $targetUser, ?string $ip = null): TemporaryPasswordResult
@@ -54,6 +56,8 @@ final class ResetUserPasswordAction
         // Revoke all existing sessions/tokens so old sessions cannot continue
         $targetUser->tokens()->delete();
 
+        $scope = $this->scopeResolver->resolveForUser($targetUser);
+
         activity('security')
             ->event('temp_password.reset')
             ->performedOn($targetUser)
@@ -61,6 +65,8 @@ final class ResetUserPasswordAction
             ->withProperties([
                 'target_user_id' => $targetUser->id,
                 'expires_at' => $result->expiresAt->toIso8601String(),
+                'scope_path' => $scope['scope_path'],
+                'department_id' => $scope['department_id'],
             ])
             ->log("Reset temporary password for user [{$targetUser->name}].");
 
