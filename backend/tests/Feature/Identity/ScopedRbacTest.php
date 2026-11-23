@@ -884,7 +884,7 @@ it('enforces singleton exclusion constraint under real concurrency across two da
         $pdoA->beginTransaction();
         $stmtA = $pdoA->prepare("
             INSERT INTO role_assignments (id, user_id, role_id, scope_type, scope_label, is_singleton, valid_from, is_active, created_at, updated_at)
-            VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW(), true, NOW(), NOW())
+            VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW() - INTERVAL '1 second', true, NOW(), NOW())
         ");
         $stmtA->execute([
             'id' => $assignmentUlidA,
@@ -899,7 +899,7 @@ it('enforces singleton exclusion constraint under real concurrency across two da
         try {
             $stmtB = $pdoB->prepare("
                 INSERT INTO role_assignments (id, user_id, role_id, scope_type, scope_label, is_singleton, valid_from, is_active, created_at, updated_at)
-                VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW(), true, NOW(), NOW())
+                VALUES (:id, :user_id, :role_id, 'department', 'd_ce', true, NOW() - INTERVAL '1 second', true, NOW(), NOW())
             ");
             $stmtB->execute([
                 'id' => $assignmentUlidB,

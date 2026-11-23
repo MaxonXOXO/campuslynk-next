@@ -32,6 +32,7 @@ import {
   SidebarTrigger,
 } from "@academic-suite/ui";
 import {
+  RiBuilding2Line,
   RiDashboardLine,
   RiKey2Line,
   RiLogoutBoxRLine,
@@ -51,6 +52,7 @@ import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 const NAV_ICONS: Record<NavIconKey, React.ComponentType<{ className?: string }>> = {
   overview: RiDashboardLine,
   principal: RiShieldUserLine,
+  departments: RiBuilding2Line,
   users: RiUserSettingsLine,
   setup: RiSettings4Line,
 };
