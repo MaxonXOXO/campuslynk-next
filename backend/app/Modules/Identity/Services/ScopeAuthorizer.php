@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Services;
 use App\Core\Authorization\ScopeLabelValidator;
 use App\Core\Contracts\ScopeAuthorizerContract;
 use App\Core\Contracts\ScopedResource;
+use App\Modules\Identity\Models\Permission;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use App\Modules\Organisation\Contracts\ScopeDirectoryContract;
@@ -214,7 +215,7 @@ class ScopeAuthorizer implements ScopeAuthorizerContract
                 if (! $assignment->is_active || ! $validFromOk || ! $validToOk || ! $assignment->role->is_active) {
                     continue;
                 }
-                if (! $assignment->role->permissions->contains('key', $permission)) {
+                if (! $assignment->role->permissions->contains(fn (Permission $p): bool => $p->key === $permission)) {
                     continue;
                 }
                 if ($assignment->scope_type === 'institution') {
