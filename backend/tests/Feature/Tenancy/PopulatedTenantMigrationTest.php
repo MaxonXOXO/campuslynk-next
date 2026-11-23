@@ -6,6 +6,7 @@ namespace Tests\Feature\Tenancy;
 
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Models\User;
 use App\Modules\Organisation\Database\Seeders\KeralaPolytechnicProfileSeeder;
 use App\Modules\Organisation\Models\Department;
 use App\Modules\Organisation\Models\Stream;
@@ -139,4 +140,38 @@ it('verifies populated tenant migration lifecycle forward and rollback', functio
     })->toThrow(UniqueConstraintViolationException::class);
 
     // Rollback failed because two departments share code 'CE', matching the migration docblock caution!
+});
+
+it('maps deactivated and rejected users to suspended when rolling back 2026_11_23_000001', function () {
+    $tenant = $this->provisioner->provision('tenant_mig_users', 'Users Mig College', 'migusers.test');
+    $this->tenantContext->setTenant($tenant);
+
+    $deactivated = User::create([
+        'type' => 'staff',
+        'name' => 'Deactivated Staff',
+        'email' => 'deact@migusers.test',
+        'password' => 'Secret@123!',
+        'must_change_password' => false,
+        'status' => 'deactivated',
+    ]);
+    $rejected = User::create([
+        'type' => 'staff',
+        'name' => 'Rejected Staff',
+        'email' => 'rej@migusers.test',
+        'password' => 'Secret@123!',
+        'must_change_password' => false,
+        'status' => 'rejected',
+    ]);
+
+    $rollbackExit = Artisan::call('migrate:rollback', [
+        '--database' => 'tenant',
+        '--path' => 'database/migrations/tenant',
+        '--step' => 1,
+        '--force' => true,
+    ]);
+    expect($rollbackExit)->toBe(0);
+
+    expect(DB::connection('tenant')->table('users')->where('id', $deactivated->id)->value('status'))->toBe('suspended')
+        ->and(DB::connection('tenant')->table('users')->where('id', $rejected->id)->value('status'))->toBe('suspended')
+        ->and(Schema::connection('tenant')->hasColumn('users', 'status_reason'))->toBeFalse();
 });
