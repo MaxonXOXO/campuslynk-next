@@ -73,6 +73,13 @@ import {
   RiUserFollowLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  STALE_TIME_LIST_MS,
+  scopedQueryKey,
+  useApiQuery,
+  useQueryScope,
+} from "@/lib/query/api-query";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { formatDisplayDate, formatDisplayDateTime } from "@/lib/format-date";
@@ -144,6 +151,8 @@ export function UserDirectory({
   const client = useApiClient();
   const usersApi = client.identity?.users ?? client.users;
   const { state: sessionState } = useSession();
+  const queryClient = useQueryClient();
+  const scope = useQueryScope();
 
   const capabilities = React.useMemo(
     () => new Set(sessionState.user?.capabilities ?? []),
@@ -152,15 +161,6 @@ export function UserDirectory({
 
   const canCreateUser = !gateByCapabilities || capabilities.has("identity.user.create");
 
-  const [users, setUsers] = React.useState<UserSchema[]>([]);
-  const [meta, setMeta] = React.useState<PaginationMeta>({
-    current_page: 1,
-    last_page: 1,
-    per_page: 25,
-    total: 0,
-  });
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
   const [actionError, setActionError] = React.useState<string | null>(null);
 
   // Filters
@@ -169,6 +169,44 @@ export function UserDirectory({
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
   const [page, setPage] = React.useState(1);
+
+  const {
+    data: usersData,
+    isPending: loading,
+    error: queryError,
+    refetch,
+  } = useApiQuery<{ data: UserSchema[]; meta: PaginationMeta }>({
+    queryKey: [
+      "users",
+      "directory",
+      {
+        page,
+        search: appliedSearch.trim(),
+        type: typeFilter,
+        status: statusFilter,
+      },
+    ],
+    staleTime: STALE_TIME_LIST_MS,
+    queryFn: async (api) => {
+      const apiUsers = api.identity?.users ?? api.users;
+      const query: Record<string, string | number | boolean> = { page };
+      if (appliedSearch.trim()) query.search = appliedSearch.trim();
+      if (typeFilter !== "all") query.type = typeFilter;
+      if (statusFilter !== "all") query.status = statusFilter;
+      return apiUsers.list(query);
+    },
+  });
+
+  const users = React.useMemo(() => usersData?.data ?? [], [usersData?.data]);
+  const meta: PaginationMeta = usersData?.meta ?? {
+    current_page: 1,
+    last_page: 1,
+    per_page: 25,
+    total: 0,
+  };
+  const loadError = queryError
+    ? getGeneralErrorMessage(queryError, "Failed to load users directory.")
+    : null;
 
   // Ephemeral one-time temporary password reveal (never persisted)
   const [revealedTempPassword, setRevealedTempPassword] = React.useState<{
@@ -216,28 +254,13 @@ export function UserDirectory({
   const [actionSubmitting, setActionSubmitting] = React.useState(false);
 
   const loadUsers = React.useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-
-    try {
-      const query: Record<string, string | number | boolean> = { page };
-      if (appliedSearch.trim()) query.search = appliedSearch.trim();
-      if (typeFilter !== "all") query.type = typeFilter;
-      if (statusFilter !== "all") query.status = statusFilter;
-
-      const res = await usersApi.list(query);
-      setUsers(res.data);
-      setMeta(res.meta);
-    } catch (err: unknown) {
-      setLoadError(getGeneralErrorMessage(err, "Failed to load users directory."));
-    } finally {
-      setLoading(false);
-    }
-  }, [usersApi, page, appliedSearch, typeFilter, statusFilter]);
-
-  React.useEffect(() => {
-    void loadUsers();
-  }, [loadUsers]);
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "users", "directory") }),
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "super-admin", "overview") }),
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "principal", "overview") }),
+    ]);
+    await refetch();
+  }, [queryClient, refetch, scope]);
 
   function handleSearchSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
