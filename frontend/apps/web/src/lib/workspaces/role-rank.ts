@@ -36,6 +36,32 @@ export function getHighestActiveRoleRank(
   return max;
 }
 
+export function isLowerAuthorityTarget(
+  actor: { id?: string; assignments?: ReadonlyArray<{ role_key: string }> } | null,
+  target: { id: string; assignments?: ReadonlyArray<{ role_key: string }> }
+): { allowed: boolean; reason?: string } {
+  if (!actor) {
+    return { allowed: false, reason: "Sign in required." };
+  }
+  if (actor.id && actor.id === target.id) {
+    return {
+      allowed: false,
+      reason: "You cannot perform this action on your own account.",
+    };
+  }
+
+  const actorRank = getHighestActiveRoleRank(actor.assignments);
+  const targetRank = getHighestActiveRoleRank(target.assignments);
+  if (actorRank <= targetRank) {
+    return {
+      allowed: false,
+      reason: "Cannot act on a user with an equal or higher authority role.",
+    };
+  }
+
+  return { allowed: true };
+}
+
 export function canResetTargetPassword(
   actor: { id?: string; assignments?: ReadonlyArray<{ role_key: string }> } | null,
   target: { id: string; assignments?: ReadonlyArray<{ role_key: string }> }
@@ -50,9 +76,8 @@ export function canResetTargetPassword(
     };
   }
 
-  const actorRank = getHighestActiveRoleRank(actor.assignments);
-  const targetRank = getHighestActiveRoleRank(target.assignments);
-  if (actorRank <= targetRank) {
+  const check = isLowerAuthorityTarget(actor, target);
+  if (!check.allowed) {
     return {
       allowed: false,
       reason: "Cannot reset password for a user with an equal or higher authority role.",

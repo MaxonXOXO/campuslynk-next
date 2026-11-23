@@ -61,6 +61,55 @@ const STAFF_LIST = [
   },
 ];
 
+const ACTIVE_AND_PAST_ASSIGNMENTS = [
+  {
+    id: "01PA_ACTIVE",
+    user_id: "01STAFF_1",
+    role_id: "01R_PRIN",
+    role_key: "principal",
+    role_name: "Principal",
+    scope_type: "institution",
+    scope_label: "i_carmel",
+    is_singleton: true,
+    is_active: true,
+    valid_from: "2026-11-01T09:00:00Z",
+    valid_to: null,
+    order_record: "GO-2026-001",
+    reason: null,
+    user: { id: "01STAFF_1", name: "Dr. Asha Nair", email: "asha@dev.test", mobile: "+919876543210" },
+    assigned_by: { id: "01SA", name: "IT Head" },
+  },
+  {
+    id: "01PA_OLD",
+    user_id: "01U_PAST",
+    role_id: "01R_PRIN",
+    role_key: "principal",
+    role_name: "Principal",
+    scope_type: "institution",
+    scope_label: "i_carmel",
+    is_singleton: true,
+    is_active: false,
+    valid_from: "2024-06-01T09:00:00Z",
+    valid_to: "2026-10-31T17:00:00Z",
+    order_record: "GO-2024-010",
+    reason: "Superannuation retirement",
+    user: { id: "01U_PAST", name: "Dr. Former Principal", email: "former@dev.test", mobile: null },
+    assigned_by: { id: "01SA", name: "IT Head" },
+  },
+];
+
+async function openReplaceDialogWithSelection(user: ReturnType<typeof userEvent.setup>) {
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: "Replace Principal" })).toBeInTheDocument();
+  });
+  await user.click(screen.getByRole("button", { name: "Replace Principal" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.click(within(dialog).getByRole("combobox"));
+  await user.click(await screen.findByText("Prof. Thomas Kurian (thomas@dev.test)"));
+  await user.type(within(dialog).getByLabelText("Transition Reason"), "Term completed");
+  return dialog;
+}
+
 describe("SuperAdminPrincipalPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,7 +126,47 @@ describe("SuperAdminPrincipalPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("supports appointing an existing staff user and creating + appointing a new user with ephemeral temporary password reveal", async () => {
+  it("enables create-and-appoint method without awaiting backend placeholder", async () => {
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
+    });
+
+    render(<SuperAdminPrincipalPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radiogroup", { name: "Appointment method" })
+      ).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/awaiting backend support/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /create new account/i })).toBeEnabled();
+  });
+
+  it("validates new-user fields inline before appointing Principal", async () => {
+    const user = userEvent.setup();
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: [],
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
+    });
+
+    render(<SuperAdminPrincipalPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("radiogroup", { name: "Appointment method" })
+      ).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByRole("radio", { name: /create new account/i }));
+    await user.click(screen.getByRole("button", { name: "Appoint Principal" }));
+
+    expect(screen.getByText("Name must be at least 2 characters.")).toBeInTheDocument();
+    expect(mocks.client.identity.principal.appoint).not.toHaveBeenCalled();
+  });
+
+  it("creates and appoints a new Principal with ephemeral temporary password reveal", async () => {
     const user = userEvent.setup();
     const secret = "TempPrin#2026!Xy";
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -96,20 +185,7 @@ describe("SuperAdminPrincipalPage", () => {
       ).toBeInTheDocument();
     });
 
-    expect(screen.queryByText(/awaiting backend support/i)).not.toBeInTheDocument();
-
-    // Switch to "Create new account & appoint"
-    const createRadio = screen.getByRole("radio", { name: /create new account/i });
-    expect(createRadio).toBeEnabled();
-    await user.click(createRadio);
-    expect(createRadio).toHaveAttribute("aria-checked", "true");
-
-    // Inline validation on empty submit
-    await user.click(screen.getByRole("button", { name: "Appoint Principal" }));
-    expect(screen.getByText("Name must be at least 2 characters.")).toBeInTheDocument();
-    expect(mocks.client.identity.principal.appoint).not.toHaveBeenCalled();
-
-    // Fill new user details and submit
+    await user.click(screen.getByRole("radio", { name: /create new account/i }));
     await user.type(screen.getByLabelText("Full Name"), "Dr. Meera Krishnan");
     await user.type(screen.getByLabelText("Email"), "meera@dev.test");
     await user.type(screen.getByLabelText(/official order reference/i), "GO-2026-01");
@@ -150,12 +226,10 @@ describe("SuperAdminPrincipalPage", () => {
       });
     });
 
-    // Reveal panel is shown
     expect(
       await screen.findByText(/One-Time Temporary Password for Dr\. Meera Krishnan/i)
     ).toBeInTheDocument();
 
-    // Password is never persisted to storage, URL, or console
     expect(JSON.stringify(localStorage)).not.toContain(secret);
     expect(JSON.stringify(sessionStorage)).not.toContain(secret);
     expect(window.location.href).not.toContain(secret);
@@ -163,10 +237,7 @@ describe("SuperAdminPrincipalPage", () => {
       [...logSpy.mock.calls, ...infoSpy.mock.calls].flat().join(" ")
     ).not.toContain(secret);
 
-    // Dismissing clears the reveal
-    await user.click(
-      screen.getByRole("checkbox", { name: /i have copied it/i })
-    );
+    await user.click(screen.getByRole("checkbox", { name: /i have copied it/i }));
     await user.click(screen.getByRole("button", { name: "Done" }));
     expect(
       screen.queryByText(/One-Time Temporary Password for Dr\. Meera Krishnan/i)
@@ -175,46 +246,9 @@ describe("SuperAdminPrincipalPage", () => {
     unmount();
   });
 
-  it("maps 422, 409, and 403 errors on Replace Principal, validates reason, and renders embedded history with zero /users/{id} calls", async () => {
-    const user = userEvent.setup();
-
+  it("renders embedded Principal history with zero N+1 /users/{id} calls", async () => {
     mocks.client.roleAssignments.list.mockResolvedValue({
-      data: [
-        {
-          id: "01PA_ACTIVE",
-          user_id: "01STAFF_1",
-          role_id: "01R_PRIN",
-          role_key: "principal",
-          role_name: "Principal",
-          scope_type: "institution",
-          scope_label: "i_carmel",
-          is_singleton: true,
-          is_active: true,
-          valid_from: "2026-11-01T09:00:00Z",
-          valid_to: null,
-          order_record: "GO-2026-001",
-          reason: null,
-          user: { id: "01STAFF_1", name: "Dr. Asha Nair", email: "asha@dev.test", mobile: "+919876543210" },
-          assigned_by: { id: "01SA", name: "IT Head" },
-        },
-        {
-          id: "01PA_OLD",
-          user_id: "01U_PAST",
-          role_id: "01R_PRIN",
-          role_key: "principal",
-          role_name: "Principal",
-          scope_type: "institution",
-          scope_label: "i_carmel",
-          is_singleton: true,
-          is_active: false,
-          valid_from: "2024-06-01T09:00:00Z",
-          valid_to: "2026-10-31T17:00:00Z",
-          order_record: "GO-2024-010",
-          reason: "Superannuation retirement",
-          user: { id: "01U_PAST", name: "Dr. Former Principal", email: "former@dev.test", mobile: null },
-          assigned_by: { id: "01SA", name: "IT Head" },
-        },
-      ],
+      data: ACTIVE_AND_PAST_ASSIGNMENTS,
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
@@ -224,27 +258,43 @@ describe("SuperAdminPrincipalPage", () => {
       expect(screen.getAllByText("Dr. Former Principal").length).toBeGreaterThan(0);
     });
 
-    // Zero N+1 /users/{id} hydration requests
     expect(mocks.client.users.get).not.toHaveBeenCalled();
     expect(screen.getAllByText("Superannuation retirement").length).toBeGreaterThan(0);
     expect(screen.getAllByText("GO-2024-010").length).toBeGreaterThan(0);
+  });
 
-    // Open Replace Principal dialog
+  it("validates transition reason inline on Replace Principal", async () => {
+    const user = userEvent.setup();
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: ACTIVE_AND_PAST_ASSIGNMENTS,
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
+    });
+
+    render(<SuperAdminPrincipalPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Replace Principal" })).toBeInTheDocument();
+    });
+
     await user.click(screen.getByRole("button", { name: "Replace Principal" }));
     const dialog = await screen.findByRole("dialog");
 
-    // Reason inline validation
     await user.click(within(dialog).getByRole("button", { name: "Confirm Replacement" }));
     expect(
       within(dialog).getByText("Transition reason must be between 5 and 500 characters.")
     ).toBeInTheDocument();
+  });
 
-    // Select replacement staff & enter valid reason -> test 409 then 403 then 201
-    await user.click(within(dialog).getByRole("combobox"));
-    await user.click(await screen.findByText("Prof. Thomas Kurian (thomas@dev.test)"));
-    await user.type(within(dialog).getByLabelText("Transition Reason"), "Term completed");
+  it("maps 422 field validation errors on Replace Principal", async () => {
+    const user = userEvent.setup();
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: ACTIVE_AND_PAST_ASSIGNMENTS,
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
+    });
 
-    // 422 per-field validation error from API
+    render(<SuperAdminPrincipalPage />);
+    const dialog = await openReplaceDialogWithSelection(user);
+
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
       new ApiError({
         type: "https://errors.campuslynk.net/validation",
@@ -256,12 +306,23 @@ describe("SuperAdminPrincipalPage", () => {
         },
       })
     );
+
     await user.click(within(dialog).getByRole("button", { name: "Confirm Replacement" }));
     expect(
       await within(dialog).findByText("The reason must not be generic.")
     ).toBeInTheDocument();
+  });
 
-    // 409 conflict
+  it("maps 409 conflict and 403 forbidden errors on Replace Principal", async () => {
+    const user = userEvent.setup();
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: ACTIVE_AND_PAST_ASSIGNMENTS,
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
+    });
+
+    render(<SuperAdminPrincipalPage />);
+    const dialog = await openReplaceDialogWithSelection(user);
+
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
       new ApiError({
         type: "https://errors.campuslynk.net/conflict",
@@ -275,7 +336,6 @@ describe("SuperAdminPrincipalPage", () => {
       await within(dialog).findByText("The specified user is already the active Principal.")
     ).toBeInTheDocument();
 
-    // 403 forbidden
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
       new ApiError({
         type: "https://errors.campuslynk.net/forbidden",
@@ -288,8 +348,18 @@ describe("SuperAdminPrincipalPage", () => {
     expect(
       await within(dialog).findByText("Only Super Admin may replace Principal.")
     ).toBeInTheDocument();
+  });
 
-    // 201 success
+  it("submits Replace Principal with user_id, reason, and order_record on 201", async () => {
+    const user = userEvent.setup();
+    mocks.client.roleAssignments.list.mockResolvedValue({
+      data: ACTIVE_AND_PAST_ASSIGNMENTS,
+      meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
+    });
+
+    render(<SuperAdminPrincipalPage />);
+    const dialog = await openReplaceDialogWithSelection(user);
+
     mocks.client.identity.principal.replace.mockResolvedValueOnce({
       data: {
         assignment: {

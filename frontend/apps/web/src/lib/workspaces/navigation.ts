@@ -1,6 +1,6 @@
 import type { WorkspaceSlug } from "./workspaces";
 
-export type NavIconKey = "overview" | "principal" | "users" | "setup";
+export type NavIconKey = "overview" | "principal" | "departments" | "users" | "setup";
 
 export interface WorkspaceNavItem {
   label: string;
@@ -44,6 +44,16 @@ export const WORKSPACE_NAV: Readonly<Record<WorkspaceSlug, readonly WorkspaceNav
       href: "/w/principal",
       icon: "overview",
       exact: true,
+    },
+    {
+      label: "Departments",
+      href: "/w/principal/departments",
+      icon: "departments",
+    },
+    {
+      label: "Users",
+      href: "/w/principal/users",
+      icon: "users",
     },
   ],
   hod: [
