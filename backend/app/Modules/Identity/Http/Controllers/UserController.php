@@ -33,6 +33,8 @@ class UserController
     {
         /** @var User $caller */
         $caller = $request->user();
+        $caller->loadMissing(['roleAssignments' => fn ($q) => $q->active()->with('role.permissions')]);
+
         $query = $authorizer->scopeQuery(User::query(), $caller, 'identity.user.view')
             ->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
 
@@ -87,7 +89,8 @@ class UserController
             });
         }
 
-        $users = $query->orderBy('name')->paginate(25);
+        $perPage = max(1, min(100, (int) $request->query('per_page', '25')));
+        $users = $query->orderBy('name')->paginate($perPage);
 
         return response()->json([
             'data' => UserResource::collection($users->items()),

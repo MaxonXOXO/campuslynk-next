@@ -285,6 +285,13 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
       responses:
         '200':
           description: Paginated users list
@@ -1086,6 +1093,13 @@ paths:
           schema:
             type: integer
             minimum: 1
+        - name: per_page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
       responses:
         '200':
           description: Paginated role assignments list with embedded user and assigner summaries

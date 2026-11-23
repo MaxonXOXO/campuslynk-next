@@ -242,6 +242,19 @@ describe('Principal User Lifecycle & Policy Matrix', function () {
 
         expect($pIds)->toContain($pending->id)
             ->and($hodIds)->not->toContain($pending->id);
+
+        // GET /users/{id} on zero-assignment user: 200 for Principal, 403 for HOD
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$pToken}",
+            'X-Tenant' => 'tenant_life_test',
+        ])->getJson("http://lifecycle.test/api/v1/users/{$pending->id}")->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders([
+            'Authorization' => "Bearer {$hodToken}",
+            'X-Tenant' => 'tenant_life_test',
+        ])->getJson("http://lifecycle.test/api/v1/users/{$pending->id}")->assertForbidden();
     });
 
     it('lets Principal create active users with one-time temp password and no-store header without logging secrets', function () {
@@ -487,5 +500,48 @@ describe('Principal User Lifecycle & Policy Matrix', function () {
             'code' => 'BLK',
             'stream_id' => $this->ceDept->stream_id,
         ])->assertForbidden();
+
+        $this->withHeaders([
+            'Authorization' => "Bearer {$pToken}",
+            'X-Tenant' => 'tenant_life_test',
+        ])->putJson("http://lifecycle.test/api/v1/departments/{$this->ceDept->id}", [
+            'name' => 'Renamed Dept',
+        ])->assertForbidden();
+
+        $this->withHeaders([
+            'Authorization' => "Bearer {$pToken}",
+            'X-Tenant' => 'tenant_life_test',
+        ])->deleteJson("http://lifecycle.test/api/v1/departments/{$this->ceDept->id}")
+            ->assertForbidden();
+    });
+
+    it('keeps GET /users query count O(1) across 50 users when computing UserResource abilities', function () {
+        $this->tenantContext->setTenant($this->tenant);
+        for ($i = 0; $i < 50; $i++) {
+            User::create([
+                'type' => 'staff',
+                'name' => "Bulk Staff {$i}",
+                'email' => "bulk{$i}@lifecycle.test",
+                'password' => 'Secret@123!',
+                'must_change_password' => false,
+                'status' => 'active',
+            ]);
+        }
+
+        $pToken = $this->principal->createToken('p_bulk')->plainTextToken;
+
+        DB::connection('tenant')->flushQueryLog();
+        DB::connection('tenant')->enableQueryLog();
+
+        $res = $this->withHeaders([
+            'Authorization' => "Bearer {$pToken}",
+            'X-Tenant' => 'tenant_life_test',
+        ])->getJson('http://lifecycle.test/api/v1/users?per_page=50')->assertOk();
+
+        $queries = DB::connection('tenant')->getQueryLog();
+        DB::connection('tenant')->disableQueryLog();
+
+        expect($res->json('data'))->toHaveCount(50)
+            ->and(count($queries))->toBeLessThanOrEqual(12);
     });
 });

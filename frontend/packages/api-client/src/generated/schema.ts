@@ -1617,6 +1617,7 @@ export interface operations {
                 role_key?: string;
                 department_id?: string;
                 page?: number;
+                per_page?: number;
             };
             header?: never;
             path?: never;
@@ -2370,6 +2371,7 @@ export interface operations {
                 scope_label?: string;
                 active_only?: boolean;
                 page?: number;
+                per_page?: number;
             };
             header?: never;
             path?: never;

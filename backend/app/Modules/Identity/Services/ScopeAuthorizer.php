@@ -99,6 +99,14 @@ class ScopeAuthorizer implements ScopeAuthorizerContract
 
     public function canAccessUser(Authenticatable $user, string $permission, User $target): bool
     {
+        $labels = $this->getActiveScopeLabelsForPermission($user, $permission);
+        if ($labels === []) {
+            return false;
+        }
+        if (in_array('*', $labels, true)) {
+            return true;
+        }
+
         return $this->scopeQuery(User::query(), $user, $permission)->whereKey($target->id)->exists();
     }
 
@@ -185,6 +193,40 @@ class ScopeAuthorizer implements ScopeAuthorizerContract
         ?string $assignmentId = null
     ): array {
         $now = Carbon::now();
+
+        if (
+            $assignmentId === null
+            && $user instanceof User
+            && $user->relationLoaded('roleAssignments')
+            && ! $user->roleAssignments->contains(
+                fn (RoleAssignment $a): bool => ! $a->relationLoaded('role') || ! $a->role->relationLoaded('permissions')
+            )
+        ) {
+            if (! $user->isActive()) {
+                return [];
+            }
+
+            /** @var list<string> $inMemoryLabels */
+            $inMemoryLabels = [];
+            foreach ($user->roleAssignments as $assignment) {
+                $validFromOk = $assignment->valid_from === null || $assignment->valid_from->lte($now);
+                $validToOk = $assignment->valid_to === null || $assignment->valid_to->gt($now);
+                if (! $assignment->is_active || ! $validFromOk || ! $validToOk || ! $assignment->role->is_active) {
+                    continue;
+                }
+                if (! $assignment->role->permissions->contains('key', $permission)) {
+                    continue;
+                }
+                if ($assignment->scope_type === 'institution') {
+                    return ['*'];
+                }
+                self::validateScopeLabel($assignment->scope_label);
+                $inMemoryLabels[] = $assignment->scope_label;
+            }
+
+            return array_values(array_unique($inMemoryLabels));
+        }
+
         $query = DB::connection('tenant')->table('role_assignments')
             ->join('users', 'users.id', '=', 'role_assignments.user_id')
             ->join('roles', 'roles.id', '=', 'role_assignments.role_id')
