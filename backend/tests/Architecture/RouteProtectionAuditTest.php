@@ -35,6 +35,7 @@ const PUBLIC_ALLOW_LIST = [
     '/api/v1/health',
     '/api/v1/meta',
     '/api/v1/auth/login',
+    '/api/v1/auth/register-staff',
 ];
 
 const SELF_SERVICE_EXEMPTIONS = [

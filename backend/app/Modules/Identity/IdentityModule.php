@@ -13,7 +13,10 @@ use App\Modules\Identity\Commands\UsersUnlockCommand;
 use App\Modules\Identity\Contracts\AuthenticatesUserContract;
 use App\Modules\Identity\Contracts\ChangesPasswordContract;
 use App\Modules\Identity\Contracts\IssuesTemporaryPasswordContract;
+use App\Modules\Identity\Events\UserApproved;
+use App\Modules\Identity\Events\UserRejected;
 use App\Modules\Identity\Listeners\ArchiveFirstYearBatchAssignmentsListener;
+use App\Modules\Identity\Listeners\LogUserApprovalNotificationListener;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Policies\UserPolicy;
 use App\Modules\Identity\Services\ScopeAuthorizer;
@@ -75,6 +78,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
             'identity.user.update',
             'identity.user.unlock',
             'identity.user.approve',
+            'identity.user.import',
             'identity.user.suspend',
             'identity.user.deactivate',
             'identity.user.delete',
@@ -100,6 +104,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
                 'identity.user.update',
                 'identity.user.unlock',
                 'identity.user.approve',
+                'identity.user.import',
                 'identity.user.suspend',
                 'identity.user.deactivate',
                 'identity.user.delete',
@@ -115,6 +120,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
                 'identity.user.update',
                 'identity.user.unlock',
                 'identity.user.approve',
+                'identity.user.import',
                 'identity.user.suspend',
                 'identity.user.deactivate',
                 'identity.user.reset_password',
@@ -138,6 +144,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
             ],
             'academic_coordinator' => [
                 'identity.user.view',
+                'identity.user.approve',
             ],
             'tutor' => [
                 'identity.user.view',
@@ -163,6 +170,10 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
         Event::listen(
             BatchSemesterPromoted::class,
             ArchiveFirstYearBatchAssignmentsListener::class
+        );
+        Event::listen(
+            [UserApproved::class, UserRejected::class],
+            LogUserApprovalNotificationListener::class
         );
 
         if ($this->app->runningInConsole()) {

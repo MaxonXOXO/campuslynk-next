@@ -47,7 +47,7 @@ export function createApiClient(config: ApiClientConfig) {
       headers.set('Accept', 'application/json, application/problem+json');
     }
 
-    if (body !== undefined && !headers.has('Content-Type')) {
+    if (body !== undefined && !(body instanceof FormData) && !headers.has('Content-Type')) {
       headers.set('Content-Type', 'application/json');
     }
 
@@ -72,7 +72,7 @@ export function createApiClient(config: ApiClientConfig) {
     const response = await fetchFn(url.toString(), {
       ...init,
       headers,
-      body: body !== undefined ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+      body: body !== undefined ? (typeof body === 'string' || body instanceof FormData ? body : JSON.stringify(body)) : undefined,
     });
 
     if (!response.ok) {
@@ -148,6 +148,12 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'GET',
         ...options,
       }),
+    registerStaff: (body: OperationRequestBody<operations['registerStaff']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['registerStaff']>>('/auth/register-staff', {
+        method: 'POST',
+        body,
+        ...options,
+      }),
   };
 
   // --- Identity Sub-Helpers ---
@@ -213,6 +219,50 @@ export function createApiClient(config: ApiClientConfig) {
         body,
         ...options,
       }),
+    bulkApprove: (body: OperationRequestBody<operations['bulkApproveUsers']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['bulkApproveUsers']>>('/users/bulk-approve', {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+  };
+
+  const staffImports = {
+    template: (options?: RequestOptions) =>
+      request<string>('/staff-imports/template', {
+        method: 'GET',
+        ...options,
+      }),
+    preview: (file: File | Blob, options?: RequestOptions) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return request<OperationResponse<operations['previewStaffImport']>>('/staff-imports/preview', {
+        method: 'POST',
+        body: formData,
+        ...options,
+      });
+    },
+    commit: (id: string, body: OperationRequestBody<operations['commitStaffImport']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['commitStaffImport']>>(`/staff-imports/${id}/commit`, {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+    get: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['getStaffImport']>>(`/staff-imports/${id}`, {
+        method: 'GET',
+        ...options,
+      }),
+    failedRows: (id: string, options?: RequestOptions) =>
+      request<string>(`/staff-imports/${id}/failed-rows`, {
+        method: 'GET',
+        ...options,
+      }),
+    approve: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['approveStaffImportBatch']>>(`/staff-imports/${id}/approve`, {
+        method: 'POST',
+        ...options,
+      }),
   };
 
   const roles = {
@@ -275,6 +325,7 @@ export function createApiClient(config: ApiClientConfig) {
 
   const identity = {
     users,
+    staffImports,
     roles,
     roleAssignments,
     principal,

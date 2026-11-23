@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Http\Controllers;
 
 use App\Modules\Identity\Actions\ApproveUserAction;
+use App\Modules\Identity\Actions\BulkApproveUsersAction;
 use App\Modules\Identity\Actions\CreateUserAction;
 use App\Modules\Identity\Actions\DeactivateUserAction;
 use App\Modules\Identity\Actions\ReactivateUserAction;
@@ -13,6 +14,7 @@ use App\Modules\Identity\Actions\ResetUserPasswordAction;
 use App\Modules\Identity\Actions\SuspendUserAction;
 use App\Modules\Identity\Actions\UnlockUserAction;
 use App\Modules\Identity\Actions\UpdateUserAction;
+use App\Modules\Identity\Http\Requests\BulkApproveUsersRequest;
 use App\Modules\Identity\Http\Requests\CreateUserRequest;
 use App\Modules\Identity\Http\Requests\DeactivateUserRequest;
 use App\Modules\Identity\Http\Requests\RejectUserRequest;
@@ -36,7 +38,10 @@ class UserController
         $caller->loadMissing(['roleAssignments' => fn ($q) => $q->active()->with('role.permissions')]);
 
         $query = $authorizer->scopeQuery(User::query(), $caller, 'identity.user.view')
-            ->with(['roleAssignments' => fn ($q) => $q->active()->with('role')]);
+            ->with([
+                'roleAssignments' => fn ($q) => $q->active()->with('role'),
+                'staffProfile',
+            ]);
 
         if ($request->filled('type')) {
             $query->where('type', (string) $request->query('type'));
@@ -87,6 +92,24 @@ class UserController
                     ->orWhere('email', 'ilike', "%{$search}%")
                     ->orWhere('registration_number', 'ilike', "%{$search}%");
             });
+        }
+
+        if ($request->has('must_change_password')) {
+            $mustChange = filter_var($request->query('must_change_password'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+            if ($mustChange !== null) {
+                $query->where('must_change_password', $mustChange);
+            }
+        }
+
+        if (filter_var($request->query('expired_temp_password'), FILTER_VALIDATE_BOOLEAN)) {
+            $query->where('must_change_password', true)
+                ->whereNotNull('temporary_password_expires_at')
+                ->where('temporary_password_expires_at', '<', now());
+        }
+
+        if ($request->filled('requested_department_id')) {
+            $reqDeptId = (string) $request->query('requested_department_id');
+            $query->whereHas('staffProfile', fn (Builder $sp) => $sp->where('requested_department_id', $reqDeptId));
         }
 
         $perPage = max(1, min(100, (int) $request->query('per_page', '25')));
@@ -349,6 +372,26 @@ class UserController
             ],
             'links' => [
                 'self' => url("/api/v1/users/{$targetUser->id}"),
+            ],
+        ]);
+    }
+
+    public function bulkApprove(BulkApproveUsersRequest $request, BulkApproveUsersAction $action): JsonResponse
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+
+        /** @var list<string> $userIds */
+        $userIds = $request->validated('user_ids');
+        $result = $action->execute($caller, $userIds);
+
+        return response()->json([
+            'data' => $result,
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url('/api/v1/users/bulk-approve'),
             ],
         ]);
     }

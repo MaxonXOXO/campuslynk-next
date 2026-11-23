@@ -106,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/register-staff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Public staff self-registration (rate-limited, behind tenant setting, always returns 202 to prevent enumeration) */
+        post: operations["registerStaff"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/impersonation": {
         parameters: {
             query?: never;
@@ -456,6 +473,125 @@ export interface paths {
         put?: never;
         /** Soft-deactivate a user account with reason, revoking tokens and end-dating active role assignments */
         post: operations["deactivateUserAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/bulk-approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Bulk approve pending users (per-row policy enforcement and results) */
+        post: operations["bulkApproveUsers"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download CSV template with exact staff import headers */
+        get: operations["downloadStaffImportTemplate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Parse and validate an uploaded CSV/XLSX staff import into staged DB rows */
+        post: operations["previewStaffImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/{id}/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Hash common temporary password once and queue background staff import commit job */
+        post: operations["commitStaffImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get staff import batch status and counts */
+        get: operations["getStaffImport"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/{id}/failed-rows": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download CSV of invalid/duplicate/failed rows from a staff import batch */
+        get: operations["downloadStaffImportFailedRows"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/staff-imports/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve all still-pending users created by a staff import batch */
+        post: operations["approveStaffImportBatch"];
         delete?: never;
         options?: never;
         head?: never;
@@ -877,6 +1013,100 @@ export interface components {
             approve: boolean;
             reject: boolean;
         };
+        StaffProfileSchema: {
+            requested_department_id?: string | null;
+            designation?: string | null;
+            employee_id?: string | null;
+            import_batch_id?: string | null;
+        };
+        RegisterStaffInput: {
+            name: string;
+            /** Format: email */
+            email?: string | null;
+            mobile?: string | null;
+            password: string;
+            requested_department_id?: string | null;
+            designation?: string | null;
+            employee_id?: string | null;
+            website?: string | null;
+        };
+        BulkApproveUsersInput: {
+            user_ids: string[];
+        };
+        BulkApproveEnvelope: {
+            data: {
+                results: {
+                    user_id: string;
+                    /** @enum {string} */
+                    status: "approved" | "skipped" | "forbidden" | "not_found";
+                    message?: string | null;
+                }[];
+                summary: {
+                    approved: number;
+                    failed: number;
+                };
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
+        CommitStaffImportInput: {
+            common_password: string;
+            auto_approve?: boolean;
+            idempotency_key?: string | null;
+        };
+        StaffImportBatchSchema: {
+            id: string;
+            filename: string;
+            /** @enum {string} */
+            status: "previewed" | "queued" | "processing" | "completed" | "failed";
+            auto_approve: boolean;
+            total_rows: number;
+            valid_rows: number;
+            duplicate_rows: number;
+            invalid_rows: number;
+            created_count: number;
+            skipped_duplicate_count: number;
+            failed_count: number;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            completed_at?: string | null;
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        StaffImportBatchEnvelope: {
+            data: components["schemas"]["StaffImportBatchSchema"];
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
+        StaffImportPreviewEnvelope: {
+            data: {
+                batch: components["schemas"]["StaffImportBatchSchema"];
+                rows_preview: {
+                    row_number: number;
+                    /** @enum {string} */
+                    status: "valid" | "duplicate" | "invalid";
+                    payload: {
+                        [key: string]: unknown;
+                    };
+                    errors: string[];
+                }[];
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
         UserSchema: {
             /**
              * @description ULID identifier
@@ -909,6 +1139,11 @@ export interface components {
             locked_until?: string | null;
             /** Format: date-time */
             last_login_at?: string | null;
+            /** Format: date-time */
+            first_activated_at?: string | null;
+            /** Format: date-time */
+            rejected_at?: string | null;
+            staff_profile?: components["schemas"]["StaffProfileSchema"];
             assignments: components["schemas"]["UserAssignmentSummary"][];
             abilities: components["schemas"]["UserAbilities"];
             /** Format: date-time */
@@ -1560,6 +1795,34 @@ export interface operations {
             };
         };
     };
+    registerStaff: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterStaffInput"];
+            };
+        };
+        responses: {
+            /** @description Registration accepted for review */
+            202: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
     startImpersonation: {
         parameters: {
             query?: never;
@@ -1616,6 +1879,9 @@ export interface operations {
                 type?: "staff" | "student" | "parent";
                 role_key?: string;
                 department_id?: string;
+                requested_department_id?: string;
+                must_change_password?: boolean;
+                expired_temp_password?: boolean;
                 page?: number;
                 per_page?: number;
             };
@@ -2305,6 +2571,185 @@ export interface operations {
             404: components["responses"]["ProblemDetails"];
             409: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
+        };
+    };
+    bulkApproveUsers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkApproveUsersInput"];
+            };
+        };
+        responses: {
+            /** @description Per-row bulk approval summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkApproveEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    downloadStaffImportTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV template file */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+        };
+    };
+    previewStaffImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Preview batch created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffImportPreviewEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    commitStaffImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitStaffImportInput"];
+            };
+        };
+        responses: {
+            /** @description Import commit queued */
+            202: {
+                headers: {
+                    "Cache-Control"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffImportBatchEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    getStaffImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Staff import batch status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StaffImportBatchEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+        };
+    };
+    downloadStaffImportFailedRows: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Failed rows CSV */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+        };
+    };
+    approveStaffImportBatch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-row batch approval summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkApproveEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
         };
     };
     appointPrincipal: {

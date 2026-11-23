@@ -19,6 +19,7 @@ Declared in `IdentityModule::permissions()`:
 - `identity.user.update`: Update account profile and credentials.
 - `identity.user.unlock`: Clear multi-tier rate limiting and administrative lockouts (restricted to Super Admin).
 - `identity.user.approve`: Approve pending student/staff registrations.
+- `identity.user.import`: Preview and commit bulk staff import batches.
 - `identity.user.suspend`: Suspend active user accounts.
 - `identity.user.delete`: Soft/hard delete user accounts.
 - `identity.user.reset_password`: Issue password reset / one-time credentials.
@@ -46,7 +47,12 @@ Declared in `IdentityModule::permissions()`:
 | `rejected` | `active` | *Disallowed* (`ReactivateUserAction`) | *None* | Returns `409 Conflict` (`rejected` accounts cannot be reactivated). |
 | `active` / `suspended` / `pending` | `deactivated` | `POST /users/{id}/deactivate` (`DeactivateUserAction`) | `identity.user.deactivate` + `callerRank > targetRank` | Requires `reason` (5–500 chars); refuses self & last active `super_admin`; revokes all tokens; end-dates all active `role_assignments` (`is_active = false`, `valid_to = now`). |
 
-## 7. Architecture Boundary
+## 7. Staff Onboarding & Deferred Email Verification
+
+- **Public self-registration** (`POST /api/v1/auth/register-staff`) is gated by tenant setting `auth.staff_self_registration_enabled` (default `false`) and a daily pending registration cap (`auth.staff_self_registration_daily_cap`, default `100`).
+- **Email/mobile ownership verification** is consciously deferred until SMTP/SMS infrastructure is added; `UserApproved` and `UserRejected` domain events are dispatched after commit with a stub listener ready for future email notifications.
+
+## 8. Architecture Boundary
 Per `AGENTS.md` and `docs/foundation_spec.md` §4:
 - Other modules must **never** import `App\Modules\Identity\Models\*`.
 - Interactions must occur exclusively through `Contracts/`, `Events/`, or `Http/Resources/`.
