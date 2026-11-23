@@ -378,11 +378,11 @@ it('administratively unlocks a locked-out user account and verifies immediate lo
         ]);
         expect(in_array($lockResponse->status(), [423, 429], true))->toBeTrue();
 
-        // Principal attempts unlock -> 403 Forbidden (identity.user.unlock required)
+        // Principal cannot unlock equal/higher rank (superAdmin) -> 403 Forbidden
         $this->app['auth']->forgetGuards();
         $this->withHeaders([
             'Authorization' => "Bearer {$principalToken}",
-        ])->postJson("http://unlock.test/api/v1/users/{$student->id}/unlock")
+        ])->postJson("http://unlock.test/api/v1/users/{$admin->id}/unlock")
             ->assertStatus(403);
 
         // Office Admin attempts unlock -> 403 Forbidden

@@ -95,7 +95,6 @@ class OrganisationModule extends ServiceProvider implements ModuleManifestContra
                 'organisation.academic_calendar.manage',
             ],
             'principal' => [
-                'organisation.department.manage',
                 'organisation.batch.view',
                 'organisation.timetable.manage',
                 'organisation.day_order.set',

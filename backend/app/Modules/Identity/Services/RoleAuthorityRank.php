@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Services;
 
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
+use Illuminate\Support\Carbon;
 
 final class RoleAuthorityRank
 {
@@ -48,6 +49,29 @@ final class RoleAuthorityRank
      */
     public function highestActiveRank(User $user): int
     {
+        if ($user->relationLoaded('roleAssignments')) {
+            $now = Carbon::now();
+            $assignments = $user->roleAssignments;
+            if ($assignments->contains(fn (RoleAssignment $a): bool => ! $a->relationLoaded('role'))) {
+                $assignments->load('role');
+            }
+
+            $max = 0;
+            foreach ($assignments as $assignment) {
+                $validFromOk = $assignment->valid_from === null || $assignment->valid_from->lte($now);
+                $validToOk = $assignment->valid_to === null || $assignment->valid_to->gt($now);
+                if (! $assignment->is_active || ! $validFromOk || ! $validToOk) {
+                    continue;
+                }
+                $rank = $this->rankForRoleKey($assignment->role->key);
+                if ($rank > $max) {
+                    $max = $rank;
+                }
+            }
+
+            return $max;
+        }
+
         /** @var list<string> $roleKeys */
         $roleKeys = RoleAssignment::query()
             ->where('user_id', $user->id)

@@ -8,6 +8,7 @@ use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 /**
  * @property-read User $resource
@@ -20,6 +21,18 @@ class UserResource extends JsonResource
     public function toArray(Request $request): array
     {
         $isLocked = $this->resource->isLocked();
+        $caller = $request->user();
+
+        $abilities = [
+            'update' => $caller !== null && Gate::forUser($caller)->allows('update', $this->resource),
+            'suspend' => $caller !== null && Gate::forUser($caller)->allows('suspend', $this->resource),
+            'reactivate' => $caller !== null && Gate::forUser($caller)->allows('reactivate', $this->resource),
+            'deactivate' => $caller !== null && Gate::forUser($caller)->allows('deactivate', $this->resource),
+            'reset_password' => $caller !== null && Gate::forUser($caller)->allows('resetPassword', $this->resource),
+            'unlock' => $caller !== null && Gate::forUser($caller)->allows('unlock', $this->resource),
+            'approve' => $caller !== null && Gate::forUser($caller)->allows('approve', $this->resource),
+            'reject' => $caller !== null && Gate::forUser($caller)->allows('reject', $this->resource),
+        ];
 
         $assignments = [];
         if ($this->resource->relationLoaded('roleAssignments')) {
@@ -44,12 +57,15 @@ class UserResource extends JsonResource
             'mobile' => $this->resource->mobile,
             'registration_number' => $this->resource->registration_number,
             'status' => $this->resource->status,
+            'status_reason' => $this->resource->status_reason,
+            'deactivated_at' => $this->resource->deactivated_at?->toIso8601String(),
             'must_change_password' => $this->resource->must_change_password,
             'temporary_password_expires_at' => $this->resource->temporary_password_expires_at?->toIso8601String(),
             'is_locked' => $isLocked,
             'locked_until' => $isLocked ? $this->resource->locked_until?->toIso8601String() : null,
             'last_login_at' => $this->resource->last_login_at?->toIso8601String(),
             'assignments' => $assignments,
+            'abilities' => $abilities,
             'created_at' => $this->resource->created_at?->toIso8601String(),
             'updated_at' => $this->resource->updated_at?->toIso8601String(),
         ];

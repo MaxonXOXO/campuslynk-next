@@ -23,6 +23,9 @@ use Laravel\Sanctum\HasApiTokens;
  * @property bool $must_change_password
  * @property Carbon|null $temporary_password_expires_at
  * @property string $status
+ * @property string|null $status_reason
+ * @property Carbon|null $deactivated_at
+ * @property string|null $deactivated_by_user_id
  * @property Carbon|null $last_login_at
  * @property Carbon|null $locked_until
  * @property Carbon|null $created_at
@@ -71,6 +74,9 @@ class User extends Authenticatable
         'must_change_password',
         'temporary_password_expires_at',
         'status',
+        'status_reason',
+        'deactivated_at',
+        'deactivated_by_user_id',
         'last_login_at',
         'locked_until',
     ];
@@ -95,6 +101,7 @@ class User extends Authenticatable
         'temporary_password_expires_at' => 'datetime',
         'last_login_at' => 'datetime',
         'locked_until' => 'datetime',
+        'deactivated_at' => 'datetime',
         'password' => 'hashed',
     ];
 

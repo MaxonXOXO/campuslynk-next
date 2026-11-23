@@ -327,10 +327,10 @@ it('enforces authorization, forbids self and equal/higher-role reset-password, c
         ]);
         $oldStudentToken = $student->createToken('s_old')->plainTextToken;
 
-        // 1. Principal lacks identity.user.reset_password -> 403
+        // 1. Principal holds identity.user.reset_password but cannot reset Super Admin -> 403
         $this->app['auth']->forgetGuards();
         $this->withHeaders(['Authorization' => "Bearer {$principalToken}"])
-            ->postJson("http://gaprst.test/api/v1/users/{$student->id}/reset-password")
+            ->postJson("http://gaprst.test/api/v1/users/{$ctx['superAdmin']->id}/reset-password")
             ->assertStatus(403);
 
         // 2. Self-reset forbidden -> 403

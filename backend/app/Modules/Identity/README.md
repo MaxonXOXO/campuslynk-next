@@ -34,7 +34,19 @@ Declared in `IdentityModule::permissions()`:
 - `PasswordChanged`: Emitted when a user updates their password.
 - `TokenRevoked`: Emitted when an access token is revoked.
 
-## 6. Architecture Boundary
+## 6. User Status Transitions
+
+| From | To | Endpoint / Action | Authorized Actor (`UserPolicy`) | Side Effects |
+| --- | --- | --- | --- | --- |
+| `pending` | `active` | `POST /users/{id}/approve` (`ApproveUserAction`) | `identity.user.approve` + `callerRank > targetRank` (Super Admin, Principal) | Clears `status_reason`; user can now sign in. Non-pending returns `409`. |
+| `pending` | `rejected` | `POST /users/{id}/reject` (`RejectUserAction`) | `identity.user.approve` + `callerRank > targetRank` | Requires `reason` (5–500 chars); revokes tokens. Non-pending returns `409`. |
+| `active` | `suspended` | `POST /users/{id}/suspend` (`SuspendUserAction`) | `identity.user.suspend` + `callerRank > targetRank` | Revokes all Sanctum tokens; keeps `role_assignments`. Non-active returns `409`. |
+| `suspended` | `active` | `POST /users/{id}/reactivate` (`ReactivateUserAction`) | `identity.user.suspend` + `callerRank > targetRank` | Restores `status = 'active'`. |
+| `deactivated` | `active` | `POST /users/{id}/reactivate` (`ReactivateUserAction`) | `identity.user.suspend` + `callerRank > targetRank` | Restores `status = 'active'` **only**; previously ended `role_assignments` stay ended. |
+| `rejected` | `active` | *Disallowed* (`ReactivateUserAction`) | *None* | Returns `409 Conflict` (`rejected` accounts cannot be reactivated). |
+| `active` / `suspended` / `pending` | `deactivated` | `POST /users/{id}/deactivate` (`DeactivateUserAction`) | `identity.user.deactivate` + `callerRank > targetRank` | Requires `reason` (5–500 chars); refuses self & last active `super_admin`; revokes all tokens; end-dates all active `role_assignments` (`is_active = false`, `valid_to = now`). |
+
+## 7. Architecture Boundary
 Per `AGENTS.md` and `docs/foundation_spec.md` §4:
 - Other modules must **never** import `App\Modules\Identity\Models\*`.
 - Interactions must occur exclusively through `Contracts/`, `Events/`, or `Http/Resources/`.

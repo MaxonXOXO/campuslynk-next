@@ -196,6 +196,23 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'POST',
         ...options,
       }),
+    approve: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['approveUserAccount']>>(`/users/${id}/approve`, {
+        method: 'POST',
+        ...options,
+      }),
+    reject: (id: string, body: OperationRequestBody<operations['rejectUserAccount']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['rejectUserAccount']>>(`/users/${id}/reject`, {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+    deactivate: (id: string, body: OperationRequestBody<operations['deactivateUserAccount']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['deactivateUserAccount']>>(`/users/${id}/deactivate`, {
+        method: 'POST',
+        body,
+        ...options,
+      }),
   };
 
   const roles = {
