@@ -41,6 +41,7 @@ import {
   RiUserSettingsLine,
 } from "@remixicon/react";
 import { useSession } from "@/lib/auth/session-provider";
+import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
 import { WORKSPACE_NAV, type NavIconKey } from "@/lib/workspaces/navigation";
 import {
   WORKSPACE_META,
@@ -81,6 +82,18 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
     workspaces.find((w) => w.slug === activeSlug) ?? null;
   const meta = WORKSPACE_META[activeSlug];
   const navItems = WORKSPACE_NAV[activeSlug];
+
+  const { data: pendingCountData } = useApiQuery<{ meta: { total: number } }>({
+    queryKey: ["users", "pending-count"],
+    staleTime: STALE_TIME_LIST_MS,
+    enabled: activeSlug === "principal",
+    queryFn: async (api) => {
+      const apiUsers = api.identity?.users ?? api.users;
+      return apiUsers.list({ status: "pending", limit: 1 });
+    },
+  });
+  const principalPendingCount =
+    activeSlug === "principal" ? (pendingCountData?.meta?.total ?? 0) : 0;
 
   return (
     <SidebarProvider>
@@ -128,6 +141,15 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                       >
                         <Icon className="size-4" aria-hidden="true" />
                         <span>{item.label}</span>
+                        {item.href === "/w/principal/users" && principalPendingCount > 0 && (
+                          <Badge
+                            variant="secondary"
+                            className="ml-auto text-[11px] tabular-nums"
+                            aria-label={`${principalPendingCount} pending approvals`}
+                          >
+                            {principalPendingCount}
+                          </Badge>
+                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
