@@ -318,6 +318,14 @@ describe('Academic Suite API Client', () => {
       approveUserAccount: () => client.identity.users.approve,
       rejectUserAccount: () => client.identity.users.reject,
       deactivateUserAccount: () => client.identity.users.deactivate,
+      bulkApproveUsers: () => client.identity.users.bulkApprove,
+      registerStaff: () => client.auth.registerStaff,
+      downloadStaffImportTemplate: () => client.identity.staffImports.template,
+      previewStaffImport: () => client.identity.staffImports.preview,
+      commitStaffImport: () => client.identity.staffImports.commit,
+      getStaffImport: () => client.identity.staffImports.get,
+      downloadStaffImportFailedRows: () => client.identity.staffImports.failedRows,
+      approveStaffImportBatch: () => client.identity.staffImports.approve,
       appointPrincipal: () => client.identity.principal.appoint,
       replacePrincipal: () => client.identity.principal.replace,
       listRoles: () => client.identity.roles.list,
@@ -609,5 +617,59 @@ describe('Academic Suite API Client', () => {
     });
     expect(calls[3]?.url).toContain('role_key=hod');
     expect(calls[3]?.url).toContain('department_id=01DEPT');
+  });
+
+  it('calls staff onboarding endpoints and never logs commit/register passwords', async () => {
+    const secrets = ['CommonBatch#2026!', 'SelfReg#Pass2026!'];
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => undefined);
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    const calls: Array<{ url: string; method: string }> = [];
+    const mockFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({ url, method: init?.method ?? 'GET' });
+      if (url.endsWith('/template') || url.endsWith('/failed-rows')) {
+        return new Response('name,email\n', { status: 200, headers: { 'Content-Type': 'text/csv' } });
+      }
+      return new Response(
+        JSON.stringify({ data: { id: '01BATCH', status: 'queued' }, meta: {}, links: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const client = createApiClient({
+      baseUrl: 'https://api.carmelpoly.in/api/v1',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.auth.registerStaff({ name: 'Reg User', email: 'reg@dev.test', password: secrets[1]! });
+    await client.identity.users.bulkApprove({ user_ids: ['01USER'] });
+    await client.identity.staffImports.template();
+    await client.identity.staffImports.preview(new Blob(['name,email\nA,a@b.c\n'], { type: 'text/csv' }));
+    await client.identity.staffImports.commit('01BATCH', { common_password: secrets[0]!, auto_approve: false });
+    await client.identity.staffImports.get('01BATCH');
+    await client.identity.staffImports.failedRows('01BATCH');
+    await client.identity.staffImports.approve('01BATCH');
+
+    expect(calls.map((c) => `${c.method} ${c.url.replace('https://api.carmelpoly.in/api/v1', '')}`)).toEqual([
+      'POST /auth/register-staff',
+      'POST /users/bulk-approve',
+      'GET /staff-imports/template',
+      'POST /staff-imports/preview',
+      'POST /staff-imports/01BATCH/commit',
+      'GET /staff-imports/01BATCH',
+      'GET /staff-imports/01BATCH/failed-rows',
+      'POST /staff-imports/01BATCH/approve',
+    ]);
+
+    const allLogged = [logSpy, infoSpy, warnSpy, errorSpy]
+      .flatMap((s) => s.mock.calls.flat().map(String))
+      .join(' ');
+    for (const secret of secrets) {
+      expect(allLogged).not.toContain(secret);
+    }
+    vi.restoreAllMocks();
   });
 });

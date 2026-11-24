@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Actions;
 
+use App\Modules\Identity\Events\UserRejected;
 use App\Modules\Identity\Exceptions\UserLifecycleConflictException;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\UserAuditScopeResolver;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 final class RejectUserAction
 {
@@ -23,6 +26,7 @@ final class RejectUserAction
 
         $target->status = 'rejected';
         $target->status_reason = $reason;
+        $target->rejected_at = Carbon::now();
         $target->save();
 
         $target->tokens()->delete();
@@ -42,6 +46,10 @@ final class RejectUserAction
                 'department_id' => $scope['department_id'],
             ])
             ->log("Rejected pending user [{$target->name}].");
+
+        DB::connection('tenant')->afterCommit(function () use ($target, $actor, $reason): void {
+            UserRejected::dispatch($target, $actor, $reason);
+        });
 
         return $target;
     }

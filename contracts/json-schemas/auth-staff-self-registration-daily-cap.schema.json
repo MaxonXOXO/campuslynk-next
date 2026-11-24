@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/auth-staff-self-registration-daily-cap.schema.json",
+  "title": "AuthStaffSelfRegistrationDailyCap",
+  "description": "Maximum number of pending staff self-registrations allowed per day.",
+  "type": "object",
+  "properties": {
+    "cap": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "value": {
+      "type": "integer",
+      "minimum": 1
+    }
+  },
+  "additionalProperties": false
+}
+
