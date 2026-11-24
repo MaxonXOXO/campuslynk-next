@@ -119,8 +119,13 @@ final class RegisterStaffAction
                             ])
                             ->log("Rejected staff account [{$existing->name}] re-submitted registration.");
                     });
+
+                    return;
                 }
             }
+
+            // Perform equivalent password-hashing work on the no-op path to prevent timing side-channels
+            Hash::make((string) $attributes['password']);
 
             // Always return silently to prevent account enumeration
             return;

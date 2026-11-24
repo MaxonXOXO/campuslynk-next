@@ -27,8 +27,8 @@ class StaffImportController
         return response()->streamDownload(function () use ($headers): void {
             $out = fopen('php://output', 'w');
             if ($out !== false) {
-                fputcsv($out, $headers);
-                fputcsv($out, ['Dr. Asha Nair', 'asha@college.edu', '+919876543210', '', 'CE', 'Lecturer', 'EMP-001']);
+                fputcsv($out, array_map($this->safeCsvCell(...), $headers));
+                fputcsv($out, array_map($this->safeCsvCell(...), ['Dr. Asha Nair', 'asha@college.edu', '+919876543210', '', 'CE', 'Lecturer', 'EMP-001']));
                 fclose($out);
             }
         }, 'staff_import_template.csv', [

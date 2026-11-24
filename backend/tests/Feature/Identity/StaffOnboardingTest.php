@@ -167,13 +167,16 @@ describe('Staff Onboarding', function () {
                 'client' => 'web',
             ])->assertUnauthorized();
 
-        // Duplicate email returns identical 202 (enumeration resistance)
+        // Duplicate email returns identical 202 (enumeration resistance) and runs equivalent Hash::make work (timing parity)
+        $t0 = hrtime(true);
         $this->withHeaders(['X-Tenant' => 'tenant_onboard'])
             ->postJson('http://onboard.test/api/v1/auth/register-staff', [
                 'name' => 'Duplicate Attempt',
                 'email' => 'app1@onboard.test',
                 'password' => 'OtherPass#2026!',
             ])->assertAccepted();
+        $dupElapsedMs = (hrtime(true) - $t0) / 1_000_000;
+        expect($dupElapsedMs)->toBeGreaterThanOrEqual(10.0);
 
         // Rejected user cannot resubmit within cooldown, but can resubmit after cooldown
         $this->tenantContext->setTenant($this->tenant);
@@ -213,25 +216,48 @@ describe('Staff Onboarding', function () {
                 'email' => 'cap@onboard.test',
                 'password' => 'StrongPass#2026!',
             ])->assertStatus(429);
+
+        // Per-identifier rate limit (4th attempt for same email within 1 hour -> 429 with Retry-After)
+        $this->tenantContext->setTenant($this->tenant);
+        TenantSetting::where('key', 'auth.staff_self_registration_daily_cap')->update(['value' => ['cap' => 100]]);
+        for ($i = 0; $i < 3; $i++) {
+            $this->withHeaders(['X-Tenant' => 'tenant_onboard'])
+                ->postJson('http://onboard.test/api/v1/auth/register-staff', [
+                    'name' => 'Rate Test',
+                    'email' => 'ratelimit@onboard.test',
+                    'password' => 'StrongPass#2026!',
+                ])->assertAccepted();
+        }
+        $this->withHeaders(['X-Tenant' => 'tenant_onboard'])
+            ->postJson('http://onboard.test/api/v1/auth/register-staff', [
+                'name' => 'Rate Test',
+                'email' => 'ratelimit@onboard.test',
+                'password' => 'StrongPass#2026!',
+            ])->assertStatus(429)->assertHeader('Retry-After');
     });
 
     it('previews CSV & XLSX imports in DB without disk staging, hashes common password once, starts TTL at approval, and enforces claim-once', function () {
         $pToken = $this->principal->createToken('p_tok')->plainTextToken;
         $commonPass = 'BatchTemp#2026!';
 
-        // 1. Download template
+        // 1. Download template (neutralizes leading + in sample mobile)
         $tplRes = $this->withHeaders([
             'Authorization' => "Bearer {$pToken}",
             'X-Tenant' => 'tenant_onboard',
         ])->get('http://onboard.test/api/v1/staff-imports/template')->assertOk();
-        expect($tplRes->streamedContent())->toContain('name,email,mobile,registration_number,requested_department_code,designation,employee_id');
+        expect($tplRes->streamedContent())
+            ->toContain('name,email,mobile,registration_number,requested_department_code,designation,employee_id')
+            ->toContain("'+919876543210");
 
-        // 2. Preview CSV with 1 valid, 1 duplicate (principal email), 1 invalid (missing name)
+        // 2. Preview CSV with 1 valid, 1 duplicate (principal email), and 4 formula-injection invalid rows (=, +, -, @ with unknown dept)
         $csvContent = implode("\n", [
             'name,email,mobile,registration_number,requested_department_code,designation,employee_id',
             'Dr. Meera Nair,meera@onboard.test,+919876543210,,CE,Lecturer,EMP-10',
             'Dup Principal,principal@onboard.test,+919876543211,,CE,Lecturer,EMP-11',
-            ',bad@onboard.test,,,CE,Lecturer,EMP-12',
+            "=CMD|'/C calc'!A0,bad1@onboard.test,,,UNKNOWN_DEPT,Lecturer,EMP-12",
+            '+1+1,bad2@onboard.test,,,UNKNOWN_DEPT,Lecturer,EMP-13',
+            '-2+3,bad3@onboard.test,,,UNKNOWN_DEPT,Lecturer,EMP-14',
+            '@SUM(1+1),bad4@onboard.test,,,UNKNOWN_DEPT,Lecturer,EMP-15',
         ]);
         $csvFile = UploadedFile::fake()->createWithContent('staff.csv', $csvContent);
 
@@ -244,10 +270,10 @@ describe('Staff Onboarding', function () {
         $batchId = (string) $previewRes->json('data.batch.id');
         expect($previewRes->json('data.batch.valid_rows'))->toBe(1)
             ->and($previewRes->json('data.batch.duplicate_rows'))->toBe(1)
-            ->and($previewRes->json('data.batch.invalid_rows'))->toBe(1);
+            ->and($previewRes->json('data.batch.invalid_rows'))->toBe(4);
 
         $this->tenantContext->setTenant($this->tenant);
-        expect(StaffImportRow::where('batch_id', $batchId)->count())->toBe(3);
+        expect(StaffImportRow::where('batch_id', $batchId)->count())->toBe(6);
 
         // 3. Preview XLSX via OpenSpout
         $xlsxPath = sys_get_temp_dir().'/staff_test_'.uniqid().'.xlsx';
@@ -316,13 +342,16 @@ describe('Staff Onboarding', function () {
         expect($meera->status)->toBe('pending')
             ->and($meera->temporary_password_expires_at)->toBeNull();
 
-        // Failed rows CSV download
+        // Failed rows CSV download neutralizes CSV formula injection (=, +, -, @)
         $failedCsv = $this->withHeaders([
             'Authorization' => "Bearer {$pToken}",
             'X-Tenant' => 'tenant_onboard',
         ])->get("http://onboard.test/api/v1/staff-imports/{$batchId}/failed-rows")->assertOk()->streamedContent();
         expect($failedCsv)->toContain('principal@onboard.test')
-            ->and($failedCsv)->toContain('bad@onboard.test');
+            ->and($failedCsv)->toContain("'=CMD")
+            ->and($failedCsv)->toContain("'+1+1")
+            ->and($failedCsv)->toContain("'-2+3")
+            ->and($failedCsv)->toContain("'@SUM(1+1)");
 
         // 5. Wait 3 days, then approve -> temporary_password_expires_at starts at approval (+48h)
         Carbon::setTestNow(Carbon::now()->addDays(3));
@@ -374,6 +403,51 @@ describe('Staff Onboarding', function () {
         $this->tenantContext->setTenant($this->tenant);
         $meera->refresh();
         expect($meera->first_activated_at)->not->toBeNull();
+
+        // 6. auto_approve=true starts temporary_password_expires_at at import time and expires after 48h
+        $this->app['auth']->forgetGuards();
+        $this->tenantContext->setTenant($this->tenant);
+        $pToken2 = $this->principal->createToken('p_tok_2')->plainTextToken;
+        $autoCsv = UploadedFile::fake()->createWithContent('auto.csv', implode("\n", [
+            'name,email,mobile,registration_number,requested_department_code,designation,employee_id',
+            'Auto Staff,auto@onboard.test,+919876543299,,CE,Lecturer,EMP-99',
+        ]));
+        $autoPreview = $this->withHeaders([
+            'Authorization' => "Bearer {$pToken2}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->post('http://onboard.test/api/v1/staff-imports/preview', ['file' => $autoCsv])->assertCreated();
+        $autoBatchId = (string) $autoPreview->json('data.batch.id');
+
+        $this->tenantContext->setTenant($this->tenant);
+        app()->call([new CommitStaffImportJob($autoBatchId, Hash::make($commonPass), $this->principal->id, true), 'handle']);
+        $this->tenantContext->setTenant($this->tenant);
+        $autoUser = User::where('email', 'auto@onboard.test')->firstOrFail();
+        expect($autoUser->status)->toBe('active')
+            ->and($autoUser->temporary_password_expires_at)->not->toBeNull();
+
+        // After 49h, temporary password is expired and login fails with 401
+        Carbon::setTestNow(Carbon::now()->addHours(49));
+        $this->withHeaders(['X-Tenant' => 'tenant_onboard'])
+            ->postJson('http://onboard.test/api/v1/auth/login', [
+                'identifier' => 'auto@onboard.test',
+                'password' => $commonPass,
+                'device_name' => 'web',
+                'client' => 'web',
+            ])->assertUnauthorized();
+
+        // 7. XLSX uncompressed-size safety cap (> 25 MB rejected with 422)
+        $bombPath = sys_get_temp_dir().'/staff_bomb_'.uniqid().'.xlsx';
+        $zip = new ZipArchive;
+        $zip->open($bombPath, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+        $zip->addFromString('xl/sharedStrings.xml', str_repeat('A', 26_214_405));
+        $zip->close();
+        $bombUpload = new UploadedFile($bombPath, 'bomb.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+        $this->withHeaders([
+            'Authorization' => "Bearer {$pToken2}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->postJson('http://onboard.test/api/v1/staff-imports/preview', ['file' => $bombUpload])
+            ->assertStatus(422);
+        @unlink($bombPath);
     });
 
     it('lets HOD see approved unassigned staff in their requested_department_id while hiding pending and other-department staff, and keeps GET /users bounded', function () {
@@ -396,6 +470,14 @@ describe('Staff Onboarding', function () {
             'password' => 'Secret@123!', 'must_change_password' => false, 'status' => 'active',
         ]);
         StaffProfile::create(['user_id' => $meApproved->id, 'requested_department_id' => $this->meDept->id]);
+
+        for ($i = 1; $i <= 18; $i++) {
+            $bulkStaff = User::create([
+                'type' => 'staff', 'name' => "CE Bulk {$i}", 'email' => "cebulk{$i}@onboard.test",
+                'password' => 'Secret@123!', 'must_change_password' => false, 'status' => 'active',
+            ]);
+            StaffProfile::create(['user_id' => $bulkStaff->id, 'requested_department_id' => $this->ceDept->id, 'designation' => 'Lecturer']);
+        }
 
         $hodToken = $this->ceHod->createToken('hod_tok')->plainTextToken;
 
@@ -443,9 +525,38 @@ describe('Staff Onboarding', function () {
         $this->withHeaders([
             'Authorization' => "Bearer {$coordToken}",
             'X-Tenant' => 'tenant_onboard',
+        ])->postJson("http://onboard.test/api/v1/users/{$sfPending->id}/deactivate")->assertForbidden();
+
+        $this->withHeaders([
+            'Authorization' => "Bearer {$coordToken}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->postJson("http://onboard.test/api/v1/users/{$sfPending->id}/reset-password")->assertForbidden();
+
+        $this->withHeaders([
+            'Authorization' => "Bearer {$coordToken}",
+            'X-Tenant' => 'tenant_onboard',
         ])->postJson('http://onboard.test/api/v1/users', [
             'type' => 'staff', 'name' => 'Nope', 'email' => 'nope@onboard.test',
         ])->assertForbidden();
+
+        $importCsv = UploadedFile::fake()->createWithContent('x.csv', "name,email\nTest,x@onboard.test\n");
+        $this->withHeaders([
+            'Authorization' => "Bearer {$coordToken}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->post('http://onboard.test/api/v1/staff-imports/preview', ['file' => $importCsv])->assertForbidden();
+
+        $this->tenantContext->setTenant($this->tenant);
+        $hodToken = $this->ceHod->createToken('hod_tok_2')->plainTextToken;
+        $this->withHeaders([
+            'Authorization' => "Bearer {$hodToken}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->post('http://onboard.test/api/v1/staff-imports/preview', ['file' => $importCsv])->assertForbidden();
+
+        // Coordinator cannot approve CE pending staff (out of stream) -> 403
+        $this->withHeaders([
+            'Authorization' => "Bearer {$coordToken}",
+            'X-Tenant' => 'tenant_onboard',
+        ])->postJson("http://onboard.test/api/v1/users/{$cePending->id}/approve")->assertForbidden();
 
         // Bulk approve as coordinator: SF pending approved, CE pending forbidden
         Event::fake([UserApproved::class, UserRejected::class]);
