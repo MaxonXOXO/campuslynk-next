@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { PrincipalUsersPage } from "../src/components/principal/PrincipalUsersPage";
 
@@ -111,7 +112,7 @@ describe("PrincipalUsersPage", () => {
   });
 
   it("renders Roles column and Locked badge without any awaiting backend text", async () => {
-    render(<PrincipalUsersPage />);
+    renderWithQueryClient(<PrincipalUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -128,7 +129,7 @@ describe("PrincipalUsersPage", () => {
     const secret = "TempPrinUser#2026";
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
-    render(<PrincipalUsersPage />);
+    renderWithQueryClient(<PrincipalUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -174,7 +175,7 @@ describe("PrincipalUsersPage", () => {
       capabilities: [],
     };
 
-    render(<PrincipalUsersPage />);
+    renderWithQueryClient(<PrincipalUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -184,7 +185,7 @@ describe("PrincipalUsersPage", () => {
   });
 
   it("hides all row actions when capabilities do not include row-action permissions", async () => {
-    render(<PrincipalUsersPage />);
+    renderWithQueryClient(<PrincipalUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -206,7 +207,7 @@ describe("PrincipalUsersPage", () => {
       ],
     };
 
-    render(<PrincipalUsersPage />);
+    renderWithQueryClient(<PrincipalUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);

@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
 import { PrincipalDepartmentsPage } from "../src/components/principal/PrincipalDepartmentsPage";
@@ -104,7 +105,7 @@ describe("PrincipalDepartmentsPage", () => {
   });
 
   it("renders view-only departments grouped by stream with batch counts and no CRUD controls", async () => {
-    render(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Civil Engineering")).toBeInTheDocument();
@@ -121,7 +122,7 @@ describe("PrincipalDepartmentsPage", () => {
   });
 
   it("shows active HOD name when assigned and Vacant warning badge when unassigned", async () => {
-    render(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Dr. Asha Nair")).toBeInTheDocument();
@@ -138,7 +139,7 @@ describe("PrincipalDepartmentsPage", () => {
       data: { id: "ra_new" },
     });
 
-    render(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Mechanical Engineering")).toBeInTheDocument();
@@ -164,7 +165,7 @@ describe("PrincipalDepartmentsPage", () => {
 
   it("maps 422, 409, and 403 errors when appointing a leadership role", async () => {
     const user = userEvent.setup();
-    render(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Civil Engineering")).toBeInTheDocument();
@@ -223,7 +224,7 @@ describe("PrincipalDepartmentsPage", () => {
       data: { message: "Revoked" },
     });
 
-    render(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
       expect(screen.getByText("Civil Engineering")).toBeInTheDocument();

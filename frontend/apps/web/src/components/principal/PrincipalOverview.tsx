@@ -39,7 +39,7 @@ import {
   RiTableLine,
   RiUserReceivedLine,
 } from "@remixicon/react";
-import { useApiClient } from "@/lib/auth/session-provider";
+import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
 import { getGeneralErrorMessage } from "@/app/setup/logic/error-mapping";
 import type { UsersByTypeDatum } from "./PrincipalUsersChart";
 
@@ -69,22 +69,23 @@ interface PrincipalOverviewState {
 }
 
 export function PrincipalOverview() {
-  const client = useApiClient();
-  const usersApi = client.identity?.users ?? client.users;
-  const roleAssignmentsApi = client.identity?.roleAssignments ?? client.roleAssignments;
-  const departmentsApi = client.organisation?.departments ?? client.departments;
-  const batchesApi = client.organisation?.batches ?? client.batches;
-
-  const [data, setData] = React.useState<PrincipalOverviewState | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
   const [showDataTable, setShowDataTable] = React.useState(false);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const {
+    data,
+    isPending: loading,
+    isRefreshing,
+    error: queryError,
+    refetch,
+  } = useApiQuery<PrincipalOverviewState>({
+    queryKey: ["principal", "overview"],
+    staleTime: STALE_TIME_LIST_MS,
+    queryFn: async (client) => {
+      const usersApi = client.identity?.users ?? client.users;
+      const roleAssignmentsApi = client.identity?.roleAssignments ?? client.roleAssignments;
+      const departmentsApi = client.organisation?.departments ?? client.departments;
+      const batchesApi = client.organisation?.batches ?? client.batches;
 
-    try {
       const [
         staffRes,
         studentRes,
@@ -115,7 +116,7 @@ export function PrincipalOverview() {
       const batchesMeta = (batchesRes as { meta?: { total?: number } }).meta;
       const batchesList = (batchesRes as { data?: unknown[] }).data ?? [];
 
-      setData({
+      return {
         staffCount: staffRes.meta.total,
         studentCount: studentRes.meta.total,
         parentCount: parentRes.meta.total,
@@ -123,17 +124,13 @@ export function PrincipalOverview() {
         totalDepartments: departments.length,
         coveredDepartments,
         activeBatchesCount: batchesMeta?.total ?? batchesList.length,
-      });
-    } catch (err: unknown) {
-      setError(getGeneralErrorMessage(err, "Failed to load Principal overview."));
-    } finally {
-      setLoading(false);
-    }
-  }, [usersApi, roleAssignmentsApi, departmentsApi, batchesApi]);
+      };
+    },
+  });
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const error = queryError
+    ? getGeneralErrorMessage(queryError, "Failed to load Principal overview.")
+    : null;
 
   const chartData: UsersByTypeDatum[] = React.useMemo(() => {
     if (!data) return [];
@@ -153,6 +150,14 @@ export function PrincipalOverview() {
       <PageHeader
         title="Principal Overview"
         description="Institution-wide staffing, student enrollment, department leadership coverage, and active batches."
+        actions={
+          isRefreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RiRefreshLine className="size-3.5 animate-spin" aria-hidden="true" />
+              Refreshing…
+            </span>
+          ) : undefined
+        }
       />
 
       {loading && (
@@ -174,7 +179,7 @@ export function PrincipalOverview() {
           <AlertTitle>Unable to load overview</AlertTitle>
           <AlertDescription className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>{error}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
               <RiRefreshLine className="size-4" aria-hidden="true" />
               Retry
             </Button>
