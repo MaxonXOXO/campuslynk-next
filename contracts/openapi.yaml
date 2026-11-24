@@ -201,6 +201,35 @@ paths:
                     status: 403
                     detail: You must change your password before accessing other features.
 
+  /auth/register-staff:
+    post:
+      operationId: registerStaff
+      summary: Public staff self-registration (rate-limited, behind tenant setting, always returns 202 to prevent enumeration)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterStaffInput'
+      responses:
+        '202':
+          description: Registration accepted for review
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+        '429':
+          $ref: '#/components/responses/ProblemDetails'
+
   /impersonation:
     post:
       operationId: startImpersonation
@@ -279,6 +308,21 @@ paths:
           required: false
           schema:
             type: string
+        - name: requested_department_id
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: must_change_password
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: expired_temp_password
+          in: query
+          required: false
+          schema:
+            type: boolean
         - name: page
           in: query
           required: false
@@ -994,6 +1038,186 @@ paths:
         '409':
           $ref: '#/components/responses/ProblemDetails'
         '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /users/bulk-approve:
+    post:
+      operationId: bulkApproveUsers
+      summary: Bulk approve pending users (per-row policy enforcement and results)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkApproveUsersInput'
+      responses:
+        '200':
+          description: Per-row bulk approval summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkApproveEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/template:
+    get:
+      operationId: downloadStaffImportTemplate
+      summary: Download CSV template with exact staff import headers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: CSV template file
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/preview:
+    post:
+      operationId: previewStaffImport
+      summary: Parse and validate an uploaded CSV/XLSX staff import into staged DB rows
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: Preview batch created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffImportPreviewEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/{id}/commit:
+    post:
+      operationId: commitStaffImport
+      summary: Hash common temporary password once and queue background staff import commit job
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitStaffImportInput'
+      responses:
+        '202':
+          description: Import commit queued
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffImportBatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/{id}:
+    get:
+      operationId: getStaffImport
+      summary: Get staff import batch status and counts
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Staff import batch status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StaffImportBatchEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/{id}/failed-rows:
+    get:
+      operationId: downloadStaffImportFailedRows
+      summary: Download CSV of invalid/duplicate/failed rows from a staff import batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Failed rows CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /staff-imports/{id}/approve:
+    post:
+      operationId: approveStaffImportBatch
+      summary: Approve all still-pending users created by a staff import batch
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Per-row batch approval summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkApproveEnvelope'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '404':
           $ref: '#/components/responses/ProblemDetails'
 
   /principal/appoint:
@@ -2035,6 +2259,202 @@ components:
         reject:
           type: boolean
 
+    StaffProfileSchema:
+      type: object
+      properties:
+        requested_department_id:
+          type: string
+          nullable: true
+        designation:
+          type: string
+          nullable: true
+        employee_id:
+          type: string
+          nullable: true
+        import_batch_id:
+          type: string
+          nullable: true
+
+    RegisterStaffInput:
+      type: object
+      required: [name, password]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 100
+        email:
+          type: string
+          format: email
+          nullable: true
+        mobile:
+          type: string
+          nullable: true
+        password:
+          type: string
+          minLength: 8
+        requested_department_id:
+          type: string
+          nullable: true
+        designation:
+          type: string
+          nullable: true
+        employee_id:
+          type: string
+          nullable: true
+        website:
+          type: string
+          nullable: true
+
+    BulkApproveUsersInput:
+      type: object
+      required: [user_ids]
+      properties:
+        user_ids:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            type: string
+
+    BulkApproveEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [results, summary]
+          properties:
+            results:
+              type: array
+              items:
+                type: object
+                required: [user_id, status]
+                properties:
+                  user_id:
+                    type: string
+                  status:
+                    type: string
+                    enum: [approved, skipped, forbidden, not_found]
+                  message:
+                    type: string
+                    nullable: true
+            summary:
+              type: object
+              required: [approved, failed]
+              properties:
+                approved:
+                  type: integer
+                failed:
+                  type: integer
+        meta:
+          type: object
+          additionalProperties: true
+        links:
+          type: object
+          additionalProperties: true
+
+    CommitStaffImportInput:
+      type: object
+      required: [common_password]
+      properties:
+        common_password:
+          type: string
+          minLength: 8
+        auto_approve:
+          type: boolean
+        idempotency_key:
+          type: string
+          nullable: true
+
+    StaffImportBatchSchema:
+      type: object
+      required: [id, filename, status, auto_approve, total_rows, valid_rows, duplicate_rows, invalid_rows, created_count, skipped_duplicate_count, failed_count]
+      properties:
+        id:
+          type: string
+        filename:
+          type: string
+        status:
+          type: string
+          enum: [previewed, queued, processing, completed, failed]
+        auto_approve:
+          type: boolean
+        total_rows:
+          type: integer
+        valid_rows:
+          type: integer
+        duplicate_rows:
+          type: integer
+        invalid_rows:
+          type: integer
+        created_count:
+          type: integer
+        skipped_duplicate_count:
+          type: integer
+        failed_count:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    StaffImportBatchEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          $ref: '#/components/schemas/StaffImportBatchSchema'
+        meta:
+          type: object
+          additionalProperties: true
+        links:
+          type: object
+          additionalProperties: true
+
+    StaffImportPreviewEnvelope:
+      type: object
+      required: [data, meta, links]
+      properties:
+        data:
+          type: object
+          required: [batch, rows_preview]
+          properties:
+            batch:
+              $ref: '#/components/schemas/StaffImportBatchSchema'
+            rows_preview:
+              type: array
+              items:
+                type: object
+                required: [row_number, status, payload, errors]
+                properties:
+                  row_number:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [valid, duplicate, invalid]
+                  payload:
+                    type: object
+                    additionalProperties: true
+                  errors:
+                    type: array
+                    items:
+                      type: string
+        meta:
+          type: object
+          additionalProperties: true
+        links:
+          type: object
+          additionalProperties: true
+
     UserSchema:
       type: object
       required: [id, type, name, status, must_change_password, is_locked, assignments, abilities]
@@ -2087,6 +2507,17 @@ components:
         last_login_at:
           type: string
           format: date-time
+          nullable: true
+        first_activated_at:
+          type: string
+          format: date-time
+          nullable: true
+        rejected_at:
+          type: string
+          format: date-time
+          nullable: true
+        staff_profile:
+          $ref: '#/components/schemas/StaffProfileSchema'
           nullable: true
         assignments:
           type: array

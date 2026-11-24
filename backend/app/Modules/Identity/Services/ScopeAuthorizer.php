@@ -155,7 +155,37 @@ class ScopeAuthorizer implements ScopeAuthorizerContract
 
             $this->constrainAssignments($memberships, $labels, $read, 'membership');
 
-            return $query->whereExists($memberships);
+            $matchingDepartments = $this->scopeDirectory->query()
+                ->select('scope_id')
+                ->where('scope_type', 'department');
+            $this->constrainPaths($matchingDepartments, $labels, $read, 'managing_path', 'home_path');
+
+            $unassignedProfile = DB::connection('tenant')->table('staff_profiles as sp')
+                ->selectRaw('1')
+                ->whereColumn('sp.user_id', 'users.id')
+                ->whereIn('sp.requested_department_id', $matchingDepartments)
+                ->whereNotExists(function (QueryBuilder $anyActive) use ($now): void {
+                    $anyActive->from('role_assignments as ra_any')
+                        ->selectRaw('1')
+                        ->whereColumn('ra_any.user_id', 'users.id')
+                        ->whereRaw('ra_any.is_active is true')
+                        ->where('ra_any.valid_from', '<=', $now)
+                        ->where(function (QueryBuilder $sub) use ($now): void {
+                            $sub->whereNull('ra_any.valid_to')->orWhere('ra_any.valid_to', '>', $now);
+                        });
+                });
+
+            $canSeePending = $permission === 'identity.user.approve'
+                || $this->getActiveScopeLabelsForPermission($user, 'identity.user.approve') !== [];
+            $allowedStatuses = $canSeePending ? ['pending', 'active'] : ['active'];
+
+            return $query->where(function (Builder $q) use ($memberships, $unassignedProfile, $allowedStatuses): void {
+                $q->whereExists($memberships)
+                    ->orWhere(function (Builder $unassigned) use ($unassignedProfile, $allowedStatuses): void {
+                        $unassigned->whereIn('users.status', $allowedStatuses)
+                            ->whereExists($unassignedProfile);
+                    });
+            });
         }
 
         if ($table === 'role_assignments') {

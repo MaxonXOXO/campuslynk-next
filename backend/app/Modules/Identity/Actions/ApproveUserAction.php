@@ -4,13 +4,19 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Actions;
 
+use App\Modules\Identity\Contracts\IssuesTemporaryPasswordContract;
+use App\Modules\Identity\Events\UserApproved;
 use App\Modules\Identity\Exceptions\UserLifecycleConflictException;
 use App\Modules\Identity\Models\User;
 use App\Modules\Identity\Services\UserAuditScopeResolver;
+use Illuminate\Support\Facades\DB;
 
 final class ApproveUserAction
 {
-    public function __construct(private readonly UserAuditScopeResolver $scopeResolver) {}
+    public function __construct(
+        private readonly UserAuditScopeResolver $scopeResolver,
+        private readonly IssuesTemporaryPasswordContract $temporaryPasswordIssuer,
+    ) {}
 
     public function execute(User $actor, User $target): User
     {
@@ -23,6 +29,13 @@ final class ApproveUserAction
 
         $target->status = 'active';
         $target->status_reason = null;
+        $target->rejected_at = null;
+
+        // Start temporary password expiry clock at approval for bulk-imported staff
+        if ($target->must_change_password) {
+            $target->temporary_password_expires_at = $this->temporaryPasswordIssuer->resolveExpiresAt();
+        }
+
         $target->save();
 
         $scope = $this->scopeResolver->resolveForUser($target);
@@ -39,6 +52,10 @@ final class ApproveUserAction
                 'department_id' => $scope['department_id'],
             ])
             ->log("Approved pending user [{$target->name}].");
+
+        DB::connection('tenant')->afterCommit(function () use ($target, $actor): void {
+            UserApproved::dispatch($target, $actor);
+        });
 
         return $target;
     }

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/auth-staff-self-registration-enabled.schema.json",
+  "title": "AuthStaffSelfRegistrationEnabled",
+  "description": "Whether public staff self-registration is enabled for the tenant.",
+  "type": "object",
+  "properties": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "value": {
+      "type": "boolean"
+    }
+  },
+  "additionalProperties": false
+}
+

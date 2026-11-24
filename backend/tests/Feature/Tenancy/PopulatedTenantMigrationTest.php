@@ -163,10 +163,18 @@ it('maps deactivated and rejected users to suspended when rolling back 2026_11_2
         'status' => 'rejected',
     ]);
 
+    $tenantMigrations = glob(database_path('migrations/tenant/*.php')) ?: [];
+    sort($tenantMigrations);
+    $matches = glob(database_path('migrations/tenant/2026_11_23_000001_*.php')) ?: [];
+    expect($matches)->toHaveCount(1);
+    $targetIndex = array_search($matches[0], $tenantMigrations, true);
+    expect($targetIndex)->not->toBeFalse();
+    $stepsToRollback = count($tenantMigrations) - (int) $targetIndex;
+
     $rollbackExit = Artisan::call('migrate:rollback', [
         '--database' => 'tenant',
         '--path' => 'database/migrations/tenant',
-        '--step' => 1,
+        '--step' => $stepsToRollback,
         '--force' => true,
     ]);
     expect($rollbackExit)->toBe(0);
