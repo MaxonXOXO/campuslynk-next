@@ -4,9 +4,9 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  AnimatedThemeToggler,
   Avatar,
   AvatarFallback,
-  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -15,6 +15,10 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  Input,
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
   Separator,
   Sidebar,
   SidebarContent,
@@ -30,16 +34,22 @@ import {
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
+  useSidebar,
 } from "@academic-suite/ui";
 import {
   RiBuilding2Line,
+  RiCustomerService2Line,
   RiDashboardLine,
   RiKey2Line,
   RiLogoutBoxRLine,
+  RiNotification3Line,
+  RiSearchLine,
   RiSettings4Line,
   RiShieldUserLine,
+  RiSideBarLine,
   RiUserSettingsLine,
 } from "@remixicon/react";
+import logoAsset from "@/app/design-system/logo.svg";
 import { useSession } from "@/lib/auth/session-provider";
 import { WORKSPACE_NAV, type NavIconKey } from "@/lib/workspaces/navigation";
 import {
@@ -65,6 +75,41 @@ function getInitials(name: string | undefined): string {
   return `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`.toUpperCase();
 }
 
+const logoSrc =
+  typeof logoAsset === "string"
+    ? logoAsset
+    : (logoAsset as { src: string }).src;
+
+function SidebarThemeItem() {
+  const { state, isMobile } = useSidebar();
+  const isCollapsed = state === "collapsed" && !isMobile;
+
+  return (
+    <SidebarMenuItem>
+      <AnimatedThemeToggler collapsed={isCollapsed} />
+    </SidebarMenuItem>
+  );
+}
+
+function SidebarCollapseItem() {
+  const { state, toggleSidebar } = useSidebar();
+  const isCollapsed = state === "collapsed";
+
+  return (
+    <SidebarMenuItem className="hidden md:block">
+      <SidebarMenuButton
+        type="button"
+        tooltip={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={toggleSidebar}
+      >
+        <RiSideBarLine className="size-4" aria-hidden="true" />
+        <span>{isCollapsed ? "Expand sidebar" : "Collapse sidebar"}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>
+  );
+}
+
 export interface AppShellProps {
   activeSlug: WorkspaceSlug;
   children: React.ReactNode;
@@ -77,8 +122,6 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
   const user = state.user;
 
   const workspaces = React.useMemo(() => computeWorkspaces(user), [user]);
-  const activeWorkspace =
-    workspaces.find((w) => w.slug === activeSlug) ?? null;
   const meta = WORKSPACE_META[activeSlug];
   const navItems = WORKSPACE_NAV[activeSlug];
 
@@ -92,19 +135,17 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
       </a>
 
       <Sidebar collapsible="icon">
-        <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
-              AS
-            </div>
-            <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-              <p className="text-sm font-semibold text-sidebar-foreground truncate">
-                Academic Suite
-              </p>
-              <p className="text-xs text-muted-foreground truncate">
-                {meta.label}
-              </p>
-            </div>
+        <SidebarHeader className="h-14 justify-center border-b border-border px-3 py-0 transition-[padding] duration-200 ease-linear group-data-[collapsible=icon]:px-1.5">
+          <div className="flex items-center gap-2.5 min-w-0 transition-[gap] duration-200 ease-linear group-data-[collapsible=icon]:gap-0">
+            <img
+              src={logoSrc}
+              alt="CampusLynk"
+              draggable={false}
+              className="h-7 w-auto shrink-0 object-contain select-none pointer-events-none"
+            />
+            <span className="text-lg font-semibold tracking-tight text-sidebar-foreground truncate transition-all duration-200 ease-linear group-data-[collapsible=icon]:w-0 group-data-[collapsible=icon]:opacity-0">
+              CampusLynk
+            </span>
           </div>
         </SidebarHeader>
 
@@ -137,33 +178,34 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           </SidebarGroup>
         </SidebarContent>
 
-        <SidebarFooter className="border-t border-sidebar-border p-3 group-data-[collapsible=icon]:hidden">
-          <div className="space-y-1">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              Active Context
-            </p>
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <Badge variant="secondary" className="text-xs">
-                {meta.shortLabel}
-              </Badge>
-              {process.env.NODE_ENV === "development" &&
-                activeWorkspace?.scopeLabels.map((scope) => (
-                  <Badge key={scope} variant="outline" className="text-[11px] font-mono">
-                    {scope}
-                  </Badge>
-                ))}
-            </div>
-          </div>
+        <SidebarFooter className="border-t border-border p-2">
+          <SidebarMenu>
+            <SidebarThemeItem />
+            <SidebarCollapseItem />
+            <div className="-mx-2 my-1 hidden border-t border-border md:block" role="separator" />
+            <SidebarMenuItem>
+              <SidebarMenuButton type="button" tooltip="Contact Us">
+                <RiCustomerService2Line className="size-4" aria-hidden="true" />
+                <span>Contact Us</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton type="button" tooltip="Settings">
+                <RiSettings4Line className="size-4" aria-hidden="true" />
+                <span>Settings</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
         </SidebarFooter>
 
         <SidebarRail />
       </Sidebar>
 
       <SidebarInset className="min-w-0">
-        <header className="sticky top-0 z-30 flex min-h-14 items-center justify-between gap-2 border-b border-border bg-background/95 px-3 sm:px-6 backdrop-blur supports-backdrop-filter:bg-background/80">
+        <header className="sticky top-0 z-30 flex h-14 items-center justify-between gap-2 border-b border-border bg-background/95 px-3 sm:px-6 backdrop-blur supports-backdrop-filter:bg-background/80">
           <div className="flex items-center gap-2 min-w-0">
-            <SidebarTrigger />
-            <Separator orientation="vertical" className="h-5" />
+            <SidebarTrigger className="md:hidden" />
+            <Separator orientation="vertical" className="h-5 md:hidden" />
             <span className="text-sm font-semibold text-foreground truncate">
               {meta.label}
             </span>
@@ -174,55 +216,97 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
             />
           </div>
 
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="gap-2 max-w-[160px] sm:max-w-xs"
-                  aria-label="Account menu"
-                >
-                  <Avatar size="sm">
-                    <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
-                  </Avatar>
-                  <span className="hidden sm:inline truncate text-sm">
-                    {user?.name ?? "Account"}
-                  </span>
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuGroup>
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-sm font-medium text-foreground truncate">
-                      {user?.name ?? "Signed-in user"}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="relative hidden sm:flex items-center">
+              <RiSearchLine
+                className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <Input
+                type="search"
+                placeholder="Search..."
+                aria-label="Search"
+                className="h-8 w-44 pl-8 md:w-56 lg:w-64"
+              />
+            </div>
+
+            <div className="flex items-center gap-1">
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Notifications"
+                    >
+                      <RiNotification3Line className="size-4" aria-hidden="true" />
+                    </Button>
+                  }
+                />
+                <PopoverContent align="center" className="w-80 p-0">
+                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                    <span className="text-sm font-semibold text-foreground">
+                      Notifications
                     </span>
-                    {user?.email && (
-                      <span className="text-xs text-muted-foreground truncate">
-                        {user.email}
-                      </span>
-                    )}
                   </div>
-                </DropdownMenuLabel>
-              </DropdownMenuGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => router.push("/change-password")}>
-                <RiKey2Line className="size-4" aria-hidden="true" />
-                Change password
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => void controller.logout()}
-              >
-                <RiLogoutBoxRLine className="size-4" aria-hidden="true" />
-                Sign out
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                    No new notifications
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-2 max-w-[160px] sm:max-w-xs"
+                      aria-label="Account menu"
+                    >
+                      <Avatar size="sm">
+                        <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
+                      </Avatar>
+                      <span className="hidden sm:inline truncate text-sm">
+                        {user?.name ?? "Account"}
+                      </span>
+                    </Button>
+                  }
+                />
+                <DropdownMenuContent align="center" className="w-56">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-medium text-foreground truncate">
+                        {user?.name ?? "Signed-in user"}
+                      </span>
+                      {user?.email && (
+                        <span className="text-xs text-muted-foreground truncate">
+                          {user.email}
+                        </span>
+                      )}
+                    </div>
+                  </DropdownMenuLabel>
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => router.push("/change-password")}>
+                  <RiKey2Line className="size-4" aria-hidden="true" />
+                  Change password
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  variant="destructive"
+                  onClick={() => void controller.logout()}
+                >
+                  <RiLogoutBoxRLine className="size-4" aria-hidden="true" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            </div>
+          </div>
         </header>
 
         <div

@@ -7,6 +7,10 @@ export { useIsMobile } from "./hooks/use-mobile";
 
 // Theme
 export { ThemeProvider, useTheme } from "./components/theme-provider";
+export {
+  AnimatedThemeToggler,
+  type AnimatedThemeTogglerProps,
+} from "./components/ui/animated-theme-toggler";
 
 // Composed Components
 export * from "./composed/page-header";
