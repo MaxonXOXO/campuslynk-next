@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
 import { SuperAdminUsersPage } from "../src/components/super-admin/SuperAdminUsersPage";
@@ -167,7 +168,7 @@ describe("SuperAdminUsersPage", () => {
   });
 
   it("renders Roles column, Locked badge, and temporary password expiry hint", async () => {
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -195,7 +196,7 @@ describe("SuperAdminUsersPage", () => {
   it("creates a user and shows ephemeral temporary password reveal without persisting secrets", async () => {
     const user = userEvent.setup();
     const secret = "TempCreate#2026";
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
@@ -238,7 +239,7 @@ describe("SuperAdminUsersPage", () => {
     const user = userEvent.setup();
     setupHodContext();
 
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
@@ -257,7 +258,7 @@ describe("SuperAdminUsersPage", () => {
     const user = userEvent.setup();
     setupHodContext();
 
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
@@ -274,7 +275,7 @@ describe("SuperAdminUsersPage", () => {
     const user = userEvent.setup();
     setupHodContext();
 
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
@@ -305,7 +306,7 @@ describe("SuperAdminUsersPage", () => {
     const user = userEvent.setup();
     setupHodContext();
 
-    render(<SuperAdminUsersPage />);
+    renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });

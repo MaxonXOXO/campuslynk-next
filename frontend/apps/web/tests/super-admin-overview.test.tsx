@@ -1,8 +1,9 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SuperAdminOverview } from "../src/components/super-admin/SuperAdminOverview";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 
 const mocks = vi.hoisted(() => ({
   client: {
@@ -14,6 +15,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth/session-provider", () => ({
   useApiClient: () => mocks.client,
+  useSession: () => ({
+    state: { status: "authenticated", user: { id: "01SA", assignments: [] } },
+  }),
 }));
 
 vi.mock("next/link", () => ({
@@ -69,7 +73,7 @@ describe("SuperAdminOverview", () => {
       meta: { current_page: 1, last_page: 2, per_page: 25, total: 32 },
     });
 
-    render(<SuperAdminOverview />);
+    renderWithQueryClient(<SuperAdminOverview />);
 
     await waitFor(() => {
       expect(screen.getByText("Dr. Meera Menon")).toBeInTheDocument();
@@ -93,7 +97,7 @@ describe("SuperAdminOverview", () => {
     mocks.client.roleAssignments.list.mockResolvedValueOnce({ data: [], meta: { total: 0 } });
     mocks.client.users.list.mockResolvedValueOnce({ data: [], meta: { total: 0 } });
 
-    render(<SuperAdminOverview />);
+    renderWithQueryClient(<SuperAdminOverview />);
 
     await waitFor(() => {
       expect(screen.getByText("Unable to load overview")).toBeInTheDocument();
