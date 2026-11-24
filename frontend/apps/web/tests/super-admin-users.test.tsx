@@ -15,6 +15,10 @@ const mocks = vi.hoisted(() => ({
       update: vi.fn(),
       suspend: vi.fn(),
       reactivate: vi.fn(),
+      deactivate: vi.fn(),
+      approve: vi.fn(),
+      reject: vi.fn(),
+      bulkApprove: vi.fn(),
       unlock: vi.fn(),
       resetPassword: vi.fn(),
     },
@@ -22,6 +26,7 @@ const mocks = vi.hoisted(() => ({
   sessionUser: {
     id: "01SA",
     name: "IT Head",
+    capabilities: ["identity.user.create"],
     assignments: [
       { role_key: "super_admin", scope_type: "institution", scope_label: "i_carmel" },
     ],
@@ -36,6 +41,17 @@ vi.mock("@/lib/auth/session-provider", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: mocks.toast }));
+
+const ALL_FALSE_ABILITIES = {
+  update: false,
+  suspend: false,
+  reactivate: false,
+  deactivate: false,
+  reset_password: false,
+  unlock: false,
+  approve: false,
+  reject: false,
+};
 
 const SAMPLE_USERS = [
   {
@@ -60,6 +76,7 @@ const SAMPLE_USERS = [
         scope_label: "i_carmel",
       },
     ],
+    abilities: { ...ALL_FALSE_ABILITIES, update: true },
   },
   {
     id: "01U_ACTIVE",
@@ -83,6 +100,14 @@ const SAMPLE_USERS = [
         scope_label: "d_ce",
       },
     ],
+    abilities: {
+      ...ALL_FALSE_ABILITIES,
+      update: true,
+      suspend: true,
+      deactivate: true,
+      reset_password: true,
+      unlock: true,
+    },
   },
   {
     id: "01U_SUSPENDED",
@@ -98,43 +123,13 @@ const SAMPLE_USERS = [
     locked_until: null,
     last_login_at: null,
     assignments: [],
+    abilities: {
+      ...ALL_FALSE_ABILITIES,
+      update: true,
+      reactivate: true,
+    },
   },
 ];
-
-function setupHodContext() {
-  mocks.sessionUser = {
-    id: "01HOD_SELF",
-    name: "HOD Self",
-    assignments: [
-      { role_key: "hod", scope_type: "department", scope_label: "d_ce" },
-    ],
-  };
-
-  mocks.client.users.list.mockResolvedValue({
-    data: [
-      {
-        id: "01HOD_SELF",
-        type: "staff",
-        name: "HOD Self",
-        email: "hod@dev.test",
-        status: "active",
-        must_change_password: false,
-        is_locked: false,
-        assignments: [
-          {
-            id: "01A_HOD",
-            role_key: "hod",
-            role_name: "HOD",
-            scope_type: "department",
-            scope_label: "d_ce",
-          },
-        ],
-      },
-      ...SAMPLE_USERS,
-    ],
-    meta: { current_page: 1, last_page: 1, per_page: 25, total: 4 },
-  });
-}
 
 describe("SuperAdminUsersPage", () => {
   beforeEach(() => {
@@ -144,6 +139,7 @@ describe("SuperAdminUsersPage", () => {
     mocks.sessionUser = {
       id: "01SA",
       name: "IT Head",
+      capabilities: ["identity.user.create"],
       assignments: [
         { role_key: "super_admin", scope_type: "institution", scope_label: "i_carmel" },
       ],
@@ -173,8 +169,6 @@ describe("SuperAdminUsersPage", () => {
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
-
-    expect(screen.queryByText(/awaiting backend support/i)).not.toBeInTheDocument();
 
     const table = screen.getByRole("table");
     const headers = within(table).getAllByRole("columnheader").map((th) => th.textContent);
@@ -220,6 +214,7 @@ describe("SuperAdminUsersPage", () => {
         must_change_password: true,
         is_locked: false,
         assignments: [],
+        abilities: ALL_FALSE_ABILITIES,
         temporary_password: secret,
         expires_at: "2026-11-24T12:00:00Z",
       },
@@ -235,35 +230,27 @@ describe("SuperAdminUsersPage", () => {
     expect(window.location.href).not.toContain(secret);
   }, 15000);
 
-  it("disables Reset temporary password for self and higher-role targets", async () => {
+  it("hides Reset temporary password when abilities.reset_password is false", async () => {
     const user = userEvent.setup();
-    setupHodContext();
-
     renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
-      expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("IT Head").length).toBeGreaterThan(0);
     });
-
-    await user.click(screen.getAllByRole("button", { name: "Actions for HOD Self" })[0]!);
-    const selfReset = await screen.findByRole("menuitem", { name: /reset temporary password/i });
-    expect(selfReset).toHaveAttribute("aria-disabled", "true");
-    await user.keyboard("{Escape}");
 
     await user.click(screen.getAllByRole("button", { name: "Actions for IT Head" })[0]!);
-    const higherReset = await screen.findByRole("menuitem", { name: /reset temporary password/i });
-    expect(higherReset).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByRole("menuitem", { name: /reset temporary password/i })
+    ).not.toBeInTheDocument();
   });
 
-  it("shows Unlock account only for locked accounts", async () => {
+  it("shows Unlock account only when is_locked is true and abilities.unlock is true", async () => {
     const user = userEvent.setup();
-    setupHodContext();
-
     renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
 
-    await user.click(screen.getAllByRole("button", { name: "Actions for HOD Self" })[0]!);
+    await user.click(screen.getAllByRole("button", { name: "Actions for IT Head" })[0]!);
     expect(screen.queryByRole("menuitem", { name: /unlock account/i })).not.toBeInTheDocument();
     await user.keyboard("{Escape}");
 
@@ -273,18 +260,13 @@ describe("SuperAdminUsersPage", () => {
 
   it("surfaces 403 out-of-scope error when resetting temporary password", async () => {
     const user = userEvent.setup();
-    setupHodContext();
-
     renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
     });
 
     await user.click(screen.getAllByRole("button", { name: "Actions for Ananya Menon" })[0]!);
-    const lecReset = await screen.findByRole("menuitem", { name: /reset temporary password/i });
-    expect(lecReset).not.toHaveAttribute("aria-disabled", "true");
-
-    await user.click(lecReset);
+    await user.click(await screen.findByRole("menuitem", { name: /reset temporary password/i }));
     const confirmDialog = await screen.findByRole("alertdialog");
 
     mocks.client.users.resetPassword.mockRejectedValueOnce(
@@ -304,8 +286,6 @@ describe("SuperAdminUsersPage", () => {
 
   it("resets temporary password and shows one-time reveal on 200", async () => {
     const user = userEvent.setup();
-    setupHodContext();
-
     renderWithQueryClient(<SuperAdminUsersPage />);
     await waitFor(() => {
       expect(screen.getAllByText("Ananya Menon").length).toBeGreaterThan(0);
