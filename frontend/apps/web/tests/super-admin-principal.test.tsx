@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
 import { SuperAdminPrincipalPage } from "../src/components/super-admin/SuperAdminPrincipalPage";
@@ -132,7 +133,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
 
     await waitFor(() => {
       expect(
@@ -151,7 +152,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
 
     await waitFor(() => {
       expect(
@@ -177,7 +178,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 0 },
     });
 
-    const { unmount } = render(<SuperAdminPrincipalPage />);
+    const { unmount } = renderWithQueryClient(<SuperAdminPrincipalPage />);
 
     await waitFor(() => {
       expect(
@@ -252,7 +253,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
 
     await waitFor(() => {
       expect(screen.getAllByText("Dr. Former Principal").length).toBeGreaterThan(0);
@@ -270,7 +271,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Replace Principal" })).toBeInTheDocument();
@@ -292,7 +293,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
     const dialog = await openReplaceDialogWithSelection(user);
 
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
@@ -320,7 +321,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
     const dialog = await openReplaceDialogWithSelection(user);
 
     mocks.client.identity.principal.replace.mockRejectedValueOnce(
@@ -357,7 +358,7 @@ describe("SuperAdminPrincipalPage", () => {
       meta: { current_page: 1, last_page: 1, per_page: 25, total: 2 },
     });
 
-    render(<SuperAdminPrincipalPage />);
+    renderWithQueryClient(<SuperAdminPrincipalPage />);
     const dialog = await openReplaceDialogWithSelection(user);
 
     mocks.client.identity.principal.replace.mockResolvedValueOnce({

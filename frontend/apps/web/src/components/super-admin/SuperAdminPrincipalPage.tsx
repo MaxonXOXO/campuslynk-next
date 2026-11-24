@@ -48,6 +48,13 @@ import {
   RiUserAddLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  STALE_TIME_LIST_MS,
+  scopedQueryKey,
+  useApiQuery,
+  useQueryScope,
+} from "@/lib/query/api-query";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { formatDisplayDateTime } from "@/lib/format-date";
@@ -122,16 +129,54 @@ function buildNewUserPayload(fields: NewUserFieldsState) {
 export function SuperAdminPrincipalPage() {
   const client = useApiClient();
   const { state } = useSession();
+  const queryClient = useQueryClient();
+  const scope = useQueryScope();
 
   const institutionScopeLabel = React.useMemo(
     () => getInstitutionScopeLabel(state.user),
     [state.user]
   );
 
-  const [assignments, setAssignments] = React.useState<RoleAssignmentSchema[]>([]);
-  const [staffOptions, setStaffOptions] = React.useState<UserSchema[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
+  const {
+    data: principalData,
+    isPending: loading,
+    error: queryError,
+    refetch,
+  } = useApiQuery<{ assignments: RoleAssignmentSchema[]; staffOptions: UserSchema[] }>({
+    queryKey: ["super-admin", "principal"],
+    staleTime: STALE_TIME_LIST_MS,
+    queryFn: async (api) => {
+      const [assignmentsRes, staffRes] = await Promise.all([
+        api.roleAssignments.list({ role_key: "principal", active_only: false }),
+        api.users.list({ type: "staff", status: "active" }),
+      ]);
+      return {
+        assignments: assignmentsRes.data,
+        staffOptions: staffRes.data,
+      };
+    },
+  });
+
+  const assignments = React.useMemo(
+    () => principalData?.assignments ?? [],
+    [principalData?.assignments]
+  );
+  const staffOptions = React.useMemo(
+    () => principalData?.staffOptions ?? [],
+    [principalData?.staffOptions]
+  );
+  const loadError = queryError
+    ? getGeneralErrorMessage(queryError, "Failed to load Principal assignments.")
+    : null;
+
+  const loadPrincipalData = React.useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "super-admin", "principal") }),
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "super-admin", "overview") }),
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "super-admin", "users") }),
+    ]);
+    await refetch();
+  }, [queryClient, refetch, scope]);
 
   // Appoint form state
   const [appointMode, setAppointMode] = React.useState<AppointMode>("existing");
@@ -168,29 +213,6 @@ export function SuperAdminPrincipalPage() {
       setRevealedTempPassword(null);
     };
   }, []);
-
-  const loadPrincipalData = React.useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-
-    try {
-      const [assignmentsRes, staffRes] = await Promise.all([
-        client.roleAssignments.list({ role_key: "principal", active_only: false }),
-        client.users.list({ type: "staff", status: "active" }),
-      ]);
-
-      setAssignments(assignmentsRes.data);
-      setStaffOptions(staffRes.data);
-    } catch (err: unknown) {
-      setLoadError(getGeneralErrorMessage(err, "Failed to load Principal assignments."));
-    } finally {
-      setLoading(false);
-    }
-  }, [client]);
-
-  React.useEffect(() => {
-    void loadPrincipalData();
-  }, [loadPrincipalData]);
 
   const activePrincipal = React.useMemo(
     () => assignments.find((a) => a.is_active) ?? null,

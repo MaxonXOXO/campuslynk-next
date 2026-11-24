@@ -64,6 +64,21 @@ class UserResource extends JsonResource
             'is_locked' => $isLocked,
             'locked_until' => $isLocked ? $this->resource->locked_until?->toIso8601String() : null,
             'last_login_at' => $this->resource->last_login_at?->toIso8601String(),
+            'first_activated_at' => $this->resource->first_activated_at?->toIso8601String(),
+            'rejected_at' => $this->resource->rejected_at?->toIso8601String(),
+            'staff_profile' => $this->whenLoaded('staffProfile', function () {
+                $profile = $this->resource->staffProfile;
+                if ($profile === null) {
+                    return null;
+                }
+
+                return [
+                    'requested_department_id' => $profile->requested_department_id,
+                    'designation' => $profile->designation,
+                    'employee_id' => $profile->employee_id,
+                    'import_batch_id' => $profile->import_batch_id,
+                ];
+            }),
             'assignments' => $assignments,
             'abilities' => $abilities,
             'created_at' => $this->resource->created_at?->toIso8601String(),

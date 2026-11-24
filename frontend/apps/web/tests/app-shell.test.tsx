@@ -1,6 +1,7 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { WorkspaceShellLayout } from "../src/components/shell/WorkspaceShellLayout";
 import type { SessionUser } from "../src/lib/auth/session-core";
@@ -10,6 +11,13 @@ const mocks = vi.hoisted(() => ({
   router: { push: vi.fn(), replace: vi.fn() },
   logout: vi.fn(async () => undefined),
   user: null as SessionUser | null,
+  client: {
+    identity: {
+      users: {
+        list: vi.fn(async () => ({ data: [], meta: { total: 0 } })),
+      },
+    },
+  },
 }));
 
 vi.mock("next/navigation", () => ({
@@ -34,6 +42,7 @@ vi.mock("@/lib/auth/auth-guard", () => ({
 }));
 
 vi.mock("@/lib/auth/session-provider", () => ({
+  useApiClient: () => mocks.client,
   useSession: () => ({
     state: { status: "authenticated", user: mocks.user },
     controller: { logout: mocks.logout },
@@ -83,7 +92,7 @@ describe("App Shell & Workspace Switcher", () => {
       ],
     };
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="super-admin">
         <div>Overview Body</div>
       </WorkspaceShellLayout>
@@ -122,7 +131,7 @@ describe("App Shell & Workspace Switcher", () => {
       ],
     };
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="principal">
         <div>Principal Body</div>
       </WorkspaceShellLayout>
@@ -151,7 +160,7 @@ describe("App Shell & Workspace Switcher", () => {
       ],
     };
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="hod">
         <div>HOD Body</div>
       </WorkspaceShellLayout>
@@ -264,7 +273,7 @@ describe("App Shell & Workspace Switcher", () => {
       assignments: [{ role_key: "chairman", scope_type: "institution", scope_label: "i_dev" }],
     };
 
-    const { rerender } = render(
+    const { rerender } = renderWithQueryClient(
       <WorkspaceShellLayout workspace="super-admin">
         <div>Protected</div>
       </WorkspaceShellLayout>
@@ -297,7 +306,7 @@ describe("App Shell & Workspace Switcher", () => {
       assignments: [{ role_key: "lecturer", scope_type: "department", scope_label: "d_me" }],
     };
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="super-admin">
         <div>Super Admin Secret</div>
       </WorkspaceShellLayout>

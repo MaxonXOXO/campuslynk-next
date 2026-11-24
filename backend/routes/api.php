@@ -8,6 +8,7 @@ use App\Modules\Identity\Http\Controllers\ImpersonationController;
 use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\PrincipalController;
 use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
+use App\Modules\Identity\Http\Controllers\StaffImportController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
@@ -47,6 +48,7 @@ Route::prefix('v1')->group(function (): void {
 
     // Public Authentication
     Route::post('/auth/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
+    Route::post('/auth/register-staff', [AuthController::class, 'registerStaff'])->name('api.v1.auth.register-staff');
 
     // Authenticated Routes (Sanctum)
     Route::middleware('auth:sanctum')->group(function (): void {
@@ -116,6 +118,29 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/users/{id}/deactivate', [UserController::class, 'deactivate'])
                 ->middleware(RequirePermission::class.':identity.user.deactivate')
                 ->name('api.v1.users.deactivate');
+            Route::post('/users/bulk-approve', [UserController::class, 'bulkApprove'])
+                ->middleware(RequirePermission::class.':identity.user.approve')
+                ->name('api.v1.users.bulk-approve');
+
+            // Identity: Staff Bulk Import & Onboarding
+            Route::get('/staff-imports/template', [StaffImportController::class, 'template'])
+                ->middleware(RequirePermission::class.':identity.user.import')
+                ->name('api.v1.staff-imports.template');
+            Route::post('/staff-imports/preview', [StaffImportController::class, 'preview'])
+                ->middleware(RequirePermission::class.':identity.user.import')
+                ->name('api.v1.staff-imports.preview');
+            Route::post('/staff-imports/{id}/commit', [StaffImportController::class, 'commit'])
+                ->middleware(RequirePermission::class.':identity.user.import')
+                ->name('api.v1.staff-imports.commit');
+            Route::get('/staff-imports/{id}', [StaffImportController::class, 'show'])
+                ->middleware(RequirePermission::class.':identity.user.import')
+                ->name('api.v1.staff-imports.show');
+            Route::get('/staff-imports/{id}/failed-rows', [StaffImportController::class, 'failedRows'])
+                ->middleware(RequirePermission::class.':identity.user.import')
+                ->name('api.v1.staff-imports.failed-rows');
+            Route::post('/staff-imports/{id}/approve', [StaffImportController::class, 'approveBatch'])
+                ->middleware(RequirePermission::class.':identity.user.approve')
+                ->name('api.v1.staff-imports.approve');
 
             // Identity: Principal Governance (Atomic Appointment & Replacement)
             Route::post('/principal/appoint', [PrincipalController::class, 'appoint'])

@@ -7,6 +7,7 @@ namespace App\Modules\Identity\Models;
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Carbon;
@@ -26,7 +27,9 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string|null $status_reason
  * @property Carbon|null $deactivated_at
  * @property string|null $deactivated_by_user_id
+ * @property Carbon|null $rejected_at
  * @property Carbon|null $last_login_at
+ * @property Carbon|null $first_activated_at
  * @property Carbon|null $locked_until
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -77,7 +80,9 @@ class User extends Authenticatable
         'status_reason',
         'deactivated_at',
         'deactivated_by_user_id',
+        'rejected_at',
         'last_login_at',
+        'first_activated_at',
         'locked_until',
     ];
 
@@ -100,8 +105,10 @@ class User extends Authenticatable
         'must_change_password' => 'boolean',
         'temporary_password_expires_at' => 'datetime',
         'last_login_at' => 'datetime',
+        'first_activated_at' => 'datetime',
         'locked_until' => 'datetime',
         'deactivated_at' => 'datetime',
+        'rejected_at' => 'datetime',
         'password' => 'hashed',
     ];
 
@@ -151,6 +158,14 @@ class User extends Authenticatable
     public function roleAssignments(): HasMany
     {
         return $this->hasMany(RoleAssignment::class, 'user_id');
+    }
+
+    /**
+     * @return HasOne<StaffProfile, $this>
+     */
+    public function staffProfile(): HasOne
+    {
+        return $this->hasOne(StaffProfile::class, 'user_id');
     }
 
     protected static function booted(): void

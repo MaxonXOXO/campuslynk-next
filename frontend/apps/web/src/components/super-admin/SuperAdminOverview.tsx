@@ -27,7 +27,7 @@ import {
   RiUserSettingsLine,
 } from "@remixicon/react";
 import type { components } from "@academic-suite/api-client";
-import { useApiClient } from "@/lib/auth/session-provider";
+import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
 import { formatDisplayDate } from "@/lib/format-date";
 import { getGeneralErrorMessage } from "@/app/setup/logic/error-mapping";
 
@@ -40,16 +40,16 @@ interface OverviewState {
 }
 
 export function SuperAdminOverview() {
-  const client = useApiClient();
-  const [data, setData] = React.useState<OverviewState | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
+  const {
+    data,
+    isPending: loading,
+    isRefreshing,
+    error: queryError,
+    refetch,
+  } = useApiQuery<OverviewState>({
+    queryKey: ["super-admin", "overview"],
+    staleTime: STALE_TIME_LIST_MS,
+    queryFn: async (client) => {
       const [setupRes, assignmentsRes, usersRes] = await Promise.all([
         client.setup.status(),
         client.roleAssignments.list({ role_key: "principal", active_only: true }),
@@ -60,27 +60,31 @@ export function SuperAdminOverview() {
       const activePrincipal =
         assignmentsRes.data.find((a) => a.is_active !== false) ?? null;
 
-      setData({
+      return {
         setupCompletedAt: setupData?.completed_at ?? null,
         activePrincipalAssignment: activePrincipal,
         totalUsers: usersRes.meta.total,
-      });
-    } catch (err: unknown) {
-      setError(getGeneralErrorMessage(err, "Failed to load Super Admin overview."));
-    } finally {
-      setLoading(false);
-    }
-  }, [client]);
+      };
+    },
+  });
 
-  React.useEffect(() => {
-    void load();
-  }, [load]);
+  const error = queryError
+    ? getGeneralErrorMessage(queryError, "Failed to load Super Admin overview.")
+    : null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Super Admin Overview"
         description="Manage institutional configuration, Principal appointment, and user accounts."
+        actions={
+          isRefreshing ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <RiRefreshLine className="size-3.5 animate-spin" aria-hidden="true" />
+              Refreshing…
+            </span>
+          ) : undefined
+        }
       />
 
       {loading && (
@@ -96,7 +100,7 @@ export function SuperAdminOverview() {
           <AlertTitle>Unable to load overview</AlertTitle>
           <AlertDescription className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <span>{error}</span>
-            <Button type="button" variant="outline" size="sm" onClick={() => void load()}>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetch()}>
               <RiRefreshLine className="size-4" aria-hidden="true" />
               Retry
             </Button>

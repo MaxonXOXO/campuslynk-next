@@ -2,6 +2,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import { createAppQueryClient } from "../query/api-query";
 import { createBrowserApiClient } from "./browser-client";
 import { createBrowserSessionApi } from "./browser-session-api";
 import { SessionController, type SessionState } from "./session-core";
@@ -27,14 +30,44 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       })
   );
 
+  const [queryClient] = React.useState(() => createAppQueryClient());
   const state = React.useSyncExternalStore(controller.subscribe, controller.getState, controller.getState);
+  const prevUserIdRef = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
     void controller.bootstrap();
   }, [controller]);
 
+  React.useEffect(() => {
+    const currentUserId = state.user?.id;
+    if (state.status === "unauthenticated") {
+      queryClient.clear();
+      prevUserIdRef.current = undefined;
+      return;
+    }
+    if (
+      prevUserIdRef.current !== undefined &&
+      currentUserId !== undefined &&
+      prevUserIdRef.current !== currentUserId
+    ) {
+      queryClient.clear();
+    }
+    if (currentUserId !== undefined) {
+      prevUserIdRef.current = currentUserId;
+    }
+  }, [queryClient, state.status, state.user?.id]);
+
   const value = React.useMemo(() => ({ controller, state }), [controller, state]);
-  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+  return (
+    <SessionContext.Provider value={value}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+        {process.env.NODE_ENV === "development" ? (
+          <ReactQueryDevtools initialIsOpen={false} />
+        ) : null}
+      </QueryClientProvider>
+    </SessionContext.Provider>
+  );
 }
 
 export function useSession(): SessionContextValue {

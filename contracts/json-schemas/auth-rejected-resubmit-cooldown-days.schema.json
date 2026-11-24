@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.campuslynk.net/json-schemas/auth-rejected-resubmit-cooldown-days.schema.json",
+  "title": "AuthRejectedResubmitCooldownDays",
+  "description": "Cooldown in days before a rejected staff self-registration can re-submit.",
+  "type": "object",
+  "properties": {
+    "days": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "value": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}
+

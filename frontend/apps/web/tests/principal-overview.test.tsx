@@ -1,8 +1,9 @@
 import React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PrincipalOverview } from "../src/components/principal/PrincipalOverview";
+import { renderWithQueryClient } from "./helpers/query-wrapper";
 
 const mocks = vi.hoisted(() => ({
   client: {
@@ -19,6 +20,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/auth/session-provider", () => ({
   useApiClient: () => mocks.client,
+  useSession: () => ({
+    state: { status: "authenticated", user: { id: "01PR", assignments: [] } },
+  }),
 }));
 
 vi.mock("next/link", () => ({
@@ -103,13 +107,13 @@ describe("PrincipalOverview", () => {
     mocks.client.identity.roleAssignments.list.mockReturnValue(new Promise(() => undefined));
     mocks.client.organisation.batches.list.mockReturnValue(new Promise(() => undefined));
 
-    const { container } = render(<PrincipalOverview />);
+    const { container } = renderWithQueryClient(<PrincipalOverview />);
     expect(container.querySelector('[aria-busy="true"]')).toBeInTheDocument();
   });
 
   it("renders real KPI cards from list endpoints and includes zero setup-wizard links", async () => {
     mockOverviewSuccess();
-    render(<PrincipalOverview />);
+    renderWithQueryClient(<PrincipalOverview />);
 
     await waitFor(() => {
       expect(screen.getByText("14")).toBeInTheDocument();
@@ -135,7 +139,7 @@ describe("PrincipalOverview", () => {
     mocks.client.identity.roleAssignments.list.mockResolvedValue({ data: [] });
     mocks.client.organisation.batches.list.mockResolvedValue({ data: [], meta: { total: 0 } });
 
-    render(<PrincipalOverview />);
+    renderWithQueryClient(<PrincipalOverview />);
 
     expect(await screen.findByText("Unable to load overview")).toBeInTheDocument();
     expect(screen.getByText("Service unavailable")).toBeInTheDocument();
@@ -160,7 +164,7 @@ describe("PrincipalOverview", () => {
       batchesTotal: 0,
     });
 
-    render(<PrincipalOverview />);
+    renderWithQueryClient(<PrincipalOverview />);
 
     expect(
       await screen.findByText(/no user accounts found yet/i)
@@ -172,7 +176,7 @@ describe("PrincipalOverview", () => {
     const user = userEvent.setup();
     mockOverviewSuccess({ staff: 15, student: 200, parent: 180 });
 
-    render(<PrincipalOverview />);
+    renderWithQueryClient(<PrincipalOverview />);
 
     expect(await screen.findByTestId("mock-users-chart")).toBeInTheDocument();
 

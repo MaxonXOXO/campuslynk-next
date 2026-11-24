@@ -45,6 +45,13 @@ import {
   RiUserSettingsLine,
 } from "@remixicon/react";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  STALE_TIME_REFERENCE_MS,
+  scopedQueryKey,
+  useApiQuery,
+  useQueryScope,
+} from "@/lib/query/api-query";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { isAssignmentActive } from "@/lib/workspaces/workspaces";
@@ -139,22 +146,67 @@ function mapAssignmentError(err: unknown, fallback: string): string {
 export function PrincipalDepartmentsPage() {
   const client = useApiClient();
   const { state: sessionState } = useSession();
-
-  const streamsApi = client.organisation?.streams ?? client.streams;
-  const departmentsApi = client.organisation?.departments ?? client.departments;
-  const batchesApi = client.organisation?.batches ?? client.batches;
+  const queryClient = useQueryClient();
+  const scope = useQueryScope();
   const roleAssignmentsApi =
     client.identity?.roleAssignments ?? client.roleAssignments;
-  const usersApi = client.identity?.users ?? client.users;
 
-  const [streams, setStreams] = React.useState<StreamSchema[]>([]);
-  const [departments, setDepartments] = React.useState<DepartmentRow[]>([]);
-  const [batches, setBatches] = React.useState<BatchRow[]>([]);
-  const [assignments, setAssignments] = React.useState<RoleAssignmentSchema[]>([]);
-  const [staffUsers, setStaffUsers] = React.useState<UserSchema[]>([]);
+  const {
+    data: deptData,
+    isPending: loading,
+    error: queryError,
+    refetch,
+  } = useApiQuery<{
+    streams: StreamSchema[];
+    departments: DepartmentRow[];
+    batches: BatchRow[];
+    assignments: RoleAssignmentSchema[];
+    staffUsers: UserSchema[];
+  }>({
+    queryKey: ["principal", "departments"],
+    staleTime: STALE_TIME_REFERENCE_MS,
+    queryFn: async (api) => {
+      const streamsApi = api.organisation?.streams ?? api.streams;
+      const departmentsApi = api.organisation?.departments ?? api.departments;
+      const batchesApi = api.organisation?.batches ?? api.batches;
+      const roleAssignments = api.identity?.roleAssignments ?? api.roleAssignments;
+      const usersApi = api.identity?.users ?? api.users;
 
-  const [loading, setLoading] = React.useState(true);
-  const [loadError, setLoadError] = React.useState<string | null>(null);
+      const [streamsRes, deptsRes, batchesRes, assignmentsRes, staffRes] =
+        await Promise.all([
+          streamsApi.list(),
+          departmentsApi.list(),
+          batchesApi.list(),
+          roleAssignments.list({ active_only: true }),
+          usersApi.list({ type: "staff", status: "active" }),
+        ]);
+
+      return {
+        streams: streamsRes.data ?? [],
+        departments: (deptsRes as { data?: DepartmentRow[] }).data ?? [],
+        batches: (batchesRes as { data?: BatchRow[] }).data ?? [],
+        assignments: (assignmentsRes.data ?? []).filter((a) => a.is_active !== false),
+        staffUsers: staffRes.data ?? [],
+      };
+    },
+  });
+
+  const streams = React.useMemo(() => deptData?.streams ?? [], [deptData?.streams]);
+  const departments = React.useMemo(() => deptData?.departments ?? [], [deptData?.departments]);
+  const batches = React.useMemo(() => deptData?.batches ?? [], [deptData?.batches]);
+  const assignments = React.useMemo(() => deptData?.assignments ?? [], [deptData?.assignments]);
+  const staffUsers = React.useMemo(() => deptData?.staffUsers ?? [], [deptData?.staffUsers]);
+  const loadError = queryError
+    ? getGeneralErrorMessage(queryError, "Failed to load departments and leadership.")
+    : null;
+
+  const loadData = React.useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "principal", "departments") }),
+      queryClient.invalidateQueries({ queryKey: scopedQueryKey(scope, "principal", "overview") }),
+    ]);
+    await refetch();
+  }, [queryClient, refetch, scope]);
 
   // Manage Leadership Dialog state
   const [selectedDept, setSelectedDept] = React.useState<DepartmentRow | null>(null);
@@ -185,40 +237,6 @@ export function PrincipalDepartmentsPage() {
     );
     return match?.scope_label ?? "";
   }, [sessionState.user?.assignments]);
-
-  const loadData = React.useCallback(async () => {
-    setLoading(true);
-    setLoadError(null);
-
-    try {
-      const [streamsRes, deptsRes, batchesRes, assignmentsRes, staffRes] =
-        await Promise.all([
-          streamsApi.list(),
-          departmentsApi.list(),
-          batchesApi.list(),
-          roleAssignmentsApi.list({ active_only: true }),
-          usersApi.list({ type: "staff", status: "active" }),
-        ]);
-
-      setStreams(streamsRes.data ?? []);
-      setDepartments((deptsRes as { data?: DepartmentRow[] }).data ?? []);
-      setBatches((batchesRes as { data?: BatchRow[] }).data ?? []);
-      setAssignments(
-        (assignmentsRes.data ?? []).filter((a) => a.is_active !== false)
-      );
-      setStaffUsers(staffRes.data ?? []);
-    } catch (err: unknown) {
-      setLoadError(
-        getGeneralErrorMessage(err, "Failed to load departments and leadership.")
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [streamsApi, departmentsApi, batchesApi, roleAssignmentsApi, usersApi]);
-
-  React.useEffect(() => {
-    void loadData();
-  }, [loadData]);
 
   const streamById = React.useMemo(() => {
     const map = new Map<string, StreamSchema>();

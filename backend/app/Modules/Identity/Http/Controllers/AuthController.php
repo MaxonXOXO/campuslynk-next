@@ -4,16 +4,23 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Core\Http\ProblemDetails;
+use App\Core\Tenancy\TenantContext;
 use App\Modules\Identity\Actions\ChangePasswordAction;
 use App\Modules\Identity\Actions\LoginAction;
 use App\Modules\Identity\Actions\LogoutAction;
+use App\Modules\Identity\Actions\RegisterStaffAction;
 use App\Modules\Identity\Http\Requests\ChangePasswordRequest;
 use App\Modules\Identity\Http\Requests\LoginRequest;
+use App\Modules\Identity\Http\Requests\RegisterStaffRequest;
 use App\Modules\Identity\Http\Resources\UserResource;
 use App\Modules\Identity\Models\PersonalAccessToken;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Models\UserIdentifier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
+use Symfony\Component\HttpFoundation\Response;
 
 class AuthController
 {
@@ -114,5 +121,88 @@ class AuthController
                 'self' => url('/api/v1/auth/password/change'),
             ],
         ]);
+    }
+
+    /**
+     * Public self-registration for staff accounts (behind tenant setting + rate limits, always 202 to avoid enumeration).
+     */
+    public function registerStaff(
+        RegisterStaffRequest $request,
+        RegisterStaffAction $action,
+        TenantContext $tenantContext,
+    ): JsonResponse {
+        if (! $action->isSelfRegistrationEnabled()) {
+            return ProblemDetails::response(
+                title: 'Forbidden',
+                detail: 'Staff self-registration is not enabled for this institution.',
+                status: Response::HTTP_FORBIDDEN,
+                type: ProblemDetails::type('self-registration-disabled'),
+            );
+        }
+
+        $tenant = $tenantContext->tenant();
+        $ip = (string) $request->ip();
+        $ipKey = "staff_reg:ip:{$tenant->id}:".hash('sha256', $ip);
+
+        if (RateLimiter::tooManyAttempts($ipKey, 10)) {
+            $retryAfter = RateLimiter::availableIn($ipKey);
+
+            return ProblemDetails::response(
+                title: 'Too Many Requests',
+                detail: 'Too many registration attempts. Please try again later.',
+                status: Response::HTTP_TOO_MANY_REQUESTS,
+                type: ProblemDetails::type('rate-limited'),
+            )->header('Retry-After', (string) $retryAfter);
+        }
+
+        $email = $request->validated('email');
+        $mobile = $request->validated('mobile');
+        $handleKey = null;
+        if (is_string($email) && trim($email) !== '') {
+            $handleKey = "staff_reg:id:{$tenant->id}:".hash('sha256', UserIdentifier::normalise($email, 'email'));
+        } elseif (is_string($mobile) && trim($mobile) !== '') {
+            $handleKey = "staff_reg:id:{$tenant->id}:".hash('sha256', UserIdentifier::normalise($mobile, 'mobile'));
+        }
+
+        if ($handleKey !== null && RateLimiter::tooManyAttempts($handleKey, 3)) {
+            $retryAfter = RateLimiter::availableIn($handleKey);
+
+            return ProblemDetails::response(
+                title: 'Too Many Requests',
+                detail: 'Too many registration attempts. Please try again later.',
+                status: Response::HTTP_TOO_MANY_REQUESTS,
+                type: ProblemDetails::type('rate-limited'),
+            )->header('Retry-After', (string) $retryAfter);
+        }
+
+        if ($action->dailyPendingCount() >= $action->dailyPendingCap()) {
+            return ProblemDetails::response(
+                title: 'Too Many Requests',
+                detail: 'Daily pending staff registration capacity has been reached.',
+                status: Response::HTTP_TOO_MANY_REQUESTS,
+                type: ProblemDetails::type('daily-registration-cap'),
+            );
+        }
+
+        RateLimiter::hit($ipKey, 3600);
+        if ($handleKey !== null) {
+            RateLimiter::hit($handleKey, 3600);
+        }
+
+        /** @var array{name: string, email?: string|null, mobile?: string|null, password: string, requested_department_id?: string|null, designation?: string|null, employee_id?: string|null, website?: string|null} $validated */
+        $validated = $request->validated();
+        $action->execute($validated, $ip);
+
+        return response()->json([
+            'data' => [
+                'message' => 'If your details are eligible, your registration has been submitted for approval.',
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url('/api/v1/auth/register-staff'),
+            ],
+        ], Response::HTTP_ACCEPTED, ['Cache-Control' => 'no-store']);
     }
 }
