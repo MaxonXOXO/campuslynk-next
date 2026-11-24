@@ -184,6 +184,88 @@ describe("App Shell & Workspace Switcher", () => {
     expect(mocks.router.push).toHaveBeenCalledWith("/w/teaching");
   });
 
+  it("renders the theme switcher directly above Collapse sidebar and adapts when collapsed", async () => {
+    const user = userEvent.setup();
+    mocks.user = {
+      id: "01SA",
+      name: "IT Head",
+      email: "it@dev.test",
+      assignments: [
+        { role_key: "super_admin", scope_type: "institution", scope_label: "i_dev" },
+      ],
+    };
+
+    const startViewTransitionMock = vi.fn((cb: () => void) => {
+      cb();
+      return {
+        ready: Promise.resolve(),
+        finished: Promise.resolve(),
+      };
+    });
+    Object.defineProperty(document, "startViewTransition", {
+      configurable: true,
+      writable: true,
+      value: startViewTransitionMock,
+    });
+    Object.defineProperty(document.documentElement, "animate", {
+      configurable: true,
+      writable: true,
+      value: vi.fn(() => ({ cancel: vi.fn() })),
+    });
+
+    renderWithQueryClient(
+      <WorkspaceShellLayout workspace="super-admin">
+        <div>Overview Body</div>
+      </WorkspaceShellLayout>
+    );
+
+    const themeSwitch = screen.getByRole("switch", { name: /switch to dark mode/i });
+    const collapseBtn = screen.getByRole("button", { name: /collapse sidebar/i });
+    expect(
+      themeSwitch.compareDocumentPosition(collapseBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    await user.click(themeSwitch);
+    expect(startViewTransitionMock).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+
+    await user.click(collapseBtn);
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /switch to dark mode/i })).toBeInTheDocument();
+  });
+
+  it("renders search bar and notifications panel button to the left of the profile pill", async () => {
+    const user = userEvent.setup();
+    mocks.user = {
+      id: "01SA",
+      name: "IT Head",
+      email: "it@dev.test",
+      assignments: [
+        { role_key: "super_admin", scope_type: "institution", scope_label: "i_dev" },
+      ],
+    };
+
+    renderWithQueryClient(
+      <WorkspaceShellLayout workspace="super-admin">
+        <div>Overview Body</div>
+      </WorkspaceShellLayout>
+    );
+
+    const searchInput = screen.getByRole("searchbox", { name: "Search" });
+    const notificationsBtn = screen.getByRole("button", { name: "Notifications" });
+    const accountBtn = screen.getByRole("button", { name: "Account menu" });
+
+    expect(
+      searchInput.compareDocumentPosition(notificationsBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      notificationsBtn.compareDocumentPosition(accountBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+
+    await user.click(notificationsBtn);
+    expect(await screen.findByText("No new notifications")).toBeInTheDocument();
+  });
+
   it("renders forbidden state when a user with only a deferred/dropped role (chairman or admin) visits /w/<slug>", () => {
     mocks.user = {
       id: "01CH",
