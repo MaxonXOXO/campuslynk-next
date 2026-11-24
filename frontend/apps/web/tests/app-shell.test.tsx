@@ -213,7 +213,7 @@ describe("App Shell & Workspace Switcher", () => {
       value: vi.fn(() => ({ cancel: vi.fn() })),
     });
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="super-admin">
         <div>Overview Body</div>
       </WorkspaceShellLayout>
@@ -245,7 +245,7 @@ describe("App Shell & Workspace Switcher", () => {
       ],
     };
 
-    render(
+    renderWithQueryClient(
       <WorkspaceShellLayout workspace="super-admin">
         <div>Overview Body</div>
       </WorkspaceShellLayout>

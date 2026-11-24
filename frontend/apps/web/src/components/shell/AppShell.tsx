@@ -7,6 +7,7 @@ import {
   AnimatedThemeToggler,
   Avatar,
   AvatarFallback,
+  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
