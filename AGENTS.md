@@ -2,6 +2,9 @@
 
 > Authoritative engineering standard for CampusLynk Academic Suite. All AI agents, contributors, and automated pipelines must follow these non-negotiable rules.
 
+Never merge pull requests, never push to main, no bypasses or force pushes to
+main. Open the PR, report the check results, and stop. The owner merges.
+
 ---
 
 ## 1. Core Architecture & Non-Negotiables

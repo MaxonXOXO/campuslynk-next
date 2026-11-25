@@ -13,6 +13,7 @@
 7. [Section 6: Exhaustive Business Rules & Hard-Coded Thresholds](#section-6-exhaustive-business-rules--hard-coded-thresholds)
 8. [Section 7: Integrations & Jobs](#section-7-integrations--jobs)
 9. [Section 8: Architectural & Codebase Pain Points](#section-8-pain-points)
+10. [Section 9: Delta Update (`51ed7939..380e9f93`)](#section-9-delta-update-51ed7939380e9f93)
 
 ---
 
@@ -2318,7 +2319,6 @@ Every role dashboard view, companion mobile view, and subject virtual classroom 
   - Dynamic Role Switcher Links (`:952-1010`): Conditionally renders links to `Tutor Console` (`/dashboard/tutor`), `HOD Console` (`/dashboard/hod`), `Course Files Hub` (`/course-files`), `Remedial Classrooms` (`/virtual-classroom/remedial`), `Online Tests` (`/lecturer/online-tests`), and `Staff Mobile App` (`/staff/mobile`).
   - `My Profile & Security` (`#navSecurity`, `onclick="switchPanel('security')"`, `:1013-1015`)
   - `Remote Support Assist` (`onclick="openStaffSupportModal()"`, `:1025`)
-- **Panels & Embedded R2021 Virtual Classroom Workspace in `lecturer_dashboard.blade.php`**:
   1. **Panel 1 — Dashboard / Batch Cards (`#panelDashboard`, `:1067-1093`)**: Renders allocated subject cards across batches; clicking a card invokes `openClassroom(...)` (`:2333`), which either routes to a dedicated R2026/R2021 specialized classroom URL or opens the embedded `#panelClassroom` workspace.
   2. **Panel 2 — Embedded R2021 Theory/Practical/Seminar Virtual Classroom (`#panelClassroom`, `:1095-1804`)**:
      - **Card 1: Subject Header (`:1097-1141`)**, **Card 2: Academic Metadata Row (`:1142-1156`)**, and **Card 3: 10-Tab Horizontal Navigation Strip (`:1157-1190`)**:
@@ -4291,3 +4291,45 @@ The root directory `carmel-linx-laravel/` is polluted with **168 non-framework f
 | Runtime creation of `scratch_r26_dump.py` inside HTTP controller | `app/Http/Controllers/R26VirtualClassroomPracticalController.php:450-459` | Writes a Python script to `storage/app/scratch_r26_dump.py` on the fly during syllabus upload and executes it via `shell_exec()`. |
 | Unescaped `$sitePkg` interpolation in `shell_exec` Python command | `app/Http/Controllers/R26ClassroomController.php:542-543` | Interpolates `$sitePkg` (`getenv('APPDATA') . '\\Python\\Python314\\site-packages'`, `line 539`) directly into a double-quoted `python3 -c "..."` string passed to `shell_exec()` (`line 543`), with a hardcoded Python 3.14 Windows path. |
 | TLS verification disabled on Gemini API call | `app/Http/Controllers/ClassroomController.php:4963` | Calls `Http::withoutVerifying()->timeout(60)->post(...)` when sending prompts and API key to Google's Gemini endpoint. |
+
+---
+
+# Section 9: Delta Update (`51ed7939..380e9f93`)
+
+> **Commits Covered**: `f67e0ca6`, `10f75638`, `c24c2d06`, `5d77e5b8`, `380e9f93` (pulled into `carmel-linx-legacy/academic-platform/carmel-linx-laravel`).
+
+## 9.1 New Feature: R21 Semester 6 Open Elective (OE) Management & Allocation System
+- **Models & Migrations**:
+  - `App\Models\OeCourse` (`app/Models/OeCourse.php`), `App\Models\OeRegistration` (`app/Models/OeRegistration.php`), `App\Models\OeSetting` (`app/Models/OeSetting.php`), `App\Models\OeVirtualClassroom` (`app/Models/OeVirtualClassroom.php`)
+  - `database/migrations/2026_11_15_130000_create_r21_s6_open_elective_tables.php`
+  - `database/migrations/2026_11_16_000000_update_oe_courses_and_classrooms_schema.php`
+- **Role-Based Routes & Controllers (`routes/web.php`)**:
+  - **Super Admin & Principal (`OpenElectiveAdminController`)**:
+    - `GET /admin/open-elective` — Central Open Elective management desk (`resources/views/open_elective/admin_index.blade.php`)
+    - `POST /admin/open-elective/courses/save`, `POST /admin/open-elective/courses/{id}/delete`
+    - `POST /admin/open-elective/settings/save`
+    - `POST /admin/open-elective/broadcast-notification`, `POST /admin/open-elective/notify-resubmit`
+    - `GET /admin/open-elective/allocation-data`, `POST /admin/open-elective/auto-allocate`, `POST /admin/open-elective/manual-override`
+    - `POST /admin/open-elective/release-to-hods`, `POST /admin/open-elective/reset-trial-data`
+    - `GET /admin/open-elective/export-roster/{courseId}` (`nominal_roll_print.blade.php`)
+    - `GET /admin/open-elective/print-first-options` — Subject-wise first-option status view & printable FCFS queue report (`first_option_list_print.blade.php`)
+  - **Student (`OpenElectiveStudentController`)**:
+    - `GET /student/open-elective`, `POST /student/open-elective/submit`, `GET /student/open-elective/print-slip` (`student_registration.blade.php`, `student_option_chart_print.blade.php`)
+  - **Department HOD (`OpenElectiveHodController`)**:
+    - `GET /hod/open-elective`, `POST /hod/open-elective/save-offering`, `POST /hod/open-elective/assign-faculty` (`hod_index.blade.php`, `hod_locked.blade.php`)
+
+## 9.2 R26 Virtual Classrooms, Workshop & Reporting Enhancements
+- **Workshop Superintendent & 2009 Workshop Lab Scheme**:
+  - Updated `routes/web.php` (`/dashboard/workshop`) to support `Workshop_Superintendent`, `Admin`, `Superadmin`, and `Principal` previewing with fallback to `Workshop_Superintendent` profile, ordering `REV2026` subjects first and loading co-faculty assignments (`resources/views/workshop_superintendent_dashboard.blade.php`).
+  - Added 2009 workshop lab scheme support and synced R26 practical marks (`R26VirtualClassroomPracticalController`, `R26VirtualClassroomPracticumController`, `R26VirtualClassroomDrawingController`).
+- **New R26 & R21 Virtual Classroom Endpoints (`routes/web.php`)**:
+  - `POST /api/r26/classroom/practical/{subjectId}/lesson-plans/sync-dates` (`R26VirtualClassroomPracticalController::syncLessonPlanDatesFromLogs`)
+  - `POST /api/r26/classroom/practical/{subjectId}/evaluate/ce-bulk` (`R26VirtualClassroomPracticalController::saveCeBulkDirect`)
+  - `POST /api/r26/classroom/health-physical/{subjectId}/attendance/override` (`R26VirtualClassroomHealthPhysicalController::saveAttendanceOverride`)
+  - `POST /api/r26/classroom/health-physical/{subjectId}/cie-register/save` (`R26VirtualClassroomHealthPhysicalController::saveCieRegister`)
+  - `GET /r21/classroom/seminar/{subjectId}/attainment/summary` (`R21VirtualClassroomSeminarController::getAttainmentSummary`)
+  - Fixed `3023` theory virtual class routing (`/classroom/theory/{subjectId}` and `/r21/classroom/theory/{subjectId}`) to redirect `REV2026` subjects to `/r26/classroom/theory/{subjectId}` and `REV2021` subjects to `/dashboard/lecturer`.
+
+## 9.3 Academic, Tutor & Attendance Updates
+- **Semester Range & Dropout Exclusion**: Updated semester range to `1-6`, added attendance dropout exclusion (`AttendanceController.php`, `Student.php`).
+- **Lecturer & Tutor Enhancements**: Added lecturer upcoming classes switcher (`lecturer_dashboard.blade.php`), and sorted Tutor progress report subjects according to official hierarchy (`TutorController.php`, `tutor/progress_report_card_print.blade.php`, `tutor/progress_report_consolidated_print.blade.php`).
