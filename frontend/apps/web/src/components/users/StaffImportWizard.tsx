@@ -40,7 +40,7 @@ import {
 } from "@remixicon/react";
 import { toast } from "sonner";
 import { useApiMutation, useApiQuery } from "@/lib/query/api-query";
-import { useSession } from "@/lib/auth/session-provider";
+import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { getGeneralErrorMessage } from "@/app/setup/logic/error-mapping";
 
@@ -92,6 +92,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
   const resumeBatchId = searchParams.get("batch");
 
   const { state: sessionState } = useSession();
+  const apiClient = useApiClient();
   const capabilities = React.useMemo(
     () => new Set(sessionState.user?.capabilities ?? []),
     [sessionState.user?.capabilities]
@@ -105,6 +106,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
   const [previewRows, setPreviewRows] = React.useState<PreviewRow[]>([]);
   const [autoApprove, setAutoApprove] = React.useState(false);
   const [commitError, setCommitError] = React.useState<string | null>(null);
+  const [committing, setCommitting] = React.useState(false);
   const [needsPasswordReentry, setNeedsPasswordReentry] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [approveSummary, setApproveSummary] = React.useState<BulkApproveData | null>(null);
@@ -180,24 +182,6 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
     mutationFn: (api, file: File) => api.identity.staffImports.preview(file),
   });
 
-  const commitMutation = useApiMutation({
-    mutationFn: (
-      api,
-      args: {
-        id: string;
-        common_password: string;
-        auto_approve: boolean;
-        idempotency_key: string;
-      }
-    ) =>
-      api.identity.staffImports.commit(args.id, {
-        common_password: args.common_password,
-        auto_approve: args.auto_approve,
-        idempotency_key: args.idempotency_key,
-      }),
-    invalidateKeys: [["staff-imports", "batch"]],
-  });
-
   const failedRowsMutation = useApiMutation({
     mutationFn: (api, id: string) => api.identity.staffImports.failedRows(id),
   });
@@ -253,7 +237,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
 
   async function handleCommitSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!currentBatch || commitMutation.isPending) return;
+    if (!currentBatch || committing) return;
 
     const rawPassword = passwordRef.current?.value ?? "";
     // Immediately wipe the DOM input before dispatching the network request.
@@ -267,10 +251,12 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
 
     setCommitError(null);
     setNeedsPasswordReentry(false);
+    setCommitting(true);
 
     try {
-      const res = (await commitMutation.mutateAsync({
-        id: currentBatch.id,
+      // Direct client call (outside TanStack MutationCache) so common_password
+      // is never retained in mutation.state.variables.
+      const res = (await apiClient.identity.staffImports.commit(currentBatch.id, {
         common_password: rawPassword,
         auto_approve: canApprove ? autoApprove : false,
         idempotency_key: idempotencyKeyRef.current,
@@ -278,9 +264,18 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
       setPreviewBatch(res.data);
       setStep(4);
     } catch (err: unknown) {
-      setCommitError(getGeneralErrorMessage(err, "Failed to commit staff import."));
-      setNeedsPasswordReentry(true);
+      if (problemStatus(err) === 409) {
+        setCommitError(
+          "This import batch has already been committed or is currently processing. View its progress or start a new import."
+        );
+        setNeedsPasswordReentry(false);
+      } else {
+        setCommitError(getGeneralErrorMessage(err, "Failed to commit staff import."));
+        setNeedsPasswordReentry(true);
+      }
       errorAlertRef.current?.focus();
+    } finally {
+      setCommitting(false);
     }
   }
 
@@ -589,7 +584,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
                   ref={passwordRef}
                   type="password"
                   autoComplete="new-password"
-                  disabled={commitMutation.isPending}
+                  disabled={committing}
                   required
                 />
               </div>
@@ -600,7 +595,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
                     id="batch-auto-approve"
                     checked={autoApprove}
                     onCheckedChange={(checked) => setAutoApprove(checked === true)}
-                    disabled={commitMutation.isPending}
+                    disabled={committing}
                   />
                   <Label htmlFor="batch-auto-approve" className="text-sm font-normal">
                     Approve on import (starts the 48-hour temporary password window immediately)
@@ -613,12 +608,12 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
                   type="button"
                   variant="outline"
                   onClick={() => setStep(2)}
-                  disabled={commitMutation.isPending}
+                  disabled={committing}
                 >
                   Back
                 </Button>
-                <Button type="submit" disabled={commitMutation.isPending}>
-                  {commitMutation.isPending ? (
+                <Button type="submit" disabled={committing}>
+                  {committing ? (
                     <>
                       <RiLoader4Line className="size-4 animate-spin" aria-hidden="true" />
                       Committing...

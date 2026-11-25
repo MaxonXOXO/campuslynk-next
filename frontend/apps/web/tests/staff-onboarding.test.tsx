@@ -9,6 +9,7 @@ import { UserDirectory } from "../src/components/users/UserDirectory";
 import RegisterStaffPage from "../src/app/register-staff/page";
 import LoginPage from "../src/app/login/page";
 import { registerStaffFlow } from "../src/lib/server/auth-flow";
+import { flowResponse } from "../src/lib/server/route-utils";
 
 const mocks = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -345,6 +346,38 @@ describe("Staff Onboarding UI", () => {
     expect(secondKey).toBe(firstKey);
   });
 
+  // 6b
+  it("shows a clear message on 409 double-commit conflict", async () => {
+    mocks.searchParams = new URLSearchParams("batch=01BATCH_409");
+    mocks.client.identity.staffImports.get.mockResolvedValue({
+      data: {
+        id: "01BATCH_409",
+        filename: "staff.csv",
+        status: "previewed",
+        auto_approve: false,
+        total_rows: 1,
+        valid_rows: 1,
+        duplicate_rows: 0,
+        invalid_rows: 0,
+        created_count: 0,
+        skipped_duplicate_count: 0,
+        failed_count: 0,
+      },
+    });
+    mocks.client.identity.staffImports.commit.mockRejectedValueOnce(
+      new ApiError({ type: "about:blank", title: "Conflict", status: 409 })
+    );
+
+    const user = userEvent.setup();
+    renderWithQueryClient(<StaffImportWizard usersHref="/w/principal/users" />);
+
+    const pwInput = (await screen.findByLabelText(/Common temporary password/i)) as HTMLInputElement;
+    await user.type(pwInput, "TempBatch#2026!");
+    await user.click(screen.getByRole("button", { name: /Commit Import/i }));
+
+    await screen.findByText(/already been committed or is currently processing/i);
+  });
+
   // 7
   it("resumes a completed batch at step 4 and downloads failed rows CSV", async () => {
     mocks.searchParams = new URLSearchParams("batch=01BATCH_DONE");
@@ -494,6 +527,11 @@ describe("Staff Onboarding UI", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(/Assign a leadership role to Self Reg Staff/i)).toBeTruthy();
 
+    // Department picker has no prefill and is enabled/selectable
+    const deptTrigger = within(dialog).getByRole("combobox", { name: /Department/i });
+    expect(deptTrigger.hasAttribute("disabled")).toBe(false);
+    expect(within(dialog).getByText(/Select department/i)).toBeTruthy();
+
     // Without selecting a department, validation requires choosing one
     await user.click(within(dialog).getByRole("button", { name: /^Appoint Role$/i }));
     await within(dialog).findByText(/Select a department for this role/i);
@@ -534,6 +572,39 @@ describe("Staff Onboarding UI", () => {
     expect(JSON.stringify(res.body)).not.toContain("SecretPassword#2026");
     const sentBody = JSON.parse(fetchMock.mock.calls[0]?.[1]?.body as string) as Record<string, unknown>;
     expect(sentBody.requested_department_id).toBeNull();
+  });
+
+  // 12b
+  it("forwards Retry-After header from backend 429 through registerStaffFlow and flowResponse", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ status: 429, title: "Too Many Requests" }), {
+        status: 429,
+        headers: {
+          "Content-Type": "application/problem+json",
+          "Retry-After": "120",
+        },
+      })
+    );
+
+    const res = await registerStaffFlow(
+      {
+        config: {
+          backendBaseUrl: "http://backend.test",
+          tenant: "tenant_demo",
+          deviceName: "web",
+          isProduction: false,
+          allowedOrigins: [],
+        },
+        fetchFn: fetchMock,
+        cookies: { get: vi.fn(), set: vi.fn(), delete: vi.fn() },
+      },
+      { name: "Asha", email: "asha@test.edu", password: "SecretPassword#2026" }
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.retryAfter).toBe("120");
+    const httpRes = flowResponse(res);
+    expect(httpRes.headers.get("Retry-After")).toBe("120");
   });
 
   // 13
