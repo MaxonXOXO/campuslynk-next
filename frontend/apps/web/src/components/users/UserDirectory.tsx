@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { components } from "@academic-suite/api-client";
 import {
   Alert,
@@ -16,6 +18,7 @@ import {
   AlertTitle,
   Badge,
   Button,
+  buttonVariants,
   Card,
   CardContent,
   Checkbox,
@@ -73,6 +76,8 @@ import {
   RiMoreLine,
   RiRefreshLine,
   RiSearchLine,
+  RiShieldUserLine,
+  RiUploadCloud2Line,
   RiUserAddLine,
   RiUserFollowLine,
   RiUserUnfollowLine,
@@ -95,6 +100,7 @@ import {
   TemporaryPasswordReveal,
   type TemporaryPasswordPayload,
 } from "@/components/super-admin/TemporaryPasswordReveal";
+import { LeadershipAppointDialog } from "@/components/principal/LeadershipAppointDialog";
 
 type UserSchema = components["schemas"]["UserSchema"];
 type PaginationMeta = components["schemas"]["PaginationMeta"];
@@ -190,6 +196,10 @@ export function UserDirectory({
   description = "Search and manage user accounts, roles, temporary passwords, and login lockouts.",
 }: UserDirectoryProps) {
   const { state: sessionState } = useSession();
+  const pathname = usePathname();
+  const importHref = pathname?.startsWith("/w/super-admin")
+    ? "/w/super-admin/users/import"
+    : "/w/principal/users/import";
 
   const capabilities = React.useMemo(
     () => new Set(sessionState.user?.capabilities ?? []),
@@ -197,6 +207,9 @@ export function UserDirectory({
   );
 
   const canCreateUser = capabilities.has("identity.user.create");
+  const canImportStaff = capabilities.has("identity.user.import");
+  const canAppointRole = capabilities.has("identity.role_assignment.create");
+  const canResetPassword = capabilities.has("identity.user.reset_password");
   const canApproveFromCapabilities =
     capabilities.has("identity.user.approve") ||
     capabilities.has("identity.user.reject");
@@ -208,11 +221,14 @@ export function UserDirectory({
   const [appliedSearch, setAppliedSearch] = React.useState("");
   const [typeFilter, setTypeFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [directoryTab, setDirectoryTab] = React.useState<"all" | "pending" | "not_activated">("all");
+  const [expiredTempOnly, setExpiredTempOnly] = React.useState(false);
   const [page, setPage] = React.useState(1);
 
   // Bulk selection & results for Pending view
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(() => new Set());
   const [bulkResult, setBulkResult] = React.useState<BulkApproveData | null>(null);
+  const [appointingUser, setAppointingUser] = React.useState<UserSchema | null>(null);
 
   const {
     data: usersData,
@@ -228,6 +244,8 @@ export function UserDirectory({
         search: appliedSearch.trim(),
         type: typeFilter,
         status: statusFilter,
+        tab: directoryTab,
+        expiredTempOnly,
       },
     ],
     staleTime: STALE_TIME_LIST_MS,
@@ -236,7 +254,16 @@ export function UserDirectory({
       const query: Record<string, string | number | boolean> = { page };
       if (appliedSearch.trim()) query.search = appliedSearch.trim();
       if (typeFilter !== "all") query.type = typeFilter;
-      if (statusFilter !== "all") query.status = statusFilter;
+      if (directoryTab === "pending") {
+        query.status = "pending";
+      } else if (directoryTab === "not_activated") {
+        query.must_change_password = true;
+        if (expiredTempOnly) {
+          query.expired_temp_password = true;
+        }
+      } else if (statusFilter !== "all") {
+        query.status = statusFilter;
+      }
       return apiUsers.list(query);
     },
   });
@@ -256,8 +283,13 @@ export function UserDirectory({
     () => users.some((u) => u.abilities?.approve || u.abilities?.reject),
     [users]
   );
-  const showPendingTab = canApproveFromCapabilities || hasApproverAbilityInRows || statusFilter === "pending";
-  const isPendingTab = statusFilter === "pending";
+  const showPendingTab = canApproveFromCapabilities || hasApproverAbilityInRows || directoryTab === "pending";
+  const showNotActivatedTab =
+    canResetPassword ||
+    users.some((u) => u.abilities?.reset_password) ||
+    directoryTab === "not_activated";
+  const isPendingTab = directoryTab === "pending";
+  const isNotActivatedTab = directoryTab === "not_activated";
 
   const { data: departmentsData } = useApiQuery<{ data: DepartmentLookup[] }>({
     queryKey: ["organisation", "departments"],
@@ -575,8 +607,19 @@ export function UserDirectory({
 
     try {
       await approveMutation.mutateAsync(approvingUser.id);
-      toast.success(`Approved ${approvingUser.name}.`);
+      const approved = approvingUser;
       setApprovingUser(null);
+      toast.success(
+        `Approved ${approved.name}.`,
+        canAppointRole
+          ? {
+              action: {
+                label: "Appoint Role",
+                onClick: () => setAppointingUser(approved),
+              },
+            }
+          : undefined
+      );
     } catch (err: unknown) {
       const msg = getGeneralErrorMessage(err, "Failed to approve user.");
       setActionError(msg);
@@ -779,6 +822,9 @@ export function UserDirectory({
     const showSuspend = Boolean(abilities.suspend);
     const showDeactivate = Boolean(abilities.deactivate);
 
+    const showAppoint =
+      canAppointRole && user.type === "staff" && user.status === "active";
+
     const hasAnyAction =
       showEdit ||
       showReset ||
@@ -787,7 +833,8 @@ export function UserDirectory({
       showReject ||
       showReactivate ||
       showSuspend ||
-      showDeactivate;
+      showDeactivate ||
+      showAppoint;
 
     if (!hasAnyAction) {
       return <span className="text-xs text-muted-foreground">—</span>;
@@ -884,6 +931,17 @@ export function UserDirectory({
                   Reset temporary password
                 </DropdownMenuItem>
               )}
+              {showAppoint && (
+                <DropdownMenuItem
+                  onClick={() => {
+                    setActionError(null);
+                    setAppointingUser(user);
+                  }}
+                >
+                  <RiShieldUserLine className="size-4" aria-hidden="true" />
+                  Appoint role
+                </DropdownMenuItem>
+              )}
               {showUnlock && (
                 <DropdownMenuItem
                   onClick={() => {
@@ -955,12 +1013,26 @@ export function UserDirectory({
       ? `${dept.name} (${dept.code})`
       : profile.requested_department_id;
 
-    if (!deptLabel && !profile.designation) return null;
+    const expiryIso = user.temporary_password_expires_at;
+    const isExpired =
+      typeof expiryIso === "string" && new Date(expiryIso).getTime() <= Date.now();
+
+    if (!deptLabel && !profile?.designation && !isNotActivatedTab) return null;
 
     return (
       <div className="text-xs text-muted-foreground space-y-0.5">
-        {profile.designation && <div>Designation: {profile.designation}</div>}
+        {profile?.designation && <div>Designation: {profile.designation}</div>}
         {deptLabel && <div>Requested dept: {deptLabel}</div>}
+        {isNotActivatedTab && (
+          <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+            <StatusBadge status={isExpired ? "danger" : "warning"}>
+              {isExpired ? "Expired" : "Pending activation"}
+            </StatusBadge>
+            <span>
+              {expiryIso ? `Expires ${formatDisplayDateTime(expiryIso)}` : "No expiry set"}
+            </span>
+          </div>
+        )}
       </div>
     );
   }
@@ -982,11 +1054,21 @@ export function UserDirectory({
         title={title}
         description={description}
         actions={
-          canCreateUser ? (
-            <Button type="button" onClick={openCreateDialog}>
-              <RiUserAddLine className="size-4" aria-hidden="true" />
-              Create User
-            </Button>
+          canImportStaff || canCreateUser ? (
+            <div className="flex flex-wrap items-center gap-2">
+              {canImportStaff && (
+                <Link href={importHref} className={buttonVariants({ variant: "outline" })}>
+                  <RiUploadCloud2Line className="size-4" aria-hidden="true" />
+                  Import staff
+                </Link>
+              )}
+              {canCreateUser && (
+                <Button type="button" onClick={openCreateDialog}>
+                  <RiUserAddLine className="size-4" aria-hidden="true" />
+                  Create User
+                </Button>
+              )}
+            </div>
           ) : undefined
         }
       />
@@ -1028,21 +1110,54 @@ export function UserDirectory({
         </Alert>
       )}
 
-      {showPendingTab && (
-        <Tabs
-          value={isPendingTab ? "pending" : "all"}
-          onValueChange={(val) => {
-            setPage(1);
-            setSelectedIds(new Set());
-            setBulkResult(null);
-            setStatusFilter(val === "pending" ? "pending" : "all");
-          }}
-        >
-          <TabsList>
-            <TabsTrigger value="all">All Users</TabsTrigger>
-            <TabsTrigger value="pending">Pending Approval</TabsTrigger>
-          </TabsList>
-        </Tabs>
+      {(showPendingTab || showNotActivatedTab) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Tabs
+            value={directoryTab}
+            onValueChange={(val) => {
+              setPage(1);
+              setSelectedIds(new Set());
+              setBulkResult(null);
+              if (val === "pending") {
+                setDirectoryTab("pending");
+                setStatusFilter("pending");
+              } else if (val === "not_activated") {
+                setDirectoryTab("not_activated");
+                setStatusFilter("all");
+              } else {
+                setDirectoryTab("all");
+                setStatusFilter("all");
+                setExpiredTempOnly(false);
+              }
+            }}
+          >
+            <TabsList>
+              <TabsTrigger value="all">All Users</TabsTrigger>
+              {showPendingTab && (
+                <TabsTrigger value="pending">Pending Approval</TabsTrigger>
+              )}
+              {showNotActivatedTab && (
+                <TabsTrigger value="not_activated">Not Activated</TabsTrigger>
+              )}
+            </TabsList>
+          </Tabs>
+
+          {isNotActivatedTab && (
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="users-expired-temp-only"
+                checked={expiredTempOnly}
+                onCheckedChange={(checked) => {
+                  setPage(1);
+                  setExpiredTempOnly(checked === true);
+                }}
+              />
+              <Label htmlFor="users-expired-temp-only" className="text-sm font-normal">
+                Expired temporary password only
+              </Label>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Filter Bar */}
@@ -2056,6 +2171,13 @@ export function UserDirectory({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <LeadershipAppointDialog
+        user={appointingUser}
+        onOpenChange={(open) => {
+          if (!open) setAppointingUser(null);
+        }}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RiEyeLine, RiEyeOffLine } from "@remixicon/react";
 import {
@@ -133,6 +134,16 @@ function LoginForm() {
             <Button type="submit" className="w-full" disabled={submitting}>
               {submitting ? authStrings.login.submitting : authStrings.login.submit}
             </Button>
+
+            <p className="text-center text-sm text-muted-foreground">
+              Staff member?{" "}
+              <Link
+                href="/register-staff"
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                Request access
+              </Link>
+            </p>
           </form>
         </CardContent>
       </Card>
