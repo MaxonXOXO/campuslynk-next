@@ -184,3 +184,52 @@ export async function changePasswordFlow(deps: FlowDeps, currentPassword: string
 
   return relogin;
 }
+
+export interface RegisterStaffPayload {
+  name: string;
+  email?: string | null;
+  mobile?: string | null;
+  password: string;
+  requested_department_id?: string | null;
+  designation?: string | null;
+  employee_id?: string | null;
+  website?: string | null;
+}
+
+/**
+ * Forward public staff self-registration to /api/v1/auth/register-staff with server X-Tenant.
+ * Never logs or returns the submitted password.
+ */
+export async function registerStaffFlow(
+  deps: FlowDeps,
+  payload: RegisterStaffPayload
+): Promise<FlowResult> {
+  const call = await callBackend(deps, "/auth/register-staff", "POST", {
+    body: {
+      name: payload.name,
+      email: payload.email ?? null,
+      mobile: payload.mobile ?? null,
+      password: payload.password,
+      requested_department_id: null,
+      designation: payload.designation ?? null,
+      employee_id: payload.employee_id ?? null,
+      website: payload.website ?? null,
+    },
+  });
+
+  if (!call) return UNREACHABLE;
+  if (!call.ok) return problemResult(call);
+
+  const data = (call.json.data ?? {}) as { message?: unknown };
+  return {
+    status: call.status,
+    body: {
+      data: {
+        message:
+          typeof data.message === "string"
+            ? data.message
+            : "If your details are eligible, your registration has been submitted for approval.",
+      },
+    },
+  };
+}
