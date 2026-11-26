@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   academicYearsListMock: vi.fn(),
   settingsListMock: vi.fn(),
   settingsUpdateMock: vi.fn(),
+  auditLogsListMock: vi.fn(),
   user: {
     id: "01SA",
     name: "IT Head",
@@ -64,6 +65,9 @@ vi.mock("@/lib/auth/session-provider", () => ({
         list: mocks.settingsListMock,
         update: mocks.settingsUpdateMock,
       },
+      auditLogs: {
+        list: mocks.auditLogsListMock,
+      },
     },
   }),
 }));
@@ -78,6 +82,24 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     mocks.departmentsListMock.mockResolvedValue({ data: [{ id: "d1" }, { id: "d2" }, { id: "d3" }] });
     mocks.academicYearsListMock.mockResolvedValue({ data: [{ id: "y1" }] });
     mocks.settingsUpdateMock.mockReset().mockResolvedValue({ data: {} });
+    mocks.auditLogsListMock.mockReset().mockResolvedValue({
+      data: [
+        {
+          id: "01AUD1",
+          log_name: "security",
+          event: "setting.updated",
+          description: "Tenant setting updated",
+          causer_name: "IT Head",
+          properties: {
+            key: "auth.staff_self_registration_enabled",
+            reason: "Open intake window",
+            secret_token: "should-not-appear",
+          },
+          created_at: "2026-11-26T12:00:00Z",
+        },
+      ],
+      meta: { current_page: 1, last_page: 1, per_page: 20, total: 1 },
+    });
     mocks.settingsListMock.mockResolvedValue({
       data: {
         settings: {
@@ -290,5 +312,17 @@ describe("ControlPanelPage shell (Slice 2)", () => {
         { value: { days: 30 } }
       );
     });
+  });
+
+  it("renders Audit & Security key and reason without exposing raw JSON properties", async () => {
+    currentCategoryParam = "audit";
+
+    renderWithQueryClient(<ControlPanelPage />);
+
+    expect(
+      await screen.findByText("auth.staff_self_registration_enabled")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Open intake window")).toBeInTheDocument();
+    expect(screen.queryByText(/should-not-appear/)).not.toBeInTheDocument();
   });
 });

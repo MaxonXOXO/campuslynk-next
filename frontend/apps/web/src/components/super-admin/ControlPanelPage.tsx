@@ -37,6 +37,7 @@ import { useApiQuery, useQueryScope, scopedQueryKey, STALE_TIME_LIST_MS } from "
 import { SetupControlPane } from "@/components/super-admin/control-panel/SetupControlPane";
 import { AuthControlPane } from "@/components/super-admin/control-panel/AuthControlPane";
 import { ApiAccessControlPane } from "@/components/super-admin/control-panel/ApiAccessControlPane";
+import { AuditControlPane } from "@/components/super-admin/control-panel/AuditControlPane";
 
 export type ControlPanelCategoryId = "home" | "setup" | "auth" | "api" | "audit";
 
@@ -344,19 +345,7 @@ export function ControlPanelPage() {
           {activeCategory === "setup" && <SetupControlPane />}
           {activeCategory === "auth" && <AuthControlPane />}
           {activeCategory === "api" && <ApiAccessControlPane />}
-
-          {activeCategory === "audit" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {CONTROL_PANEL_CATEGORIES.find((c) => c.id === activeCategory)?.label}
-                </CardTitle>
-                <CardDescription>
-                  {CONTROL_PANEL_CATEGORIES.find((c) => c.id === activeCategory)?.description}
-                </CardDescription>
-              </CardHeader>
-            </Card>
-          )}
+          {activeCategory === "audit" && <AuditControlPane />}
         </section>
       </div>
     </div>
