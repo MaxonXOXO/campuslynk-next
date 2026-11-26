@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Core\Http\Controllers\MetaController;
+use App\Modules\Identity\Http\Controllers\AuditLogController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\ImpersonationController;
 use App\Modules\Identity\Http\Controllers\MeController;
@@ -73,6 +74,11 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/', [TenantSettingController::class, 'index'])->name('api.v1.settings.index');
                 Route::put('/{key}', [TenantSettingController::class, 'update'])->name('api.v1.settings.update');
             });
+
+            // Role-Scoped Audit Logs (super_admin & principal via identity.audit.view)
+            Route::get('/audit-logs', [AuditLogController::class, 'index'])
+                ->middleware(RequirePermission::class.':identity.audit.view')
+                ->name('api.v1.audit-logs.index');
 
             if (app()->environment('testing')) {
                 // Route flagged as having side-effects on GET (must be blocked while impersonating)

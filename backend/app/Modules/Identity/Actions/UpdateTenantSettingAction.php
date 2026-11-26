@@ -6,6 +6,7 @@ namespace App\Modules\Identity\Actions;
 
 use App\Core\Tenancy\Models\TenantSetting;
 use App\Modules\Identity\Models\User;
+use App\Modules\Identity\Services\AuditPropertyRedactor;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use InvalidArgumentException;
@@ -66,13 +67,13 @@ final class UpdateTenantSettingAction
             activity('identity')
                 ->causedBy($actor)
                 ->event('setting.updated')
-                ->withProperties([
+                ->withProperties(AuditPropertyRedactor::redact([
                     'key' => $key,
                     'old_value' => $oldValue,
                     'new_value' => $target->value,
                     'reason' => $trimmedReason,
                     'ip' => $ip,
-                ])
+                ]))
                 ->log("Updated tenant setting [{$key}].");
 
             return $target;

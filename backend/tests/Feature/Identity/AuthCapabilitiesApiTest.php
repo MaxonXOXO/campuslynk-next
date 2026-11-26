@@ -140,4 +140,3 @@ describe('Auth Capabilities API', function () {
             ])->assertAccepted();
     });
 });
-
