@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => ({
   streamsListMock: vi.fn(),
   departmentsListMock: vi.fn(),
   academicYearsListMock: vi.fn(),
+  settingsListMock: vi.fn(),
+  settingsUpdateMock: vi.fn(),
   user: {
     id: "01SA",
     name: "IT Head",
@@ -57,6 +59,12 @@ vi.mock("@/lib/auth/session-provider", () => ({
       departments: { list: mocks.departmentsListMock },
       academicYears: { list: mocks.academicYearsListMock },
     },
+    identity: {
+      settings: {
+        list: mocks.settingsListMock,
+        update: mocks.settingsUpdateMock,
+      },
+    },
   }),
 }));
 
@@ -69,6 +77,37 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     mocks.streamsListMock.mockResolvedValue({ data: [{ id: "1" }, { id: "2" }] });
     mocks.departmentsListMock.mockResolvedValue({ data: [{ id: "d1" }, { id: "d2" }, { id: "d3" }] });
     mocks.academicYearsListMock.mockResolvedValue({ data: [{ id: "y1" }] });
+    mocks.settingsUpdateMock.mockReset().mockResolvedValue({ data: {} });
+    mocks.settingsListMock.mockResolvedValue({
+      data: {
+        settings: {
+          "auth.staff_self_registration_enabled": {
+            value: { enabled: false },
+            is_default: true,
+          },
+          "auth.staff_self_registration_daily_cap": {
+            value: { cap: 25 },
+            is_default: true,
+          },
+          "auth.rejected_resubmit_cooldown_days": {
+            value: { days: 7 },
+            is_default: true,
+          },
+          "auth.token_lifetime_web_hours": {
+            value: { hours: 12 },
+            is_default: true,
+          },
+          "auth.token_lifetime_mobile_days": {
+            value: { days: 30 },
+            is_default: true,
+          },
+        },
+        token_summary: {
+          active_tokens_count: 14,
+          active_users_with_tokens_count: 9,
+        },
+      },
+    });
     currentCategoryParam = null;
     mocks.statusMock.mockResolvedValue({
       data: {
@@ -195,5 +234,61 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     expect(screen.getByRole("checkbox", { name: /Institution Profile/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Calendar Basics/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Registration Policy/i })).toBeInTheDocument();
+  });
+
+  it("prompts for reason when enabling staff self-registration and disables without reason", async () => {
+    const user = userEvent.setup();
+    currentCategoryParam = "auth";
+
+    renderWithQueryClient(<ControlPanelPage />);
+
+    const toggle = await screen.findByRole("switch", {
+      name: /Allow staff self-registration/i,
+    });
+    await user.click(toggle);
+
+    expect(
+      await screen.findByText("Enable staff self-registration")
+    ).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Audit reason"), "Fall recruitment drive");
+    await user.click(
+      screen.getByRole("button", { name: "Enable self-registration" })
+    );
+
+    await waitFor(() => {
+      expect(mocks.settingsUpdateMock).toHaveBeenCalledWith(
+        "auth.staff_self_registration_enabled",
+        {
+          value: { enabled: true },
+          reason: "Fall recruitment drive",
+        }
+      );
+    });
+  });
+
+  it("displays active token summary and saves token lifetimes in API Access pane", async () => {
+    const user = userEvent.setup();
+    currentCategoryParam = "api";
+
+    renderWithQueryClient(<ControlPanelPage />);
+
+    expect(await screen.findByText("14")).toBeInTheDocument();
+    expect(screen.getByText("9")).toBeInTheDocument();
+
+    const webInput = screen.getByLabelText("Web Token Lifetime (hours)");
+    await user.clear(webInput);
+    await user.type(webInput, "24");
+    await user.click(screen.getByRole("button", { name: "Save Token Policy" }));
+
+    await waitFor(() => {
+      expect(mocks.settingsUpdateMock).toHaveBeenCalledWith(
+        "auth.token_lifetime_web_hours",
+        { value: { hours: 24 } }
+      );
+      expect(mocks.settingsUpdateMock).toHaveBeenCalledWith(
+        "auth.token_lifetime_mobile_days",
+        { value: { days: 30 } }
+      );
+    });
   });
 });

@@ -35,6 +35,8 @@ import {
 import { useApiClient } from "@/lib/auth/session-provider";
 import { useApiQuery, useQueryScope, scopedQueryKey, STALE_TIME_LIST_MS } from "@/lib/query/api-query";
 import { SetupControlPane } from "@/components/super-admin/control-panel/SetupControlPane";
+import { AuthControlPane } from "@/components/super-admin/control-panel/AuthControlPane";
+import { ApiAccessControlPane } from "@/components/super-admin/control-panel/ApiAccessControlPane";
 
 export type ControlPanelCategoryId = "home" | "setup" | "auth" | "api" | "audit";
 
@@ -340,8 +342,10 @@ export function ControlPanelPage() {
           )}
 
           {activeCategory === "setup" && <SetupControlPane />}
+          {activeCategory === "auth" && <AuthControlPane />}
+          {activeCategory === "api" && <ApiAccessControlPane />}
 
-          {activeCategory !== "home" && activeCategory !== "setup" && (
+          {activeCategory === "audit" && (
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
