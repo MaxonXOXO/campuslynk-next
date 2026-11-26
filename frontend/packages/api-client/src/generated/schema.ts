@@ -978,6 +978,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/unlock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Unlock one or more completed setup sections with an audited reason (Super Admin at institution scope) */
+        post: operations["unlockSetupSections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/lock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Manually re-lock unlocked setup sections (Super Admin at institution scope) */
+        post: operations["lockSetupSections"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1654,11 +1688,28 @@ export interface components {
              */
             approval_mode: "manual" | "auto";
         };
+        UnlockSetupSectionsInput: {
+            sections: ("institution_profile" | "calendar_basics" | "signup_policy")[];
+            reason: string;
+        };
+        LockSetupSectionsInput: {
+            sections?: ("institution_profile" | "calendar_basics" | "signup_policy")[];
+        };
+        UnlockedSectionInfo: {
+            unlocked_by_user_id: string;
+            /** Format: date-time */
+            unlocked_at: string;
+            reason: string;
+        };
         SetupStatusEnvelope: {
             data: {
                 /** Format: date-time */
                 completed_at: string | null;
                 is_completed: boolean;
+                is_locked: boolean;
+                unlocked_sections: {
+                    [key: string]: components["schemas"]["UnlockedSectionInfo"];
+                };
                 steps: {
                     institution_profile: {
                         /** Format: date-time */
@@ -3662,6 +3713,62 @@ export interface operations {
             /** @description Setup was already finalized, including by a winning concurrent request. Returns the setup-already-completed problem type without changing policy values or existing completion timestamps. */
             409: components["responses"]["ProblemDetails"];
             /** @description Required profile/calendar settings or their completion timestamps, or a stream, department, or academic year, are missing. Returns the setup-prerequisites-missing problem type with errors.missing listing the unmet prerequisites. An unsaved signup_policy is not a missing prerequisite. No defaults or completion markers are persisted on failure. */
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    unlockSetupSections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnlockSetupSectionsInput"];
+            };
+        };
+        responses: {
+            /** @description Setup sections unlocked for editing */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    lockSetupSections: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["LockSetupSectionsInput"];
+            };
+        };
+        responses: {
+            /** @description Setup sections locked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatusEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            409: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
         };
     };

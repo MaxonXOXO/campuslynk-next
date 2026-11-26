@@ -2122,6 +2122,62 @@ paths:
             unmet prerequisites. An unsaved signup_policy is not a missing prerequisite.
             No defaults or completion markers are persisted on failure.
 
+  /setup/unlock:
+    post:
+      operationId: unlockSetupSections
+      summary: Unlock one or more completed setup sections with an audited reason (Super Admin at institution scope)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UnlockSetupSectionsInput'
+      responses:
+        '200':
+          description: Setup sections unlocked for editing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
+  /setup/lock:
+    post:
+      operationId: lockSetupSections
+      summary: Manually re-lock unlocked setup sections (Super Admin at institution scope)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LockSetupSectionsInput'
+      responses:
+        '200':
+          description: Setup sections locked
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SetupStatusEnvelope'
+        '401':
+          $ref: '#/components/responses/ProblemDetails'
+        '403':
+          $ref: '#/components/responses/ProblemDetails'
+        '409':
+          $ref: '#/components/responses/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ProblemDetails'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -3543,6 +3599,44 @@ components:
           enum: [manual, auto]
           default: manual
 
+    UnlockSetupSectionsInput:
+      type: object
+      required: [sections, reason]
+      properties:
+        sections:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [institution_profile, calendar_basics, signup_policy]
+        reason:
+          type: string
+          minLength: 5
+          maxLength: 500
+
+    LockSetupSectionsInput:
+      type: object
+      properties:
+        sections:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum: [institution_profile, calendar_basics, signup_policy]
+
+    UnlockedSectionInfo:
+      type: object
+      required: [unlocked_by_user_id, unlocked_at, reason]
+      additionalProperties: false
+      properties:
+        unlocked_by_user_id:
+          type: string
+        unlocked_at:
+          type: string
+          format: date-time
+        reason:
+          type: string
+
     SetupStatusEnvelope:
       type: object
       required: [data, meta, links]
@@ -3550,7 +3644,7 @@ components:
       properties:
         data:
           type: object
-          required: [completed_at, is_completed, steps, prerequisites]
+          required: [completed_at, is_completed, is_locked, unlocked_sections, steps, prerequisites]
           additionalProperties: false
           properties:
             completed_at:
@@ -3559,6 +3653,12 @@ components:
               nullable: true
             is_completed:
               type: boolean
+            is_locked:
+              type: boolean
+            unlocked_sections:
+              type: object
+              additionalProperties:
+                $ref: '#/components/schemas/UnlockedSectionInfo'
             steps:
               type: object
               required: [institution_profile, calendar_basics, signup_policy]
