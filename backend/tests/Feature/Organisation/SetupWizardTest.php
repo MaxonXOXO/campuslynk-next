@@ -599,7 +599,7 @@ it('lists missing prerequisites when complete is called prematurely, completes c
                 'status' => 409,
             ]);
 
-        // 7. Re-saving an earlier step keeps completed_at of the setup state AND the step itself intact
+        // 7. Re-saving an earlier step without unlocking returns 423 setup-locked; unlocking first allows save, keeps completed_at intact, and auto-relocks
         Carbon::setTestNow(now()->addHour());
 
         $this->app['auth']->forgetGuards();
@@ -607,6 +607,19 @@ it('lists missing prerequisites when complete is called prematurely, completes c
             'name' => 'Carmel Polytechnic College (Updated)',
             'short_code' => 'CPC',
         ];
+        $this->withHeaders(['Authorization' => "Bearer {$token}"])
+            ->putJson('http://setupflow.test/api/v1/setup/steps/institution_profile', $updatedStep1Payload)
+            ->assertStatus(423)
+            ->assertJson(['type' => ProblemDetails::type('setup-locked')]);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Authorization' => "Bearer {$token}"])
+            ->postJson('http://setupflow.test/api/v1/setup/unlock', [
+                'sections' => ['institution_profile'],
+                'reason' => 'Updating institution name after initial setup completion.',
+            ])->assertStatus(200);
+
+        $this->app['auth']->forgetGuards();
         $resaveRes = $this->withHeaders(['Authorization' => "Bearer {$token}"])
             ->putJson('http://setupflow.test/api/v1/setup/steps/institution_profile', $updatedStep1Payload);
 

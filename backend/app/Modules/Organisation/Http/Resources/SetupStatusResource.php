@@ -36,11 +36,18 @@ class SetupStatusResource extends JsonResource
             ? $resource['prerequisites']
             : [];
 
+        /** @var array<string, mixed> $unlockedSections */
+        $unlockedSections = isset($resource['unlocked_sections']) && is_array($resource['unlocked_sections'])
+            ? $resource['unlocked_sections']
+            : [];
+
         return [
             'completed_at' => isset($resource['completed_at']) && is_string($resource['completed_at'])
                 ? $resource['completed_at']
                 : null,
             'is_completed' => (bool) ($resource['is_completed'] ?? false),
+            'is_locked' => (bool) ($resource['is_locked'] ?? false),
+            'unlocked_sections' => (object) $unlockedSections,
             'steps' => [
                 'institution_profile' => $formatStep($steps['institution_profile'] ?? null),
                 'calendar_basics' => $formatStep($steps['calendar_basics'] ?? null),

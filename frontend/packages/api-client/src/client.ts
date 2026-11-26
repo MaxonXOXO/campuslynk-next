@@ -584,6 +584,24 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'POST',
         ...options,
       }),
+    unlock: (
+      body: OperationRequestBody<operations['unlockSetupSections']>,
+      options?: RequestOptions
+    ) =>
+      request<OperationResponse<operations['unlockSetupSections']>>('/setup/unlock', {
+        method: 'POST',
+        body,
+        ...options,
+      }),
+    lock: (
+      body?: OperationRequestBody<operations['lockSetupSections']>,
+      options?: RequestOptions
+    ) =>
+      request<OperationResponse<operations['lockSetupSections']>>('/setup/lock', {
+        method: 'POST',
+        body: body ?? {},
+        ...options,
+      }),
   };
 
   const organisation = {

@@ -370,6 +370,8 @@ describe('Academic Suite API Client', () => {
       getSetupStatus: () => client.organisation.setup.status,
       saveSetupStep: () => client.organisation.setup.saveStep,
       completeSetup: () => client.organisation.setup.complete,
+      unlockSetupSections: () => client.organisation.setup.unlock,
+      lockSetupSections: () => client.organisation.setup.lock,
     };
 
     const missingOperations: string[] = [];
