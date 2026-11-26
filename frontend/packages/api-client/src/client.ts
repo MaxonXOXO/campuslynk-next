@@ -154,6 +154,11 @@ export function createApiClient(config: ApiClientConfig) {
         body,
         ...options,
       }),
+    capabilities: (options?: RequestOptions) =>
+      request<OperationResponse<operations['getAuthCapabilities']>>('/auth/capabilities', {
+        method: 'GET',
+        ...options,
+      }),
   };
 
   // --- Identity Sub-Helpers ---
@@ -323,6 +328,33 @@ export function createApiClient(config: ApiClientConfig) {
       }),
   };
 
+  const settings = {
+    list: (options?: RequestOptions) =>
+      request<OperationResponse<operations['listTenantSettings']>>('/settings', {
+        method: 'GET',
+        ...options,
+      }),
+    update: (
+      key: operations['updateTenantSetting']['parameters']['path']['key'],
+      body: OperationRequestBody<operations['updateTenantSetting']>,
+      options?: RequestOptions
+    ) =>
+      request<OperationResponse<operations['updateTenantSetting']>>(`/settings/${key}`, {
+        method: 'PUT',
+        body,
+        ...options,
+      }),
+  };
+
+  const auditLogs = {
+    list: (query?: Record<string, string | number | boolean>, options?: RequestOptions) =>
+      request<OperationResponse<operations['listAuditLogs']>>('/audit-logs', {
+        method: 'GET',
+        query,
+        ...options,
+      }),
+  };
+
   const identity = {
     users,
     staffImports,
@@ -330,6 +362,8 @@ export function createApiClient(config: ApiClientConfig) {
     roleAssignments,
     principal,
     impersonation,
+    settings,
+    auditLogs,
   };
 
   // --- Organisation Sub-Helpers ---
@@ -579,6 +613,8 @@ export function createApiClient(config: ApiClientConfig) {
     roles,
     roleAssignments,
     impersonation,
+    settings,
+    auditLogs,
     streams,
     departments,
     programs,
