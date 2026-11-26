@@ -9,6 +9,7 @@ use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\PrincipalController;
 use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
 use App\Modules\Identity\Http\Controllers\StaffImportController;
+use App\Modules\Identity\Http\Controllers\TenantSettingController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
@@ -64,6 +65,12 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/status', [SetupController::class, 'status'])->name('api.v1.setup.status');
                 Route::put('/steps/{step}', [SetupController::class, 'saveStep'])->name('api.v1.setup.steps.save');
                 Route::post('/complete', [SetupController::class, 'complete'])->name('api.v1.setup.complete');
+            });
+
+            // Admin Settings (Super Admin at institution scope)
+            Route::middleware(EnsureSuperAdminAtInstitutionScope::class)->prefix('settings')->group(function (): void {
+                Route::get('/', [TenantSettingController::class, 'index'])->name('api.v1.settings.index');
+                Route::put('/{key}', [TenantSettingController::class, 'update'])->name('api.v1.settings.update');
             });
 
             if (app()->environment('testing')) {
