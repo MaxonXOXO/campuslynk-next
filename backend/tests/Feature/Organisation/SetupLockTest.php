@@ -292,4 +292,45 @@ describe('Audited Setup Lock', function () {
             ->and($props['trigger'])->toBe('expired')
             ->and($props['expired_at'])->not->toBeNull();
     });
+
+    it('exposes is_locked and unlocked_sections on GET /setup/status without mutating expired unlocks or returning expires_at', function () {
+        $saToken = $this->superAdmin->createToken('sa_tok')->plainTextToken;
+        completeSetupForLockTest($this, $saToken);
+
+        // Locked right after completion
+        $this->app['auth']->forgetGuards();
+        $lockedRes = $this->withHeaders(['Authorization' => "Bearer {$saToken}", 'X-Tenant' => 'tenant_lock'])
+            ->getJson('http://lock.test/api/v1/setup/status')
+            ->assertOk();
+        expect($lockedRes->json('data.is_locked'))->toBeTrue()
+            ->and($lockedRes->json('data.unlocked_sections'))->toBe([]);
+
+        // Unlock institution_profile -> is_locked=false, unlocked_sections has entry without expires_at
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Authorization' => "Bearer {$saToken}", 'X-Tenant' => 'tenant_lock'])
+            ->postJson('http://lock.test/api/v1/setup/unlock', [
+                'sections' => ['institution_profile'],
+                'reason' => 'Inspecting status payload.',
+            ])->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $unlockedRes = $this->withHeaders(['Authorization' => "Bearer {$saToken}", 'X-Tenant' => 'tenant_lock'])
+            ->getJson('http://lock.test/api/v1/setup/status')
+            ->assertOk();
+        expect($unlockedRes->json('data.is_locked'))->toBeFalse()
+            ->and($unlockedRes->json('data.unlocked_sections.institution_profile.reason'))->toBe('Inspecting status payload.')
+            ->and($unlockedRes->json('data.unlocked_sections.institution_profile'))->not->toHaveKey('expires_at');
+
+        // Advance past 24h -> GET /setup/status reports is_locked=true without writing setup.locked audit log
+        Carbon::setTestNow(Carbon::now()->addHours(25));
+        $this->app['auth']->forgetGuards();
+        $afterExpiryRes = $this->withHeaders(['Authorization' => "Bearer {$saToken}", 'X-Tenant' => 'tenant_lock'])
+            ->getJson('http://lock.test/api/v1/setup/status')
+            ->assertOk();
+        expect($afterExpiryRes->json('data.is_locked'))->toBeTrue()
+            ->and($afterExpiryRes->json('data.unlocked_sections'))->toBe([]);
+
+        $this->tenantContext->setTenant($this->tenant);
+        expect(DB::connection('tenant')->table('activity_log')->where('event', 'setup.locked')->count())->toBe(0);
+    });
 });
