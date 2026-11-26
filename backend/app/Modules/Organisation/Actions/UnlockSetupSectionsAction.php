@@ -47,6 +47,7 @@ final class UnlockSetupSectionsAction
             throw new InvalidArgumentException('Unlock reason must be between 5 and 500 characters.');
         }
 
+        /** @var string $actorId */
         $actorId = (string) $actor->getAuthIdentifier();
 
         DB::connection('tenant')->transaction(function () use ($actorId, $uniqueSections, $trimmedReason, $ip): void {
