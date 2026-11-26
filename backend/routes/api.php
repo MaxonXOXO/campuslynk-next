@@ -50,6 +50,7 @@ Route::prefix('v1')->group(function (): void {
     // Public Authentication
     Route::post('/auth/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
     Route::post('/auth/register-staff', [AuthController::class, 'registerStaff'])->name('api.v1.auth.register-staff');
+    Route::get('/auth/capabilities', [AuthController::class, 'capabilities'])->name('api.v1.auth.capabilities');
 
     // Authenticated Routes (Sanctum)
     Route::middleware('auth:sanctum')->group(function (): void {

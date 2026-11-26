@@ -36,6 +36,7 @@ const PUBLIC_ALLOW_LIST = [
     '/api/v1/meta',
     '/api/v1/auth/login',
     '/api/v1/auth/register-staff',
+    '/api/v1/auth/capabilities',
 ];
 
 const SELF_SERVICE_EXEMPTIONS = [
