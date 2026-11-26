@@ -123,6 +123,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/capabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public tenant-resolved authentication capabilities (rate-limited, private cache, Vary X-Tenant) */
+        get: operations["getAuthCapabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List whitelisted auth.* tenant settings and Sanctum token summary (Super Admin at institution scope) */
+        get: operations["listTenantSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/settings/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update a whitelisted auth.* tenant setting (reason required when enabling staff self-registration) */
+        put: operations["updateTenantSetting"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List role-scoped tenant audit logs (super_admin sees all logs; principal sees identity, organisation, and rbac) */
+        get: operations["listAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/impersonation": {
         parameters: {
             query?: never;
@@ -914,6 +982,88 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AuthCapabilitiesEnvelope: {
+            data: {
+                staff_self_registration_enabled: boolean;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
+        TenantSettingItem: {
+            value: {
+                [key: string]: unknown;
+            };
+            is_default: boolean;
+            /** Format: date-time */
+            updated_at?: string | null;
+        };
+        TenantSettingsEnvelope: {
+            data: {
+                settings: {
+                    [key: string]: components["schemas"]["TenantSettingItem"];
+                };
+                token_summary: {
+                    active_tokens_count: number;
+                    active_users_with_tokens_count: number;
+                };
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateTenantSettingInput: {
+            value: {
+                [key: string]: unknown;
+            };
+            reason?: string | null;
+        };
+        UpdateTenantSettingEnvelope: {
+            data: {
+                key: string;
+                value: {
+                    [key: string]: unknown;
+                };
+                is_default: boolean;
+                /** Format: date-time */
+                updated_at?: string | null;
+            };
+            meta: {
+                [key: string]: unknown;
+            };
+            links: {
+                [key: string]: unknown;
+            };
+        };
+        AuditLogEntry: {
+            id: string;
+            log_name?: string | null;
+            event?: string | null;
+            description: string;
+            subject_type?: string | null;
+            subject_id?: string | null;
+            causer_id?: string | null;
+            causer_name?: string | null;
+            causer_email?: string | null;
+            properties: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at?: string | null;
+        };
+        PaginatedAuditLogsEnvelope: {
+            data: components["schemas"]["AuditLogEntry"][];
+            meta: components["schemas"]["PaginationMeta"];
+            links: {
+                [key: string]: unknown;
+            };
+        };
         Stream: {
             /** @example 01HMG7XYZ456ABCDEF01234567 */
             id: string;
@@ -1821,6 +1971,109 @@ export interface operations {
             403: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
             429: components["responses"]["ProblemDetails"];
+        };
+    };
+    getAuthCapabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Public authentication capabilities */
+            200: {
+                headers: {
+                    "Cache-Control"?: string;
+                    Vary?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthCapabilitiesEnvelope"];
+                };
+            };
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    listTenantSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whitelisted tenant settings and token summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TenantSettingsEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+        };
+    };
+    updateTenantSetting: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: "auth.staff_self_registration_enabled" | "auth.staff_self_registration_daily_cap" | "auth.rejected_resubmit_cooldown_days" | "auth.token_lifetime_web_hours" | "auth.token_lifetime_mobile_days";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTenantSettingInput"];
+            };
+        };
+        responses: {
+            /** @description Updated tenant setting */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateTenantSettingEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+        };
+    };
+    listAuditLogs: {
+        parameters: {
+            query?: {
+                log_name?: string;
+                event?: string;
+                causer_id?: string;
+                from?: string;
+                to?: string;
+                search?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Paginated audit log entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedAuditLogsEnvelope"];
+                };
+            };
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
         };
     };
     startImpersonation: {

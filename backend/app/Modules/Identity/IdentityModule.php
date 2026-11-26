@@ -87,6 +87,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
             'identity.role.assign',
             'identity.online_status.view',
             'identity.audit_log.view',
+            'identity.audit.view',
         ];
     }
 
@@ -113,6 +114,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
                 'identity.role.assign',
                 'identity.online_status.view',
                 'identity.audit_log.view',
+                'identity.audit.view',
             ],
             'principal' => [
                 'identity.user.view',
@@ -127,6 +129,7 @@ class IdentityModule extends ServiceProvider implements ModuleManifestContract
                 'identity.role.assign',
                 'identity.online_status.view',
                 'identity.audit_log.view',
+                'identity.audit.view',
             ],
             'admin' => [
                 'identity.user.view',
