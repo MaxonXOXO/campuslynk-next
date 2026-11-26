@@ -187,4 +187,36 @@ describe('Audited Setup Lock', function () {
             ->and($props['sections'])->toBe(['institution_profile', 'signup_policy'])
             ->and($props['ip'])->toBe('127.0.0.1');
     });
+
+    it('manually locks unlocked sections via POST /setup/lock and logs setup.locked with trigger=manual', function () {
+        $saToken = $this->superAdmin->createToken('sa_tok')->plainTextToken;
+        completeTestSetup($saToken, $this->tenantContext, $this->tenant);
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Authorization' => "Bearer {$saToken}"])
+            ->postJson('http://lock.test/api/v1/setup/unlock', [
+                'sections' => ['institution_profile', 'calendar_basics'],
+                'reason' => 'Unlocking two sections for manual lock test.',
+            ])->assertOk();
+
+        $this->app['auth']->forgetGuards();
+        $this->withHeaders(['Authorization' => "Bearer {$saToken}"])
+            ->postJson('http://lock.test/api/v1/setup/lock', [
+                'sections' => ['institution_profile'],
+            ])->assertOk();
+
+        $this->tenantContext->setTenant($this->tenant);
+        $setupSetting = TenantSetting::where('key', 'setup')->firstOrFail();
+        expect(array_keys($setupSetting->value['unlocks'] ?? []))->toBe(['calendar_basics']);
+
+        $audit = DB::connection('tenant')->table('activity_log')
+            ->where('event', 'setup.locked')
+            ->latest('created_at')
+            ->first();
+        expect($audit)->not->toBeNull();
+        /** @var array<string, mixed> $props */
+        $props = json_decode((string) $audit->properties, true);
+        expect($props['sections'])->toBe(['institution_profile'])
+            ->and($props['trigger'])->toBe('manual');
+    });
 });
