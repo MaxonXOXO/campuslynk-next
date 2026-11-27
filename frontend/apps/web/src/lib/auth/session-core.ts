@@ -20,7 +20,11 @@ import { isSuperAdminAtInstitutionScope } from "../../app/setup/logic/role-routi
 export interface SessionUser extends UserWithWorkspaceAssignments {
   id?: string;
   name?: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email?: string | null;
+  mobile?: string | null;
+  registration_number?: string | null;
   must_change_password?: boolean;
   capabilities?: string[];
 }

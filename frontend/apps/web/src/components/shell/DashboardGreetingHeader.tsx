@@ -26,7 +26,7 @@ export function DashboardGreetingHeader({
   actions,
 }: DashboardGreetingHeaderProps) {
   const { state } = useSession();
-  const userName = state.user?.name;
+  const displayName = state.user?.first_name?.trim() || state.user?.name;
   const [greeting, setGreeting] = React.useState<string>("Welcome");
 
   React.useEffect(() => {
@@ -35,7 +35,7 @@ export function DashboardGreetingHeader({
 
   return (
     <PageHeader
-      title={formatGreetingTitle(greeting, userName)}
+      title={formatGreetingTitle(greeting, displayName)}
       description={description}
       actions={actions}
     />
