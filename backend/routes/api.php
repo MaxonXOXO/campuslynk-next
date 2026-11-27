@@ -7,6 +7,7 @@ use App\Modules\Identity\Http\Controllers\AuditLogController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\ImpersonationController;
 use App\Modules\Identity\Http\Controllers\MeController;
+use App\Modules\Identity\Http\Controllers\MySessionController;
 use App\Modules\Identity\Http\Controllers\PrincipalController;
 use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
 use App\Modules\Identity\Http\Controllers\StaffImportController;
@@ -64,6 +65,11 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/me', [MeController::class, 'update'])
                 ->middleware('throttle:profile-security')
                 ->name('api.v1.me.update');
+            Route::middleware('throttle:profile-security')->prefix('me/sessions')->group(function (): void {
+                Route::get('/', [MySessionController::class, 'index'])->name('api.v1.me.sessions.index');
+                Route::delete('/{id}', [MySessionController::class, 'destroy'])->name('api.v1.me.sessions.destroy');
+                Route::delete('/', [MySessionController::class, 'destroyOthers'])->name('api.v1.me.sessions.destroy-others');
+            });
 
             // Setup Wizard (Super Admin at institution scope)
             Route::middleware(EnsureSuperAdminAtInstitutionScope::class)->prefix('setup')->group(function (): void {
