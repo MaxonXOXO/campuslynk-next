@@ -60,7 +60,10 @@ Route::prefix('v1')->group(function (): void {
 
         // Authenticated routes requiring must_change_password to be false and respecting impersonation safety
         Route::middleware([EnsurePasswordNotMustChange::class, EnforceImpersonationRestrictions::class])->group(function (): void {
-            Route::get('/me', MeController::class)->name('api.v1.me');
+            Route::get('/me', [MeController::class, 'show'])->name('api.v1.me');
+            Route::patch('/me', [MeController::class, 'update'])
+                ->middleware('throttle:profile-security')
+                ->name('api.v1.me.update');
 
             // Setup Wizard (Super Admin at institution scope)
             Route::middleware(EnsureSuperAdminAtInstitutionScope::class)->prefix('setup')->group(function (): void {

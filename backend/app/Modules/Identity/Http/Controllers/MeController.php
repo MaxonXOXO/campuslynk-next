@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Modules\Identity\Actions\UpdateMeAction;
+use App\Modules\Identity\Http\Requests\UpdateMeRequest;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use Illuminate\Database\Eloquent\Collection;
@@ -16,10 +18,31 @@ class MeController
     /**
      * Retrieve the currently authenticated user with active assignments and capabilities.
      */
-    public function __invoke(Request $request): JsonResponse
+    public function show(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = $request->user();
+
+        return $this->respondWithMe($user);
+    }
+
+    /**
+     * Update the currently authenticated user's self-editable profile fields.
+     */
+    public function update(UpdateMeRequest $request, UpdateMeAction $action): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        /** @var array{first_name?: string|null, last_name?: string|null} $validated */
+        $validated = $request->validated();
+        $updated = $action->execute($user, $validated);
+
+        return $this->respondWithMe($updated);
+    }
+
+    private function respondWithMe(User $user): JsonResponse
+    {
 
         $now = Carbon::now();
 
