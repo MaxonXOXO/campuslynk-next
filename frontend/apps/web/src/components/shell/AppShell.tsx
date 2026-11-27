@@ -16,7 +16,6 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  Input,
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -44,7 +43,6 @@ import {
   RiKey2Line,
   RiLogoutBoxRLine,
   RiNotification3Line,
-  RiSearchLine,
   RiSettings4Line,
   RiShieldUserLine,
   RiSideBarLine,
@@ -60,6 +58,7 @@ import {
   type WorkspaceSlug,
 } from "@/lib/workspaces/workspaces";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
+import { GlobalSearchCommand } from "./GlobalSearchCommand";
 
 const NAV_ICONS: Record<NavIconKey, React.ComponentType<{ className?: string }>> = {
   overview: RiDashboardLine,
@@ -124,6 +123,7 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
   const user = state.user;
 
   const workspaces = React.useMemo(() => computeWorkspaces(user), [user]);
+  const workspaceSlugs = React.useMemo(() => workspaces.map((w) => w.slug), [workspaces]);
   const meta = WORKSPACE_META[activeSlug];
   const navItems = WORKSPACE_NAV[activeSlug];
 
@@ -240,65 +240,53 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
-            <div className="relative hidden sm:flex items-center">
-              <RiSearchLine
-                className="pointer-events-none absolute left-2.5 size-4 text-muted-foreground"
-                aria-hidden="true"
+            <Popover>
+              <PopoverTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Notifications"
+                  >
+                    <RiNotification3Line className="size-4" aria-hidden="true" />
+                  </Button>
+                }
               />
-              <Input
-                type="search"
-                placeholder="Search..."
-                aria-label="Search"
-                className="h-8 w-44 pl-8 md:w-56 lg:w-64"
-              />
-            </div>
+              <PopoverContent align="center" className="w-80 p-0">
+                <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                  <span className="text-sm font-semibold text-foreground">
+                    Notifications
+                  </span>
+                </div>
+                <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+                  No new notifications
+                </div>
+              </PopoverContent>
+            </Popover>
 
-            <div className="flex items-center gap-1">
-              <Popover>
-                <PopoverTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Notifications"
-                    >
-                      <RiNotification3Line className="size-4" aria-hidden="true" />
-                    </Button>
-                  }
-                />
-                <PopoverContent align="center" className="w-80 p-0">
-                  <div className="flex items-center justify-between border-b border-border px-4 py-3">
-                    <span className="text-sm font-semibold text-foreground">
-                      Notifications
+            <GlobalSearchCommand activeSlug={activeSlug} workspaces={workspaceSlugs} />
+
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                render={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="gap-2 max-w-[160px] sm:max-w-xs"
+                    aria-label="Account menu"
+                  >
+                    <Avatar size="sm">
+                      <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
+                    </Avatar>
+                    <span className="hidden sm:inline truncate text-sm">
+                      {user?.name ?? "Account"}
                     </span>
-                  </div>
-                  <div className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    No new notifications
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  render={
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="gap-2 max-w-[160px] sm:max-w-xs"
-                      aria-label="Account menu"
-                    >
-                      <Avatar size="sm">
-                        <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
-                      </Avatar>
-                      <span className="hidden sm:inline truncate text-sm">
-                        {user?.name ?? "Account"}
-                      </span>
-                    </Button>
-                  }
-                />
-                <DropdownMenuContent align="center" className="w-56">
+                  </Button>
+                }
+              />
+              <DropdownMenuContent align="center" className="w-56">
                 <DropdownMenuGroup>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col gap-0.5">
@@ -328,14 +316,13 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            </div>
           </div>
         </header>
 
         <div
           id="main-content"
           tabIndex={-1}
-          className="flex-1 w-full max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 outline-none"
+          className="flex-1 w-full max-w-[96rem] mx-auto p-4 sm:p-6 lg:p-8 outline-none"
         >
           {children}
         </div>

@@ -14,11 +14,11 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  PageHeader,
   Skeleton,
   StatusBadge,
   cn,
 } from "@academic-suite/ui";
+import { DashboardGreetingHeader } from "@/components/shell/DashboardGreetingHeader";
 import {
   RiArrowRightLine,
   RiRefreshLine,
@@ -74,8 +74,7 @@ export function SuperAdminOverview() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Super Admin Overview"
+      <DashboardGreetingHeader
         description="Manage institutional configuration, Principal appointment, and user accounts."
         actions={
           isRefreshing ? (

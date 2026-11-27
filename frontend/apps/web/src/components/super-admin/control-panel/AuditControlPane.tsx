@@ -85,6 +85,11 @@ export function AuditControlPane() {
   const [search, setSearch] = React.useState("");
   const [logName, setLogName] = React.useState<string>("all");
   const [page, setPage] = React.useState(1);
+  const [expandedReasons, setExpandedReasons] = React.useState<Record<string, boolean>>({});
+
+  function toggleReason(id: string) {
+    setExpandedReasons((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
 
   const queryParams = React.useMemo(() => {
     const params: Record<string, string | number | boolean> = {
@@ -231,8 +236,29 @@ export function AuditControlPane() {
                       <TableCell className="font-mono text-xs text-foreground">
                         {extractKeyOrStep(entry.properties ?? {})}
                       </TableCell>
-                      <TableCell className="max-w-xs text-sm text-foreground">
-                        {extractReason(entry.properties ?? {})}
+                      <TableCell className="max-w-xs overflow-hidden text-sm text-foreground">
+                        {(() => {
+                          const reasonText = extractReason(entry.properties ?? {});
+                          if (reasonText === "—") {
+                            return reasonText;
+                          }
+                          const isExpanded = Boolean(expandedReasons[entry.id]);
+                          return (
+                            <button
+                              type="button"
+                              aria-expanded={isExpanded}
+                              onClick={() => toggleReason(entry.id)}
+                              title={isExpanded ? "Click to collapse" : "Click to expand"}
+                              className={
+                                isExpanded
+                                  ? "block w-full cursor-pointer whitespace-normal break-words text-left outline-none focus-visible:underline"
+                                  : "block w-full cursor-pointer truncate text-left outline-none focus-visible:underline"
+                              }
+                            >
+                              {reasonText}
+                            </button>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {entry.causer_name ?? entry.causer_email ?? "System"}

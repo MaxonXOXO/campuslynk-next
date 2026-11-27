@@ -34,6 +34,10 @@ import {
 } from "@remixicon/react";
 import { useApiClient } from "@/lib/auth/session-provider";
 import { useApiQuery, useQueryScope, scopedQueryKey, STALE_TIME_LIST_MS } from "@/lib/query/api-query";
+import {
+  searchControlPanelSettings,
+  type ControlPanelSettingItem,
+} from "@/lib/search/search-registry";
 import { SetupControlPane } from "@/components/super-admin/control-panel/SetupControlPane";
 import { AuthControlPane } from "@/components/super-admin/control-panel/AuthControlPane";
 import { ApiAccessControlPane } from "@/components/super-admin/control-panel/ApiAccessControlPane";
@@ -131,8 +135,28 @@ export function ControlPanelPage() {
   const searchParams = useSearchParams();
 
   const activeCategory = resolveControlPanelCategory(searchParams.get("category"));
+  const focusTargetId = searchParams.get("focus");
   const [searchQuery, setSearchQuery] = React.useState("");
   const [mobileRailOpen, setMobileRailOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!focusTargetId) return;
+    let attempts = 0;
+    const timer = window.setInterval(() => {
+      attempts += 1;
+      const el = document.getElementById(focusTargetId);
+      if (el) {
+        window.clearInterval(timer);
+        if (typeof el.scrollIntoView === "function") {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+        el.focus?.();
+      } else if (attempts >= 20) {
+        window.clearInterval(timer);
+      }
+    }, 100);
+    return () => window.clearInterval(timer);
+  }, [focusTargetId, activeCategory]);
 
   const setupStatusQuery = useApiQuery({
     queryKey: scopedQueryKey(scope, "organisation", "setup", "status"),
@@ -140,29 +164,49 @@ export function ControlPanelPage() {
     staleTime: STALE_TIME_LIST_MS,
   });
 
+  const matchingSettings = React.useMemo(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      return [];
+    }
+    return searchControlPanelSettings(q);
+  }, [searchQuery]);
+
   const filteredCategories = React.useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) {
       return CONTROL_PANEL_CATEGORIES;
     }
+    const matchedCategoryIds = new Set(matchingSettings.map((item) => item.categoryId));
     return CONTROL_PANEL_CATEGORIES.filter(
       (cat) =>
+        matchedCategoryIds.has(cat.id) ||
         cat.label.toLowerCase().includes(q) ||
         cat.description.toLowerCase().includes(q) ||
         cat.keywords.some((kw) => kw.toLowerCase().includes(q))
     );
-  }, [searchQuery]);
+  }, [searchQuery, matchingSettings]);
 
-  function selectCategory(categoryId: ControlPanelCategoryId) {
+  function selectCategory(categoryId: ControlPanelCategoryId, focusId?: string) {
     const params = new URLSearchParams(searchParams.toString());
     if (categoryId === "home") {
       params.delete("category");
     } else {
       params.set("category", categoryId);
     }
+    if (focusId) {
+      params.set("focus", focusId);
+    } else {
+      params.delete("focus");
+    }
     const qs = params.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     setMobileRailOpen(false);
+  }
+
+  function selectSettingMatch(item: ControlPanelSettingItem) {
+    selectCategory(item.categoryId, item.targetElementId);
+    setSearchQuery("");
   }
 
   const setupStatus = setupStatusQuery.data?.data;
@@ -205,6 +249,32 @@ export function ControlPanelPage() {
               <RiMenuLine className="size-4" aria-hidden="true" />
             </Button>
           </div>
+
+          {searchQuery.trim().length > 0 && matchingSettings.length > 0 && (
+            <div
+              aria-label="Matching settings"
+              className="space-y-1 rounded-xl border border-border bg-card p-2"
+            >
+              <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Matching settings
+              </p>
+              {matchingSettings.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => selectSettingMatch(item)}
+                  className="flex w-full flex-col gap-0.5 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60 outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span className="text-xs font-medium text-foreground">
+                    {item.title}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {item.categoryLabel}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
 
           <nav
             id="control-panel-rail-nav"

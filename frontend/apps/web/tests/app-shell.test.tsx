@@ -234,7 +234,7 @@ describe("App Shell & Workspace Switcher", () => {
     expect(screen.getByRole("button", { name: /switch to dark mode/i })).toBeInTheDocument();
   });
 
-  it("renders search bar and notifications panel button to the left of the profile pill", async () => {
+  it("renders notifications button to the left of the search bar and profile pill", async () => {
     const user = userEvent.setup();
     mocks.user = {
       id: "01SA",
@@ -251,15 +251,15 @@ describe("App Shell & Workspace Switcher", () => {
       </WorkspaceShellLayout>
     );
 
-    const searchInput = screen.getByRole("searchbox", { name: "Search" });
     const notificationsBtn = screen.getByRole("button", { name: "Notifications" });
+    const searchInput = screen.getByRole("searchbox", { name: "Search" });
     const accountBtn = screen.getByRole("button", { name: "Account menu" });
 
     expect(
-      searchInput.compareDocumentPosition(notificationsBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+      notificationsBtn.compareDocumentPosition(searchInput) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
     expect(
-      notificationsBtn.compareDocumentPosition(accountBtn) & Node.DOCUMENT_POSITION_FOLLOWING
+      searchInput.compareDocumentPosition(accountBtn) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
 
     await user.click(notificationsBtn);

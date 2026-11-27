@@ -5,8 +5,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-  PageHeader,
 } from "@academic-suite/ui";
+import { DashboardGreetingHeader } from "@/components/shell/DashboardGreetingHeader";
 import { WORKSPACE_META, isWorkspaceSlug } from "@/lib/workspaces/workspaces";
 
 export default async function WorkspacePlaceholderPage({
@@ -19,8 +19,7 @@ export default async function WorkspacePlaceholderPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title={meta?.label ?? "Workspace"}
+      <DashboardGreetingHeader
         description={meta?.description ?? "Role-scoped workspace overview."}
         actions={<Badge variant="outline">Preview</Badge>}
       />

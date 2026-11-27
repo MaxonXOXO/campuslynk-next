@@ -362,4 +362,19 @@ describe("ControlPanelPage shell (Slice 2)", () => {
       { role: { slug: "super_admin" }, scope_label: "institution" },
     ];
   });
+
+  it("toggles Audit & Security reason between truncated and multi-line expanded on click", async () => {
+    const user = userEvent.setup();
+    currentCategoryParam = "audit";
+
+    renderWithQueryClient(<ControlPanelPage />);
+
+    const reasonBtn = await screen.findByRole("button", { name: "Open intake window" });
+    expect(reasonBtn).toHaveAttribute("aria-expanded", "false");
+    expect(reasonBtn).toHaveClass("truncate");
+
+    await user.click(reasonBtn);
+    expect(reasonBtn).toHaveAttribute("aria-expanded", "true");
+    expect(reasonBtn).toHaveClass("whitespace-normal");
+  });
 });

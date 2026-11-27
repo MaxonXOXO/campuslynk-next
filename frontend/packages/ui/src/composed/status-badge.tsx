@@ -46,7 +46,7 @@ export interface StatusBadgeProps
 
 export function StatusBadge({
   status = "neutral",
-  showDot = true,
+  showDot = false,
   className,
   children,
   ...props

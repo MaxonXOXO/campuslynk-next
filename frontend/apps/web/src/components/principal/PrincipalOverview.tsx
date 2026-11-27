@@ -16,7 +16,6 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  PageHeader,
   Skeleton,
   StatusBadge,
   Table,
@@ -27,6 +26,7 @@ import {
   TableRow,
   cn,
 } from "@academic-suite/ui";
+import { DashboardGreetingHeader } from "@/components/shell/DashboardGreetingHeader";
 import {
   RiAlertLine,
   RiArrowRightLine,
@@ -147,8 +147,7 @@ export function PrincipalOverview() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Principal Overview"
+      <DashboardGreetingHeader
         description="Institution-wide staffing, student enrollment, department leadership coverage, and active batches."
         actions={
           isRefreshing ? (

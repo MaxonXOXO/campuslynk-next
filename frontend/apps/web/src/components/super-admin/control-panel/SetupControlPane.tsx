@@ -576,13 +576,13 @@ export function SetupControlPane() {
                 }}
                 disabled={!calendarEditable || savingCalendar}
               >
-                <SelectTrigger id="cp-day-order-format">
+              <SelectTrigger id="cp-day-order-format" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="numeric">Numeric (Day 1, Day 2)</SelectItem>
-                  <SelectItem value="roman">Roman (Day I, Day II)</SelectItem>
-                  <SelectItem value="alpha">Alphabetic (Day A, Day B)</SelectItem>
+                  <SelectItem value="numeric">Numeric (Day 1)</SelectItem>
+                  <SelectItem value="roman">Roman (Day I)</SelectItem>
+                  <SelectItem value="alpha">Alphabetic (Day A)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
