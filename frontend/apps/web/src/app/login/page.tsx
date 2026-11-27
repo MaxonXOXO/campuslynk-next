@@ -31,7 +31,55 @@ function LoginForm() {
   const [showPassword, setShowPassword] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [selfRegState, setSelfRegState] = React.useState<
+    "loading" | "show" | "hide"
+  >("loading");
   const errorRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    let active = true;
+    const controllerAbort = new AbortController();
+    const timeoutId = window.setTimeout(() => {
+      controllerAbort.abort();
+      if (active) {
+        setSelfRegState("show");
+      }
+    }, 1500);
+
+    void fetch("/api/session/capabilities", {
+      method: "GET",
+      credentials: "same-origin",
+      signal: controllerAbort.signal,
+    })
+      .then(async (res) => {
+        if (!active) return;
+        if (!res.ok) {
+          setSelfRegState("show");
+          return;
+        }
+        const json = (await res.json()) as {
+          data?: { staff_self_registration_enabled?: unknown };
+        };
+        if (!active) return;
+        setSelfRegState(
+          json?.data?.staff_self_registration_enabled === false ? "hide" : "show"
+        );
+      })
+      .catch(() => {
+        if (active) {
+          setSelfRegState("show");
+        }
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+      });
+
+    return () => {
+      active = false;
+      window.clearTimeout(timeoutId);
+      controllerAbort.abort();
+    };
+  }, []);
 
   // An already signed-in visitor is routed on instead of seeing the form.
   React.useEffect(() => {
@@ -135,15 +183,19 @@ function LoginForm() {
               {submitting ? authStrings.login.submitting : authStrings.login.submit}
             </Button>
 
-            <p className="text-center text-sm text-muted-foreground">
-              Staff member?{" "}
-              <Link
-                href="/register-staff"
-                className="font-medium text-primary underline-offset-4 hover:underline"
-              >
-                Request access
-              </Link>
-            </p>
+            <div className="min-h-6 flex items-center justify-center">
+              {selfRegState === "show" && (
+                <p className="text-center text-sm text-muted-foreground">
+                  Staff member?{" "}
+                  <Link
+                    href="/register-staff"
+                    className="font-medium text-primary underline-offset-4 hover:underline"
+                  >
+                    Request access
+                  </Link>
+                </p>
+              )}
+            </div>
           </form>
         </CardContent>
       </Card>
