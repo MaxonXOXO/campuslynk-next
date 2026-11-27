@@ -1,7 +1,8 @@
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { ApiError } from "@academic-suite/api-client";
 import { renderWithQueryClient } from "./helpers/query-wrapper";
 import { AppShell } from "../src/components/shell/AppShell";
 import { DashboardGreetingHeader } from "../src/components/shell/DashboardGreetingHeader";
@@ -12,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   logout: vi.fn(),
+  bootstrap: vi.fn(),
+  updateMe: vi.fn(),
   sectionParam: null as string | null,
   user: {
     id: "01USER",
@@ -44,7 +47,7 @@ vi.mock("@/lib/auth/session-provider", () => ({
   useSession: () => ({
     controller: {
       logout: mocks.logout,
-      bootstrap: vi.fn(),
+      bootstrap: mocks.bootstrap,
       changePassword: vi.fn(),
     },
     state: {
@@ -55,7 +58,7 @@ vi.mock("@/lib/auth/session-provider", () => ({
   useApiClient: () => ({
     identity: { users: { list: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }) } },
     auth: {
-      updateMe: vi.fn(),
+      updateMe: mocks.updateMe,
       sessions: { list: vi.fn(), revoke: vi.fn(), revokeOthers: vi.fn() },
     },
   }),
@@ -78,6 +81,8 @@ describe("Profile & Settings v1 — Slice 1", () => {
     });
     mocks.push.mockReset();
     mocks.replace.mockReset();
+    mocks.bootstrap.mockReset().mockResolvedValue(undefined);
+    mocks.updateMe.mockReset().mockResolvedValue({ data: mocks.user });
     mocks.sectionParam = null;
     mocks.user.first_name = "Asha";
     mocks.user.last_name = "Nair";
@@ -139,6 +144,70 @@ describe("Profile & Settings v1 — Slice 1", () => {
     expect(
       screen.getByRole("button", { name: "Personal info" })
     ).toHaveAttribute("aria-current", "page");
+  });
+
+  it("renders read-only full name, email, and mobile with explanatory notes and no avatar upload", () => {
+    renderWithQueryClient(<ProfilePage />);
+
+    expect(screen.getByText("Profile photo upload is coming later.")).toBeInTheDocument();
+    expect(screen.queryByLabelText(/upload/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Full name")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Email")).toHaveAttribute("readonly");
+    expect(screen.getByLabelText("Mobile")).toHaveAttribute("readonly");
+    expect(
+      screen.getAllByText("Managed by your institution administrator")
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByText("Email and mobile changes need verification, coming soon")
+    ).toHaveLength(2);
+  });
+
+  it("submits first_name and last_name via PATCH /me and refreshes session user", async () => {
+    const user = userEvent.setup();
+    renderWithQueryClient(<ProfilePage />);
+
+    const firstInput = screen.getByLabelText("First name");
+    const lastInput = screen.getByLabelText("Last name");
+    await user.clear(firstInput);
+    await user.type(firstInput, "അരുൺ");
+    await user.clear(lastInput);
+    await user.type(lastInput, "   ");
+
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => {
+      expect(mocks.updateMe).toHaveBeenCalledWith({
+        first_name: "അരുൺ",
+        last_name: null,
+      });
+    });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByText("Personal information updated.")
+    ).toBeInTheDocument();
+  });
+
+  it("displays API error inline and moves focus to the error alert when PATCH /me fails", async () => {
+    const user = userEvent.setup();
+    mocks.updateMe.mockRejectedValueOnce(
+      new ApiError({
+        type: "about:blank",
+        title: "Validation failed",
+        status: 422,
+        detail: "The first_name contains invalid characters.",
+        errors: { first_name: ["Invalid character in first name."] },
+      })
+    );
+
+    renderWithQueryClient(<ProfilePage />);
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("The first_name contains invalid characters.");
+    expect(alert.parentElement).toHaveFocus();
+    expect(
+      screen.getByText("Invalid character in first name.")
+    ).toBeInTheDocument();
   });
 });
 

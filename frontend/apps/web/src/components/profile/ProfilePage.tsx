@@ -12,6 +12,7 @@ import {
   cn,
 } from "@academic-suite/ui";
 import { RiShieldKeyholeLine, RiUser3Line } from "@remixicon/react";
+import { PersonalInfoSection } from "./PersonalInfoSection";
 
 export type ProfileSectionId = "personal" | "security";
 
@@ -91,17 +92,7 @@ export function ProfilePage() {
         </nav>
 
         <section aria-label="Profile section content" className="min-w-0 space-y-6">
-          {activeSection === "personal" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Personal info</CardTitle>
-                <CardDescription>
-                  Update your first and last name.
-                </CardDescription>
-              </CardHeader>
-              <CardContent />
-            </Card>
-          )}
+          {activeSection === "personal" && <PersonalInfoSection />}
 
           {activeSection === "security" && (
             <Card>
