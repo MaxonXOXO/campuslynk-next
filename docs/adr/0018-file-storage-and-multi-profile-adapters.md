@@ -27,8 +27,8 @@ Three logical disks are configured in `config/filesystems.php`:
 | Disk | Purpose | On-Premise Profile | Cloud / VPS Profile |
 | --- | --- | --- | --- |
 | `files_private` | Bulk originals & private uploads | Secondary bulk drive mount (`/var/lib/campuslynk/storage/private`) | S3-compatible bucket (private ACL) |
-| `files_public` | Public institution assets (e.g. logo) | Secondary drive or NVMe public mount (`/var/lib/campuslynk/storage/public`) | S3-compatible bucket/prefix with public-read or CDN |
-| `files_hot` | Small derived files (avatar thumbnails) & fast staging | Fast NVMe (`storage_path('app/hot')`) | Local NVMe/ephemeral cache or S3 prefix |
+| `files_public` | Public institution assets (e.g. logo) | Secondary bulk drive mount (`/var/lib/campuslynk/storage/public`) with long cache headers | S3-compatible bucket/prefix with public-read or CDN |
+| `files_hot` | Small regenerable derived files (avatar thumbnails, caches) & fast staging | Fast NVMe (`storage_path('app/hot')`) — losing it never loses user data | Local NVMe/ephemeral cache or S3 prefix |
 
 Environment variables:
 - `FILES_DRIVER` (`local` | `s3`)
@@ -42,7 +42,7 @@ Environment variables:
 - **Database stores relative paths only** (never absolute filesystem paths or full S3 URLs).
 - **Tenant `files` table** (in each tenant database, using `UsesTenantConnection` and ULID primary keys) is the **source of truth** for access control, quotas, and usage:
   - `id` (ULID), `owner_type`, `owner_id`, `category`, `disk`, `path`, `original_name`, `mime_type`, `size_bytes`, `checksum_sha256`, `visibility` (`private` | `public`), `created_by`, `deleted_at`, `created_at`, `updated_at`.
-- Storage holds **bytes only**. Quotas and per-tenant usage are computed from the `files` table (feeding the Control Panel storage card later).
+- Storage holds **bytes only**. Per-tenant usage and quota enforcement are computed from the `files` table (feeding the Control Panel storage card later). In v1, per-tenant quota is **unlimited by default** and configurable per deployment (`FILES_TENANT_QUOTA_BYTES`).
 
 ### 4. Access Control & Serving Strategy
 - **Private by default.** Every private file download is authorized by the application using the same `ScopedResource` / permission rules as the rest of the API.
@@ -55,7 +55,7 @@ Environment variables:
 
 ### 5. Upload Validation & Staging
 - Validate MIME type **by file content** (magic bytes / `finfo`), not client-supplied `Content-Type` or extension.
-- Enforce per-category size limits and **reject all executable uploads** (`.php`, `.sh`, `.exe`, `.bat`, `.js`, SVG with scripts, etc.).
+- Enforce per-category file size caps from day one (`avatar`: 5 MB, `logo`: 2 MB, `import`: 25 MB, `document`: 50 MB) and **reject all executable uploads** (`.php`, `.sh`, `.exe`, `.bat`, `.js`, SVG with scripts, etc.).
 - Rename on save to `{ulid}` (with safe extension if needed for content-type).
 - Stage uploads on fast local temp (`files_hot` / `sys_get_temp_dir()`), compute `sha256` and size, then move/stream to target disk.
 - Virus scanning (e.g. ClamAV) is deferred to a documented later step via a scanner hook before promotion from staging.
@@ -77,7 +77,7 @@ Environment variables:
 
 ### 9. Test Strategy & Octane Safety
 - **CI:** Runs unit/feature tests against the `local` adapter on a temporary directory (`Storage::fake(...)` or `sys_get_temp_dir()`).
-- **S3 CI job:** Add an optional/dedicated CI job running against a **MinIO** service container to verify presigned URLs, path-style endpoints, and streaming parity.
+- **S3 CI job:** Run against a **MinIO** service container only on `main` and on PRs that touch storage paths (via path filters). If configured as a required status check, ensure skipped runs still report as passing so non-storage PRs are not blocked.
 - **Octane safety:** Do **not** mutate `config('filesystems.disks...')` per request if avoidable; prefer explicit `tenants/{tenant_id}/...` key prefixes on shared disks, and ensure `FilesystemBootstrapper::revert()` restores any legacy `local` root override so `octane-worker-leak-test` remains clean.
 
 ## Implementation Slice Plan
@@ -90,8 +90,3 @@ Environment variables:
    - Avatar upload/delete endpoints using `FileStorageService` (`files_private` for original, `files_hot` for thumbnail).
    - Frontend avatar uploader in Profile & Settings.
 
-## Open Questions
-
-1. Should `files_public` (e.g. institution logo) in the On-Premise profile live on the fast NVMe or the secondary bulk drive?
-2. What default per-tenant storage quota (if any) should be enforced for v1 before the Control Panel storage card ships?
-3. Should the MinIO S3 CI job run on every PR or only on `main` / storage-touching PRs?
