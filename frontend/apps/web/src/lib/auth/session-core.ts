@@ -63,7 +63,11 @@ export interface PasswordChangeResponse {
 export interface SessionApi {
   login(identifier: string, password: string): Promise<LoginResponse>;
   logout(): Promise<void>;
-  changePassword(currentPassword: string, newPassword: string): Promise<PasswordChangeResponse>;
+  changePassword(
+    currentPassword: string,
+    newPassword: string,
+    revokeOtherSessions?: boolean
+  ): Promise<PasswordChangeResponse>;
   fetchMe(): Promise<SessionUser>;
   fetchSetupStatus(): Promise<SetupStatusCheck>;
 }
@@ -139,11 +143,22 @@ export class SessionController {
     return this.enterApp(returnTo);
   }
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<PasswordOutcome> {
+  async changePassword(
+    currentPassword: string,
+    newPassword: string,
+    revokeOtherSessions?: boolean
+  ): Promise<PasswordOutcome> {
     let response: PasswordChangeResponse;
 
     try {
-      response = await this.options.api.changePassword(currentPassword, newPassword);
+      response =
+        revokeOtherSessions === undefined
+          ? await this.options.api.changePassword(currentPassword, newPassword)
+          : await this.options.api.changePassword(
+              currentPassword,
+              newPassword,
+              revokeOtherSessions
+            );
     } catch (error) {
       const http = error instanceof SessionHttpError ? error : null;
       const mapped = classifyPasswordFailure({ status: http?.status, body: http?.body, network: http ? http.network : true });

@@ -135,7 +135,12 @@ export async function logoutFlow(deps: FlowDeps): Promise<FlowResult> {
  * Change the password, then sign in again with the new password in the same request and
  * replace the cookie. The browser only ever receives { user, must_change_password }.
  */
-export async function changePasswordFlow(deps: FlowDeps, currentPassword: string, newPassword: string): Promise<FlowResult> {
+export async function changePasswordFlow(
+  deps: FlowDeps,
+  currentPassword: string,
+  newPassword: string,
+  revokeOtherSessions = true
+): Promise<FlowResult> {
   const oldToken = readToken(deps.cookies);
   const identifier = readIdentifier(deps.cookies);
 
@@ -145,7 +150,11 @@ export async function changePasswordFlow(deps: FlowDeps, currentPassword: string
 
   const change = await callBackend(deps, "/auth/password/change", "POST", {
     token: oldToken,
-    body: { current_password: currentPassword, new_password: newPassword },
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+      revoke_other_sessions: revokeOtherSessions,
+    },
   });
 
   if (!change) return UNREACHABLE;

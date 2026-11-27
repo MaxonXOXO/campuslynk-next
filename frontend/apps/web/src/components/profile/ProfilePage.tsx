@@ -2,17 +2,10 @@
 
 import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-  PageHeader,
-  cn,
-} from "@academic-suite/ui";
+import { PageHeader, cn } from "@academic-suite/ui";
 import { RiShieldKeyholeLine, RiUser3Line } from "@remixicon/react";
 import { PersonalInfoSection } from "./PersonalInfoSection";
+import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
 
 export type ProfileSectionId = "personal" | "security";
 
@@ -95,15 +88,9 @@ export function ProfilePage() {
           {activeSection === "personal" && <PersonalInfoSection />}
 
           {activeSection === "security" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Security</CardTitle>
-                <CardDescription>
-                  Update your password and manage active sessions.
-                </CardDescription>
-              </CardHeader>
-              <CardContent />
-            </Card>
+            <div className="space-y-6">
+              <ChangePasswordForm mode="profile" />
+            </div>
           )}
         </section>
       </div>

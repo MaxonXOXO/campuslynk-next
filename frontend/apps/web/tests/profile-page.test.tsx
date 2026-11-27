@@ -7,13 +7,16 @@ import { renderWithQueryClient } from "./helpers/query-wrapper";
 import { AppShell } from "../src/components/shell/AppShell";
 import { DashboardGreetingHeader } from "../src/components/shell/DashboardGreetingHeader";
 import { ProfilePage } from "../src/components/profile/ProfilePage";
+import { ChangePasswordForm } from "../src/components/auth/ChangePasswordForm";
 import { getProfileInitials } from "../src/lib/profile/initials";
+import { authStrings } from "../src/lib/auth/strings";
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
   replace: vi.fn(),
   logout: vi.fn(),
   bootstrap: vi.fn(),
+  changePassword: vi.fn(),
   updateMe: vi.fn(),
   sectionParam: null as string | null,
   user: {
@@ -48,7 +51,7 @@ vi.mock("@/lib/auth/session-provider", () => ({
     controller: {
       logout: mocks.logout,
       bootstrap: mocks.bootstrap,
-      changePassword: vi.fn(),
+      changePassword: mocks.changePassword,
     },
     state: {
       status: "authenticated",
@@ -82,6 +85,7 @@ describe("Profile & Settings v1 — Slice 1", () => {
     mocks.push.mockReset();
     mocks.replace.mockReset();
     mocks.bootstrap.mockReset().mockResolvedValue(undefined);
+    mocks.changePassword.mockReset().mockResolvedValue({ ok: true, route: "/home" });
     mocks.updateMe.mockReset().mockResolvedValue({ data: mocks.user });
     mocks.sectionParam = null;
     mocks.user.first_name = "Asha";
@@ -207,6 +211,57 @@ describe("Profile & Settings v1 — Slice 1", () => {
     expect(alert.parentElement).toHaveFocus();
     expect(
       screen.getByText("Invalid character in first name.")
+    ).toBeInTheDocument();
+  });
+
+  it("validates confirm-password mismatch inline in ChangePasswordForm", async () => {
+    const user = userEvent.setup();
+    mocks.sectionParam = "security";
+    renderWithQueryClient(<ProfilePage />);
+
+    await user.type(screen.getByLabelText("Current password"), "CurrentPass99!");
+    await user.type(screen.getByLabelText("New password"), "NewStrongPass99!");
+    await user.type(screen.getByLabelText("Confirm new password"), "Different99!");
+    await user.click(screen.getByRole("button", { name: "Update password" }));
+
+    expect(
+      await screen.findByText(authStrings.changePassword.mismatch)
+    ).toBeInTheDocument();
+    expect(mocks.changePassword).not.toHaveBeenCalled();
+  });
+
+  it("sends revoke_other_sessions from /profile and hides checkbox on forced /change-password", async () => {
+    const user = userEvent.setup();
+    mocks.sectionParam = "security";
+    const { rerender } = renderWithQueryClient(<ProfilePage />);
+
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Sign out other devices",
+    });
+    expect(checkbox).toHaveAttribute("aria-checked", "true");
+    await user.click(checkbox);
+
+    await user.type(screen.getByLabelText("Current password"), "CurrentPass99!");
+    await user.type(screen.getByLabelText("New password"), "NewStrongPass99!");
+    await user.type(screen.getByLabelText("Confirm new password"), "NewStrongPass99!");
+    await user.click(screen.getByRole("button", { name: "Update password" }));
+
+    await waitFor(() => {
+      expect(mocks.changePassword).toHaveBeenCalledWith(
+        "CurrentPass99!",
+        "NewStrongPass99!",
+        false
+      );
+    });
+
+    rerender(<ChangePasswordForm mode="forced" />);
+    expect(
+      screen.queryByRole("checkbox", { name: "Sign out other devices" })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Other signed-in devices will be signed out when you update your password."
+      )
     ).toBeInTheDocument();
   });
 });
