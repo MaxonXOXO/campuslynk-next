@@ -27,6 +27,7 @@ class ChangePasswordRequest extends FormRequest
         return [
             'current_password' => ['required', 'string', 'max:128'],
             'new_password' => ['required', 'string', new PasswordPolicyRule],
+            'revoke_other_sessions' => ['sometimes', 'boolean'],
         ];
     }
 }

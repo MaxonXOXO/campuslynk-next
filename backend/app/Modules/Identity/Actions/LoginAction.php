@@ -48,7 +48,8 @@ final class LoginAction implements AuthenticatesUserContract
         string $password,
         string $deviceName,
         string $client,
-        string $ip
+        string $ip,
+        ?string $userAgent = null
     ): array {
         $tenant = $this->tenantContext->tenant();
         $trimmedIdentifier = trim($identifier);
@@ -121,6 +122,14 @@ final class LoginAction implements AuthenticatesUserContract
             : ['*'];
 
         $newAccessToken = $user->createToken($deviceName, $abilities, $expiresAt);
+
+        $truncatedUserAgent = $userAgent !== null && trim($userAgent) !== ''
+            ? mb_substr(trim($userAgent), 0, 512)
+            : null;
+        $newAccessToken->accessToken->forceFill([
+            'user_agent' => $truncatedUserAgent,
+            'ip_address' => $ip !== '' ? mb_substr($ip, 0, 45) : null,
+        ])->save();
 
         // 8. Update last login timestamp and clear locked_until
         $user->forceFill([

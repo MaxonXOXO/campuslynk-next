@@ -29,7 +29,8 @@ final class ChangePasswordAction implements ChangesPasswordContract
         string $currentPassword,
         string $newPassword,
         string $ip,
-        ?PersonalAccessToken $currentToken = null
+        ?PersonalAccessToken $currentToken = null,
+        bool $revokeOtherSessions = true
     ): void {
         // 1. Verify current password
         if (! Hash::check($currentPassword, $user->password)) {
@@ -62,13 +63,29 @@ final class ChangePasswordAction implements ChangesPasswordContract
                 ->log("User [{$user->name}] completed first-login password activation.");
         }
 
-        // 3. Grant full abilities to current token and revoke all other tokens of this user (ADR-0011, B3, B4)
+        $shouldRevokeOthers = $wasFirstActivation || $revokeOtherSessions;
+
+        // 3. Grant full abilities to current token and optionally revoke all other tokens (ADR-0011, B3, B4)
         if ($currentToken !== null) {
             $currentToken->forceFill(['abilities' => ['*']])->save();
-            $user->tokens()->where('id', '!=', $currentToken->id)->delete();
-        } else {
+            if ($shouldRevokeOthers) {
+                $user->tokens()->where('id', '!=', $currentToken->id)->delete();
+            }
+        } elseif ($shouldRevokeOthers) {
             $user->tokens()->delete();
         }
+
+        activity('security')
+            ->event('user.password_changed')
+            ->performedOn($user)
+            ->causedBy($user)
+            ->withProperties([
+                'user_id' => $user->id,
+                'ip' => $ip,
+                'forced' => $wasFirstActivation,
+                'revoke_other_sessions' => $shouldRevokeOthers,
+            ])
+            ->log("User [{$user->name}] changed their password.");
 
         PasswordChanged::dispatch($user, $ip, $this->tenantContext->tenant()->slug);
     }

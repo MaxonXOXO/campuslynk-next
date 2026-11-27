@@ -103,6 +103,42 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /** Update caller self-editable profile fields (first_name and last_name only) */
+        patch: operations["updateCurrentUser"];
+        trace?: never;
+    };
+    "/me/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List caller active personal access tokens with derived device labels */
+        get: operations["listMySessions"];
+        put?: never;
+        post?: never;
+        /** Revoke all other active sessions of the caller (excluding current and support sessions) */
+        delete: operations["revokeOtherSessions"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/sessions/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke a specific active session belonging to the caller */
+        delete: operations["revokeMySession"];
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -1301,6 +1337,8 @@ export interface components {
             type: "staff" | "student" | "parent";
             /** @example John Doe */
             name: string;
+            first_name?: string | null;
+            last_name?: string | null;
             /**
              * Format: email
              * @example john.doe@carmelpoly.in
@@ -1354,12 +1392,64 @@ export interface components {
                 self?: string;
             };
         };
+        UpdateMeInput: {
+            first_name?: string | null;
+            last_name?: string | null;
+        };
+        MySessionItem: {
+            id: string;
+            device_label: string;
+            is_current: boolean;
+            is_support_session: boolean;
+            /** Format: date-time */
+            created_at?: string | null;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            /** Format: date-time */
+            expires_at?: string | null;
+        };
+        MySessionsEnvelope: {
+            data: components["schemas"]["MySessionItem"][];
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
+        RevokeSessionEnvelope: {
+            data: {
+                revoked: boolean;
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
+        RevokeOtherSessionsEnvelope: {
+            data: {
+                revoked_count: number;
+            };
+            meta: {
+                /** Format: date-time */
+                timestamp?: string;
+            };
+            links: {
+                self?: string;
+            };
+        };
         CurrentUserEnvelope: {
             data: {
                 id: string;
                 /** @enum {string} */
                 type: "staff" | "student" | "parent";
                 name: string;
+                first_name?: string | null;
+                last_name?: string | null;
                 email?: string | null;
                 mobile?: string | null;
                 registration_number?: string | null;
@@ -1935,6 +2025,11 @@ export interface operations {
                     new_password: string;
                     /** Format: password */
                     new_password_confirmation: string;
+                    /**
+                     * @description Whether to revoke other active sessions of the user (ignored on forced first-login password change).
+                     * @default true
+                     */
+                    revoke_other_sessions?: boolean;
                 };
             };
         };
@@ -1951,6 +2046,7 @@ export interface operations {
             401: components["responses"]["ProblemDetails"];
             403: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
         };
     };
     getCurrentUser: {
@@ -1994,6 +2090,107 @@ export interface operations {
                     };
                 };
             };
+        };
+    };
+    updateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeInput"];
+            };
+        };
+        responses: {
+            /** @description Updated current user context */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUserEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    listMySessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active sessions for the authenticated user */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MySessionsEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    revokeOtherSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Other sessions revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeOtherSessionsEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    revokeMySession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevokeSessionEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
         };
     };
     registerStaff: {

@@ -3,7 +3,10 @@
 namespace App\Providers;
 
 use App\Modules\Identity\Models\PersonalAccessToken;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Sanctum\Sanctum;
 use RuntimeException;
@@ -27,6 +30,13 @@ class AppServiceProvider extends ServiceProvider
         $this->validateProductionAppKey();
 
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
+
+        RateLimiter::for('profile-security', function (Request $request): Limit {
+            $userId = $request->user()?->getAuthIdentifier();
+            $key = $userId !== null ? (string) $userId : (string) $request->ip();
+
+            return Limit::perMinute(30)->by($key);
+        });
 
         $proxies = config('app.trusted_proxies');
         if (! empty($proxies)) {

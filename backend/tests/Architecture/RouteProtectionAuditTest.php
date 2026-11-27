@@ -43,6 +43,8 @@ const SELF_SERVICE_EXEMPTIONS = [
     '/api/v1/auth/logout',
     '/api/v1/auth/password/change',
     '/api/v1/me',
+    '/api/v1/me/sessions',
+    '/api/v1/me/sessions/{id}',
     '/api/v1/impersonation/stop',
 ];
 

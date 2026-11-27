@@ -183,3 +183,71 @@ it('maps deactivated and rejected users to suspended when rolling back 2026_11_2
         ->and(DB::connection('tenant')->table('users')->where('id', $rejected->id)->value('status'))->toBe('suspended')
         ->and(Schema::connection('tenant')->hasColumn('users', 'status_reason'))->toBeFalse();
 });
+
+it('migrates populated tenant forward and rolls back cleanly for 2026_11_27_000001 profile and token metadata columns', function () {
+    $tenant = $this->provisioner->provision('tenant_mig_profile', 'Profile Mig College', 'migprofile.test');
+    $this->tenantContext->setTenant($tenant);
+
+    $tenantMigrations = glob(database_path('migrations/tenant/*.php')) ?: [];
+    sort($tenantMigrations);
+    $matches = glob(database_path('migrations/tenant/2026_11_27_000001_*.php')) ?: [];
+    expect($matches)->toHaveCount(1);
+    $targetIndex = array_search($matches[0], $tenantMigrations, true);
+    expect($targetIndex)->not->toBeFalse();
+    $stepsToRollback = count($tenantMigrations) - (int) $targetIndex;
+
+    // 1. Roll back to pre-2026_11_27_000001 state
+    expect(Artisan::call('migrate:rollback', [
+        '--database' => 'tenant',
+        '--path' => 'database/migrations/tenant',
+        '--step' => $stepsToRollback,
+        '--force' => true,
+    ]))->toBe(0);
+
+    expect(Schema::connection('tenant')->hasColumn('users', 'first_name'))->toBeFalse()
+        ->and(Schema::connection('tenant')->hasColumn('users', 'last_name'))->toBeFalse()
+        ->and(Schema::connection('tenant')->hasColumn('personal_access_tokens', 'user_agent'))->toBeFalse()
+        ->and(Schema::connection('tenant')->hasColumn('personal_access_tokens', 'ip_address'))->toBeFalse();
+
+    // 2. Seed populated user + personal access token in pre-migration state
+    $user = User::create([
+        'type' => 'staff',
+        'name' => 'Existing Populated User',
+        'email' => 'populated@migprofile.test',
+        'password' => 'Secret@123!',
+        'must_change_password' => false,
+        'status' => 'active',
+    ]);
+    $token = $user->createToken('web', ['*']);
+
+    // 3. Migrate forward
+    expect(Artisan::call('migrate', [
+        '--database' => 'tenant',
+        '--path' => 'database/migrations/tenant',
+        '--force' => true,
+    ]))->toBe(0);
+
+    $userRow = DB::connection('tenant')->table('users')->where('id', $user->id)->first();
+    $tokenRow = DB::connection('tenant')->table('personal_access_tokens')->where('id', $token->accessToken->id)->first();
+
+    expect(Schema::connection('tenant')->hasColumn('users', 'first_name'))->toBeTrue()
+        ->and(Schema::connection('tenant')->hasColumn('users', 'last_name'))->toBeTrue()
+        ->and(Schema::connection('tenant')->hasColumn('personal_access_tokens', 'user_agent'))->toBeTrue()
+        ->and(Schema::connection('tenant')->hasColumn('personal_access_tokens', 'ip_address'))->toBeTrue()
+        ->and($userRow->first_name)->toBeNull()
+        ->and($userRow->last_name)->toBeNull()
+        ->and($tokenRow->user_agent)->toBeNull()
+        ->and($tokenRow->ip_address)->toBeNull();
+
+    // 4. Clean rollback without losing existing rows
+    expect(Artisan::call('migrate:rollback', [
+        '--database' => 'tenant',
+        '--path' => 'database/migrations/tenant',
+        '--step' => 1,
+        '--force' => true,
+    ]))->toBe(0);
+
+    expect(Schema::connection('tenant')->hasColumn('users', 'first_name'))->toBeFalse()
+        ->and(DB::connection('tenant')->table('users')->where('id', $user->id)->exists())->toBeTrue()
+        ->and(DB::connection('tenant')->table('personal_access_tokens')->where('id', $token->accessToken->id)->exists())->toBeTrue();
+});
