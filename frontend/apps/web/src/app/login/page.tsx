@@ -183,7 +183,10 @@ function LoginForm() {
               {submitting ? authStrings.login.submitting : authStrings.login.submit}
             </Button>
 
-            <div className="min-h-6 flex items-center justify-center">
+            <div
+              data-testid="login-request-access-slot"
+              className="min-h-6 flex items-center justify-center"
+            >
               {selfRegState === "show" && (
                 <p className="text-center text-sm text-muted-foreground">
                   Staff member?{" "}

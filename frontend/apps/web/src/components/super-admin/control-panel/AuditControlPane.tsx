@@ -29,7 +29,8 @@ import {
   TableRow,
 } from "@academic-suite/ui";
 import { RiAlertLine, RiSearchLine } from "@remixicon/react";
-import { useApiClient } from "@/lib/auth/session-provider";
+import { useApiClient, useSession } from "@/lib/auth/session-provider";
+import { isSuperAdminAtInstitutionScope } from "@/app/setup/logic/role-routing";
 import {
   STALE_TIME_LIST_MS,
   scopedQueryKey,
@@ -77,7 +78,9 @@ function eventStatusTone(
 
 export function AuditControlPane() {
   const client = useApiClient();
+  const { state: sessionState } = useSession();
   const scope = useQueryScope();
+  const isSuperAdmin = isSuperAdminAtInstitutionScope(sessionState.user);
 
   const [search, setSearch] = React.useState("");
   const [logName, setLogName] = React.useState<string>("all");
@@ -162,7 +165,9 @@ export function AuditControlPane() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All categories</SelectItem>
-                <SelectItem value="security">Security</SelectItem>
+                {isSuperAdmin && (
+                  <SelectItem value="security">Security</SelectItem>
+                )}
                 <SelectItem value="identity">Identity</SelectItem>
                 <SelectItem value="organisation">Organisation</SelectItem>
               </SelectContent>

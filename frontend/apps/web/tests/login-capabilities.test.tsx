@@ -83,6 +83,8 @@ describe("capabilities BFF & /login Request access visibility", () => {
 
     render(<LoginPage />);
 
+    const slot = screen.getByTestId("login-request-access-slot");
+    expect(slot).toHaveClass("min-h-6");
     expect(
       screen.queryByRole("link", { name: "Request access" })
     ).not.toBeInTheDocument();
@@ -90,6 +92,7 @@ describe("capabilities BFF & /login Request access visibility", () => {
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledTimes(1);
     });
+    expect(screen.getByTestId("login-request-access-slot")).toBeInTheDocument();
     expect(
       screen.queryByRole("link", { name: "Request access" })
     ).not.toBeInTheDocument();

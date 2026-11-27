@@ -24,6 +24,9 @@ const mocks = vi.hoisted(() => ({
     email: "it@college.edu",
     tenant_slug: "college",
     roles: ["super_admin"],
+    role_assignments: [
+      { role: { slug: "super_admin" }, scope_label: "institution" },
+    ],
     capabilities: [],
   },
 }));
@@ -168,6 +171,18 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     expect(screen.getByText("Roadmap")).toBeInTheDocument();
   });
 
+  it("selects the requested category from ?category= deep link", async () => {
+    currentCategoryParam = "api";
+    renderWithQueryClient(<ControlPanelPage />);
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "API Access" })
+      ).toHaveAttribute("aria-current", "page");
+    });
+    expect(await screen.findByText("Active Token Inventory")).toBeInTheDocument();
+  });
+
   it("falls back to Home when category query param is unknown", async () => {
     currentCategoryParam = "non_existent_category";
     renderWithQueryClient(<ControlPanelPage />);
@@ -253,6 +268,9 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     expect(
       await screen.findByText("Saving an unlocked section locks it again automatically.")
     ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/countdown|remaining|expires in|hours left|minutes left/i)
+    ).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Institution Profile/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Calendar Basics/i })).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /Registration Policy/i })).toBeInTheDocument();
@@ -324,5 +342,24 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Open intake window")).toBeInTheDocument();
     expect(screen.queryByText(/should-not-appear/)).not.toBeInTheDocument();
+  });
+
+  it("hides security category filter for Principal role in Audit & Security", async () => {
+    const user = userEvent.setup();
+    mocks.user.role_assignments = [
+      { role: { slug: "principal" }, scope_label: "institution" },
+    ];
+    currentCategoryParam = "audit";
+
+    renderWithQueryClient(<ControlPanelPage />);
+
+    await screen.findByText("auth.staff_self_registration_enabled");
+    await user.click(screen.getByLabelText("Category"));
+    expect(screen.queryByRole("option", { name: "Security" })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Identity" })).toBeInTheDocument();
+
+    mocks.user.role_assignments = [
+      { role: { slug: "super_admin" }, scope_label: "institution" },
+    ];
   });
 });
