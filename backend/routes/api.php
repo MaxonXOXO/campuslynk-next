@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use App\Core\Http\Controllers\MetaController;
+use App\Modules\Identity\Http\Controllers\AuditLogController;
 use App\Modules\Identity\Http\Controllers\AuthController;
 use App\Modules\Identity\Http\Controllers\ImpersonationController;
 use App\Modules\Identity\Http\Controllers\MeController;
 use App\Modules\Identity\Http\Controllers\PrincipalController;
 use App\Modules\Identity\Http\Controllers\RoleAssignmentController;
 use App\Modules\Identity\Http\Controllers\StaffImportController;
+use App\Modules\Identity\Http\Controllers\TenantSettingController;
 use App\Modules\Identity\Http\Controllers\UserController;
 use App\Modules\Identity\Middleware\EnforceImpersonationRestrictions;
 use App\Modules\Identity\Middleware\EnsurePasswordNotMustChange;
@@ -49,6 +51,7 @@ Route::prefix('v1')->group(function (): void {
     // Public Authentication
     Route::post('/auth/login', [AuthController::class, 'login'])->name('api.v1.auth.login');
     Route::post('/auth/register-staff', [AuthController::class, 'registerStaff'])->name('api.v1.auth.register-staff');
+    Route::get('/auth/capabilities', [AuthController::class, 'capabilities'])->name('api.v1.auth.capabilities');
 
     // Authenticated Routes (Sanctum)
     Route::middleware('auth:sanctum')->group(function (): void {
@@ -64,7 +67,20 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('/status', [SetupController::class, 'status'])->name('api.v1.setup.status');
                 Route::put('/steps/{step}', [SetupController::class, 'saveStep'])->name('api.v1.setup.steps.save');
                 Route::post('/complete', [SetupController::class, 'complete'])->name('api.v1.setup.complete');
+                Route::post('/unlock', [SetupController::class, 'unlock'])->name('api.v1.setup.unlock');
+                Route::post('/lock', [SetupController::class, 'lock'])->name('api.v1.setup.lock');
             });
+
+            // Admin Settings (Super Admin at institution scope)
+            Route::middleware(EnsureSuperAdminAtInstitutionScope::class)->prefix('settings')->group(function (): void {
+                Route::get('/', [TenantSettingController::class, 'index'])->name('api.v1.settings.index');
+                Route::put('/{key}', [TenantSettingController::class, 'update'])->name('api.v1.settings.update');
+            });
+
+            // Role-Scoped Audit Logs (super_admin & principal via identity.audit.view)
+            Route::get('/audit-logs', [AuditLogController::class, 'index'])
+                ->middleware(RequirePermission::class.':identity.audit.view')
+                ->name('api.v1.audit-logs.index');
 
             if (app()->environment('testing')) {
                 // Route flagged as having side-effects on GET (must be blocked while impersonating)

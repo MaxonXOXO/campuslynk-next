@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Card,
@@ -12,7 +13,9 @@ import {
   Button,
   Alert,
   AlertDescription,
+  AlertTitle,
   Badge,
+  buttonVariants,
 } from "@academic-suite/ui";
 import { toast } from "sonner";
 import {
@@ -25,6 +28,7 @@ import {
 } from "@remixicon/react";
 import { AuthGuard } from "@/lib/auth/auth-guard";
 import { useApiClient } from "@/lib/auth/session-provider";
+import { problemStatus } from "@/lib/auth/problem";
 
 import {
   WIZARD_STEPS,
@@ -117,6 +121,7 @@ function SetupWizardContent() {
 
   // Security & Error States
   const [securityBlock, setSecurityBlock] = React.useState<"impersonation" | "forbidden" | null>(null);
+  const [setupLockedError, setSetupLockedError] = React.useState(false);
   const [generalError, setGeneralError] = React.useState<string | null>(null);
   const [stepServerErrors, setStepServerErrors] = React.useState<Record<string, string>>({});
   const [missingPrerequisites, setMissingPrerequisites] = React.useState<string[]>([]);
@@ -182,6 +187,7 @@ function SetupWizardContent() {
       initialRequestedStepRef.current = requestedStep;
       setStepDirty(currentStepRef.current, false);
       setStepServerErrors({});
+      setSetupLockedError(false);
       setGeneralError(null);
       setViewingSummary(Boolean(statusRef.current?.completed_at && !requestedStep));
       setActiveStep(deriveCurrentStep(statusRef.current, requestedStep));
@@ -323,6 +329,7 @@ function SetupWizardContent() {
     navigation.requestNavigation(() => {
       setStepDirty(currentStepRef.current, false);
       setStepServerErrors({});
+      setSetupLockedError(false);
       setGeneralError(null);
       setViewingSummary(false);
       setActiveStep(targetStep);
@@ -338,6 +345,7 @@ function SetupWizardContent() {
     savingStepRef.current = true;
     setIsSavingStep(true);
     setStepServerErrors({});
+    setSetupLockedError(false);
     setGeneralError(null);
 
     try {
@@ -349,6 +357,10 @@ function SetupWizardContent() {
       setStepDirty("institution_profile", false);
       return true;
     } catch (err: unknown) {
+      if (problemStatus(err) === 423) {
+        setSetupLockedError(true);
+        return false;
+      }
       const fieldErrors = mapProblemFieldErrors(err);
       if (Object.keys(fieldErrors).length > 0) {
         setStepServerErrors(fieldErrors);
@@ -448,6 +460,7 @@ function SetupWizardContent() {
     savingStepRef.current = true;
     setIsSavingStep(true);
     setStepServerErrors({});
+    setSetupLockedError(false);
     setGeneralError(null);
 
     try {
@@ -459,6 +472,10 @@ function SetupWizardContent() {
       setStepDirty("calendar_basics", false);
       return true;
     } catch (err: unknown) {
+      if (problemStatus(err) === 423) {
+        setSetupLockedError(true);
+        return false;
+      }
       const fieldErrors = mapProblemFieldErrors(err);
       if (Object.keys(fieldErrors).length > 0) {
         setStepServerErrors(fieldErrors);
@@ -770,6 +787,25 @@ function SetupWizardContent() {
                 )}
               </div>
             </div>
+
+            {setupLockedError && (
+              <Alert variant="destructive" role="alert">
+                <RiAlertLine className="size-4" aria-hidden="true" />
+                <AlertTitle>This setup section is locked</AlertTitle>
+                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    Completed setup sections are locked. Unlock this section with an
+                    audited reason in the Control Panel before saving changes.
+                  </span>
+                  <Link
+                    href="/w/super-admin/settings?category=setup"
+                    className={buttonVariants({ size: "sm", variant: "outline" })}
+                  >
+                    Open Control Panel
+                  </Link>
+                </AlertDescription>
+              </Alert>
+            )}
 
             {/* Active Step Card Surface */}
             <Card className="border-border shadow-xs">

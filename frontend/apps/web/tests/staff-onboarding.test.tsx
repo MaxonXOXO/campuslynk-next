@@ -683,9 +683,9 @@ describe("Staff Onboarding UI", () => {
   });
 
   // 17
-  it("renders the secondary Request access link on /login", () => {
+  it("renders the secondary Request access link on /login", async () => {
     renderWithQueryClient(<LoginPage />);
-    const link = screen.getByRole("link", { name: /Request access/i });
+    const link = await screen.findByRole("link", { name: /Request access/i });
     expect(link.getAttribute("href")).toBe("/register-staff");
   });
 });

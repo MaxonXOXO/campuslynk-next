@@ -35,7 +35,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  Textarea,
   cn,
 } from "@academic-suite/ui";
 import {
@@ -58,6 +57,10 @@ import {
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { formatDisplayDateTime } from "@/lib/format-date";
+import {
+  AuditedReasonField,
+  validateAuditedReason,
+} from "@/components/common/AuditedReasonDialog";
 import { getInstitutionScopeLabel } from "@/lib/workspaces/workspaces";
 import {
   getGeneralErrorMessage,
@@ -376,8 +379,12 @@ export function SuperAdminPrincipalPage() {
     }
 
     const trimmedReason = replaceReason.trim();
-    if (trimmedReason.length < 5 || trimmedReason.length > 500) {
-      nextErrors.reason = "Transition reason must be between 5 and 500 characters.";
+    const reasonError = validateAuditedReason(
+      replaceReason,
+      "Transition reason must be between 5 and 500 characters."
+    );
+    if (reasonError) {
+      nextErrors.reason = reasonError;
     }
 
     if (Object.keys(nextErrors).length > 0) {
@@ -1195,30 +1202,19 @@ export function SuperAdminPrincipalPage() {
               </div>
             )}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="replace-reason">Transition Reason</Label>
-              <Textarea
-                id="replace-reason"
-                value={replaceReason}
-                onChange={(e) => {
-                  setReplaceReason(e.target.value);
-                  clearReplaceFieldError("reason");
-                }}
-                placeholder="e.g. Retirement transition effective end of term"
-                rows={3}
-                maxLength={500}
-                disabled={replacing}
-                aria-invalid={Boolean(replaceFieldErrors.reason)}
-                aria-describedby={
-                  replaceFieldErrors.reason ? "replace-reason-error" : undefined
-                }
-              />
-              {replaceFieldErrors.reason && (
-                <p id="replace-reason-error" className="text-xs text-destructive">
-                  {replaceFieldErrors.reason}
-                </p>
-              )}
-            </div>
+            <AuditedReasonField
+              id="replace-reason"
+              label="Transition Reason"
+              value={replaceReason}
+              onChange={(value) => {
+                setReplaceReason(value);
+                clearReplaceFieldError("reason");
+              }}
+              placeholder="e.g. Retirement transition effective end of term"
+              error={replaceFieldErrors.reason}
+              errorId="replace-reason-error"
+              disabled={replacing}
+            />
 
             <div className="space-y-1.5">
               <Label htmlFor="replace-order-record">

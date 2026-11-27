@@ -205,4 +205,44 @@ class AuthController
             ],
         ], Response::HTTP_ACCEPTED, ['Cache-Control' => 'no-store']);
     }
+
+    /**
+     * Public tenant-resolved authentication capabilities (rate-limited, private cache, Vary: X-Tenant).
+     */
+    public function capabilities(
+        Request $request,
+        RegisterStaffAction $action,
+        TenantContext $tenantContext,
+    ): JsonResponse {
+        $tenant = $tenantContext->tenant();
+        $ipKey = "auth_cap:ip:{$tenant->id}:".hash('sha256', (string) $request->ip());
+
+        if (RateLimiter::tooManyAttempts($ipKey, 60)) {
+            $retryAfter = RateLimiter::availableIn($ipKey);
+
+            return ProblemDetails::response(
+                title: 'Too Many Requests',
+                detail: 'Too many capability requests. Please try again later.',
+                status: Response::HTTP_TOO_MANY_REQUESTS,
+                type: ProblemDetails::type('rate-limited'),
+            )->header('Retry-After', (string) $retryAfter);
+        }
+
+        RateLimiter::hit($ipKey, 60);
+
+        return response()->json([
+            'data' => [
+                'staff_self_registration_enabled' => $action->isSelfRegistrationEnabled(),
+            ],
+            'meta' => [
+                'timestamp' => now()->toIso8601String(),
+            ],
+            'links' => [
+                'self' => url('/api/v1/auth/capabilities'),
+            ],
+        ], Response::HTTP_OK, [
+            'Cache-Control' => 'private, max-age=60',
+            'Vary' => 'X-Tenant',
+        ]);
+    }
 }

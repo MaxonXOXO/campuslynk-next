@@ -98,5 +98,30 @@ Revisit this decision when the dedicated **Self-Registration module** begins con
 - **One write-lock protocol:** `SaveSetupStepAction` and `CompleteSetupAction` must acquire the `setup` row lock in a separate first query inside their tenant transaction, before reading or writing any other configuration row. `LockSetupStateAction` provides this shared mutex. Completion subsequently locks the remaining settings in key order; an explicit save locks its target step. The structural lock order remains Stream → Department → Academic Year.
 - **Concurrent first saves:** If `setup` is absent, initialization uses the schema-validated model path and `createOrFirst`'s savepoint-protected unique-key conflict handling, followed by a fresh locking read. Unrecorded step markers do not make a step complete. A failed completion rolls back any newly initialized mutex along with its policy and completion markers.
 - **Fresh configuration snapshot:** Do not combine `setup` and the remaining settings into one locking SELECT. Under PostgreSQL `READ COMMITTED`, that statement can wait on `setup` yet still miss a policy inserted by the transaction it waited for. Acquiring the mutex first and then issuing fresh configuration queries preserves that committed custom policy.
+
+---
+
+## Decision Amendment — 2026-11-26: Post-Completion Per-Section Setup Lock & Settings Boundary
+
+**Status:** Accepted — Pending Implementation (PR B for setup lock enforcement; PR A for settings boundary and audit API)
+
+**Scope:** Amends Decision §2 ("Idempotent Step Re-saves") for post-completion edits after `setup.completed_at` is set, and establishes the boundary between `PUT /api/v1/settings/{key}` and `PUT /api/v1/setup/steps/{step}`. First-run setup behaviour prior to `setup.completed_at` remains completely unchanged.
+
+### 1. Settings API Boundary (Implemented in PR A)
+- `GET /api/v1/settings` and `PUT /api/v1/settings/{key}` (Super Admin at institution scope) manage only whitelisted `auth.*` tenant settings (`auth.staff_self_registration_enabled`, `auth.staff_self_registration_daily_cap`, `auth.rejected_resubmit_cooldown_days`, `auth.token_lifetime_web_hours`, `auth.token_lifetime_mobile_days`), validated against `TenantSetting::SCHEMA_MAP`.
+- **`signup_policy` is explicitly excluded from `PUT /api/v1/settings/{key}`.** It remains editable exclusively through `PUT /api/v1/setup/steps/signup_policy` so the post-completion setup lock cannot be bypassed.
+- Enabling `auth.staff_self_registration_enabled` (`true`) requires an audit `reason` (5–500 characters); disabling it (`false`) does not. Every `PUT /api/v1/settings/{key}` writes a `setting.updated` event (`old_value`, `new_value`, `reason`, `ip`) to `activity_log` (`identity` log) without recording passwords, hashes, or tokens.
+
+### 2. Per-Section Post-Completion Setup Lock (Accepted — Pending Implementation in PR B)
+- **Lockable sections:** Only the three setup step keys — `institution_profile`, `calendar_basics`, and `signup_policy` — are lockable. Structural academic entities (Streams, Departments, Academic Years, Courses, Batches) are **not** locked so Principal and staff operations continue unobstructed.
+- **Per-section unlock state:** `setup-state.schema.json` will be extended in PR B with an optional `unlocks` map keyed by `institution_profile | calendar_basics | signup_policy`, storing `{ unlocked_by_user_id, unlocked_at, expires_at, reason }`.
+- **No UI timers:** Unlocking uses a single reason-verification dialog (5–500 character reason) where the Super Admin selects one or more of the three sections (`POST /api/v1/setup/unlock`). There is no countdown timer or auto-lock while editing.
+- **Auto-relock & manual lock:** Inside the same `LockSetupStateAction` transaction, `SaveSetupStepAction` verifies the target section is unlocked (else returns **HTTP 423 Locked** with `type: .../setup-locked`), saves the step, and immediately re-locks that section. Admins may also manually lock sections via `POST /api/v1/setup/lock`.
+- **Silent safety-net expiry:** An unused unlock expires after `config('setup.unlock_safety_ttl_hours', 24)` hours. Expiry is enforced and logged lazily on the next write/unlock/lock transaction (preserving `expired_at` in `properties`) rather than via a scheduled cross-tenant sweep; `GET /api/v1/setup/status` remains strictly read-only.
+- **Mandatory audit events (`organisation` log):**
+  - `setup.unlocked` (`reason`, `sections`, `ip`)
+  - `setup.step_updated` (`step`, `old_values`, `new_values`, `reason`)
+  - `setup.locked` (`sections`, `trigger`: `manual` | `auto_save` | `expired`, plus `expired_at` when expired)
+
 - **Synchronous audit assumption:** The transactional audit guarantee assumes `activitylog.enabled = true` and `activitylog.buffer.enabled = false` (`ACTIVITYLOG_BUFFER_ENABLED=false`). The `signup_policy.defaults_initialized` event must be persisted synchronously on the tenant connection. Buffered logging flushes outside the completion transaction and does not provide this atomicity guarantee.
 - **Late-failure rollback:** An exception after the audit insert or after the last status query rolls back the policy, setup completion markers, and audit together. Retrying the failed completion creates exactly one policy and one initialization event. Existing policy values and recorded timestamps retain their preservation semantics.

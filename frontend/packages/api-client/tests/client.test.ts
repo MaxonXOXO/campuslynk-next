@@ -320,6 +320,10 @@ describe('Academic Suite API Client', () => {
       deactivateUserAccount: () => client.identity.users.deactivate,
       bulkApproveUsers: () => client.identity.users.bulkApprove,
       registerStaff: () => client.auth.registerStaff,
+      getAuthCapabilities: () => client.auth.capabilities,
+      listTenantSettings: () => client.identity.settings.list,
+      updateTenantSetting: () => client.identity.settings.update,
+      listAuditLogs: () => client.identity.auditLogs.list,
       downloadStaffImportTemplate: () => client.identity.staffImports.template,
       previewStaffImport: () => client.identity.staffImports.preview,
       commitStaffImport: () => client.identity.staffImports.commit,
@@ -366,6 +370,8 @@ describe('Academic Suite API Client', () => {
       getSetupStatus: () => client.organisation.setup.status,
       saveSetupStep: () => client.organisation.setup.saveStep,
       completeSetup: () => client.organisation.setup.complete,
+      unlockSetupSections: () => client.organisation.setup.unlock,
+      lockSetupSections: () => client.organisation.setup.lock,
     };
 
     const missingOperations: string[] = [];
@@ -671,5 +677,37 @@ describe('Academic Suite API Client', () => {
       expect(allLogged).not.toContain(secret);
     }
     vi.restoreAllMocks();
+  });
+
+  it('exposes typed helpers for auth.capabilities, identity.settings, and identity.auditLogs', async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    const mockFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      calls.push({ url, method: init?.method ?? 'GET' });
+      return new Response(
+        JSON.stringify({ data: {}, meta: {}, links: {} }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      );
+    });
+
+    const client = createApiClient({
+      baseUrl: 'https://api.carmelpoly.in/api/v1',
+      fetchFn: mockFetch as unknown as typeof fetch,
+    });
+
+    await client.auth.capabilities();
+    await client.identity.settings.list();
+    await client.identity.settings.update('auth.staff_self_registration_enabled', {
+      value: { enabled: true },
+      reason: 'Opening onboarding window.',
+    });
+    await client.identity.auditLogs.list({ log_name: 'identity', per_page: 25 });
+
+    expect(calls.map((c) => `${c.method} ${c.url.replace('https://api.carmelpoly.in/api/v1', '')}`)).toEqual([
+      'GET /auth/capabilities',
+      'GET /settings',
+      'PUT /settings/auth.staff_self_registration_enabled',
+      'GET /audit-logs?log_name=identity&per_page=25',
+    ]);
   });
 });

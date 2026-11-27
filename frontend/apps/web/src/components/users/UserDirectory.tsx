@@ -183,12 +183,10 @@ function bulkStatusBadge(status: string): SemanticStatus {
   }
 }
 
+import { validateAuditedReason } from "@/components/common/AuditedReasonDialog";
+
 function validateReasonRange(reason: string): string | null {
-  const trimmed = reason.trim();
-  if (trimmed.length < 5 || trimmed.length > 500) {
-    return "Reason must be between 5 and 500 characters.";
-  }
-  return null;
+  return validateAuditedReason(reason);
 }
 
 export function UserDirectory({
