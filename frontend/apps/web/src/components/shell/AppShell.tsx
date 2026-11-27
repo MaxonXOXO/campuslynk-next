@@ -46,8 +46,10 @@ import {
   RiSettings4Line,
   RiShieldUserLine,
   RiSideBarLine,
+  RiUser3Line,
   RiUserSettingsLine,
 } from "@remixicon/react";
+import { getProfileInitials } from "@/lib/profile/initials";
 import logoAsset from "@/app/design-system/logo.svg";
 import { useSession } from "@/lib/auth/session-provider";
 import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
@@ -68,14 +70,6 @@ const NAV_ICONS: Record<NavIconKey, React.ComponentType<{ className?: string }>>
   users: RiUserSettingsLine,
   setup: RiSettings4Line,
 };
-
-function getInitials(name: string | undefined): string {
-  if (!name) return "U";
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "U";
-  if (parts.length === 1) return parts[0]!.slice(0, 2).toUpperCase();
-  return `${parts[0]![0] ?? ""}${parts[parts.length - 1]![0] ?? ""}`.toUpperCase();
-}
 
 const logoSrc =
   typeof logoAsset === "string"
@@ -279,7 +273,9 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                     aria-label="Account menu"
                   >
                     <Avatar size="sm">
-                      <AvatarFallback>{getInitials(user?.name)}</AvatarFallback>
+                      <AvatarFallback>
+                        {getProfileInitials(user?.first_name, user?.last_name, user?.name)}
+                      </AvatarFallback>
                     </Avatar>
                     <span className="hidden sm:inline truncate text-sm">
                       {user?.name ?? "Account"}
@@ -303,7 +299,11 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                   </DropdownMenuLabel>
                 </DropdownMenuGroup>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => router.push("/change-password")}>
+                <DropdownMenuItem onClick={() => router.push("/profile")}>
+                  <RiUser3Line className="size-4" aria-hidden="true" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => router.push("/profile?section=security")}>
                   <RiKey2Line className="size-4" aria-hidden="true" />
                   Change password
                 </DropdownMenuItem>
