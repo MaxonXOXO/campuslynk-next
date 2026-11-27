@@ -354,9 +354,9 @@ describe("ControlPanelPage shell (Slice 2)", () => {
     renderWithQueryClient(<ControlPanelPage />);
 
     await screen.findByText("auth.staff_self_registration_enabled");
-    await user.click(screen.getByLabelText("Category"));
+    await user.click(screen.getByRole("combobox", { name: "Category" }));
+    expect(await screen.findByRole("option", { name: "Identity" })).toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Security" })).not.toBeInTheDocument();
-    expect(screen.getByRole("option", { name: "Identity" })).toBeInTheDocument();
 
     mocks.user.role_assignments = [
       { role: { slug: "super_admin" }, scope_label: "institution" },
