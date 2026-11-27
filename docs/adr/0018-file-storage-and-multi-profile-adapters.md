@@ -9,10 +9,10 @@
 
 CampusLynk-Next is a universal multi-tenant academic suite that must run from a single codebase across two primary deployment profiles, selected by configuration only:
 
-1. **On-Premise (Single Server):** Fast NVMe for OS, PostgreSQL, Redis, and hot/small derived files, paired with a large secondary drive (HDD/array) for bulk originals.
+1. **On-Premise (Single Server):** Fast NVMe for OS, PostgreSQL, Redis, and hot/small regenerable files, paired with a large secondary drive (HDD/array) for bulk originals and public assets.
 2. **Cloud / VPS:** Containerized API (`FrankenPHP` / Laravel Octane) backed by block storage or S3-compatible object storage (AWS S3, Cloudflare R2, MinIO, DigitalOcean Spaces).
 
-Today, `backend/config/filesystems.php` defines standard `local`, `public`, and `s3` disks, `FilesystemBootstrapper` mutates `filesystems.disks.local.root` per tenant, and neither `deploy/compose/onprem/docker-compose.yml` nor `deploy/compose/cloud/docker-compose.yml` mounts a persistent storage volume for `api`.
+Today, `backend/config/filesystems.php` defines standard `local`, `public`, and `s3` disks, `FilesystemBootstrapper` mutates `filesystems.disks.local.root` per tenant, and neither `deploy/compose/onprem/docker-compose.yml` nor `deploy/compose/cloud/docker-compose.yml` mounts a persistent storage volume for `api` or includes an `nginx` reverse proxy.
 
 ## Decision
 
@@ -28,35 +28,38 @@ Three logical disks are configured in `config/filesystems.php`:
 | --- | --- | --- | --- |
 | `files_private` | Bulk originals & private uploads | Secondary bulk drive mount (`/var/lib/campuslynk/storage/private`) | S3-compatible bucket (private ACL) |
 | `files_public` | Public institution assets (e.g. logo) | Secondary bulk drive mount (`/var/lib/campuslynk/storage/public`) with long cache headers | S3-compatible bucket/prefix with public-read or CDN |
-| `files_hot` | Small regenerable derived files (avatar thumbnails, caches) & fast staging | Fast NVMe (`storage_path('app/hot')`) — losing it never loses user data | Local NVMe/ephemeral cache or S3 prefix |
+| `files_hot` | Small regenerable derived files (avatar thumbnails, caches) & fast staging | Fast NVMe (`storage_path('app/hot')`) — losing it never loses user data | S3 prefix (or lazy regeneration); local hot disk is single-node only |
 
 Environment variables:
 - `FILES_DRIVER` (`local` | `s3`)
 - `FILES_PRIVATE_ROOT` / `FILES_PUBLIC_ROOT` / `FILES_HOT_ROOT` (for `local` profile)
 - `FILES_S3_KEY`, `FILES_S3_SECRET`, `FILES_S3_REGION`, `FILES_S3_BUCKET`, `FILES_S3_ENDPOINT`, `FILES_S3_USE_PATH_STYLE_ENDPOINT` (for `s3` profile)
-- `FILES_SERVE_MODE` (`x-accel` | `x-sendfile` | `presigned` | `proxy`)
-- `FILES_PRESIGNED_TTL_SECONDS` (default `120`)
+- `FILES_SERVE_MODE` (`stream` | `x-accel` | `x-sendfile` | `presigned` | `proxy`)
+- `FILES_PRESIGNED_TTL_SECONDS` (default `60`)
+- `FILES_TENANT_QUOTA_BYTES` (unlimited by default in v1)
 
 ### 3. Key Naming & Tenant Metadata Table
 - **Object/file keys:** `tenants/{tenant_id}/{category}/{ulid}` (e.g. `tenants/01J.../avatars/01J...`). Original filenames are **never** used in storage keys; they are stored only as metadata.
 - **Database stores relative paths only** (never absolute filesystem paths or full S3 URLs).
 - **Tenant `files` table** (in each tenant database, using `UsesTenantConnection` and ULID primary keys) is the **source of truth** for access control, quotas, and usage:
   - `id` (ULID), `owner_type`, `owner_id`, `category`, `disk`, `path`, `original_name`, `mime_type`, `size_bytes`, `checksum_sha256`, `visibility` (`private` | `public`), `created_by`, `deleted_at`, `created_at`, `updated_at`.
-- Storage holds **bytes only**. Per-tenant usage and quota enforcement are computed from the `files` table (feeding the Control Panel storage card later). In v1, per-tenant quota is **unlimited by default** and configurable per deployment (`FILES_TENANT_QUOTA_BYTES`).
+- Storage holds **bytes only**. Per-tenant usage and quota enforcement are computed from the `files` table (feeding the Control Panel storage card later). In v1, per-tenant quota is **unlimited by default** and configurable per deployment (`FILES_TENANT_QUOTA_BYTES`). Slice 2 adds a per-tenant running counter updated inside a database transaction so concurrent uploads cannot exceed the configured limit.
 
 ### 4. Access Control & Serving Strategy
 - **Private by default.** Every private file download is authorized by the application using the same `ScopedResource` / permission rules as the rest of the API.
 - **Public assets** (e.g. institution logo) are the only direct-served category.
+- **Response headers:** All file responses send `X-Content-Type-Options: nosniff` and `Content-Disposition`, with `Content-Type` taken from the validated stored `mime_type` (never client-supplied).
 - **Serving in On-Premise (`local`):**
-  - Behind `nginx` (or Caddy), the API authorizes the request and returns an internal redirect header (`X-Accel-Redirect` for nginx, `X-Sendfile` for Apache/Caddy equivalent) pointing to the internal location mapped to `FILES_PRIVATE_ROOT`. PHP/Octane workers are not tied up streaming large files.
+  - Neither `deploy/compose/onprem/docker-compose.yml` nor `deploy/compose/cloud/docker-compose.yml` currently includes an `nginx` container; both run `FrankenPHP` (Caddy) directly. Because FrankenPHP worker mode does not natively offload `X-Accel-Redirect` without custom Caddy `handle_response` / `file_server` rules, **Laravel `StreamedResponse` (`FILES_SERVE_MODE=stream`) is the default fallback** for `local`, with `X-Accel-Redirect` / `X-Sendfile` supported when a reverse proxy is placed in front.
 - **Serving in Cloud (`s3`):**
-  - **Chosen:** Short-lived **presigned URLs** (`TTL = 120s`, configurable via `FILES_PRESIGNED_TTL_SECONDS`) issued after API authorization.
-  - **Alternative considered:** *App-proxied streaming* (`StreamedResponse` through Octane). Rejected as default because it doubles bandwidth egress through the app tier and occupies Octane workers; retained only as a fallback (`FILES_SERVE_MODE=proxy`) for air-gapped or strict-CORS environments.
+  - **Chosen:** Short-lived **presigned URLs** (`TTL = 60s`, configurable via `FILES_PRESIGNED_TTL_SECONDS`) issued after API authorization for standard categories.
+  - **Sensitive categories** (e.g. `document`) use **proxy streaming** (`StreamedResponse`) instead of presigned URLs so authorization cannot be shared via a URL.
+  - **Alternative considered:** *App-proxied streaming for all files*. Rejected as default because it doubles bandwidth egress through the app tier and occupies Octane workers.
 
 ### 5. Upload Validation & Staging
 - Validate MIME type **by file content** (magic bytes / `finfo`), not client-supplied `Content-Type` or extension.
-- Enforce per-category file size caps from day one (`avatar`: 5 MB, `logo`: 2 MB, `import`: 25 MB, `document`: 50 MB) and **reject all executable uploads** (`.php`, `.sh`, `.exe`, `.bat`, `.js`, SVG with scripts, etc.).
-- Rename on save to `{ulid}` (with safe extension if needed for content-type).
+- Enforce per-category file size caps from day one (`avatar`: 5 MB, `logo`: 2 MB, `import`: 25 MB, `document`: 50 MB) and **reject all executable uploads** (`.php`, `.sh`, `.exe`, `.bat`, `.js`, etc.) as well as **SVG uploads in v1**.
+- Rename on save to `{ulid}`.
 - Stage uploads on fast local temp (`files_hot` / `sys_get_temp_dir()`), compute `sha256` and size, then move/stream to target disk.
 - Virus scanning (e.g. ClamAV) is deferred to a documented later step via a scanner hook before promotion from staging.
 
@@ -70,23 +73,27 @@ Environment variables:
 - **Bulk disk full or unreachable:** Uploads fail cleanly with `503 Service Unavailable` (RFC 7807 Problem Details); the rest of the application (auth, dashboards, database reads/writes) continues operating normally.
 - **Backup contract:** Database and file storage must be restorable to a consistent point-in-time.
   - *On-Premise:* Snapshot/rsync of `files_private` + `files_public` paired with `pg_dump` / WAL archive. **RAID is not a backup.**
-  - *Cloud:* S3 versioning + cross-region/lifecycle backup paired with RDS automated snapshots/PITR.
+  - *Cloud:* S3 versioning + cross-region/lifecycle backup paired with managed or self-hosted PostgreSQL with point-in-time recovery (e.g. Amazon RDS automated snapshots/PITR).
 
 ### 8. Profile Migration (`storage:migrate`)
-- A `php artisan storage:migrate {--from=} {--to=}` command is **in scope as a follow-up** (Stage C) to copy blobs by `files` table cursor and verify `checksum_sha256` before switching `FILES_DRIVER`.
+- A `php artisan storage:migrate {--from=} {--to=}` command is **in scope as a follow-up** to copy blobs by `files` table cursor and verify `checksum_sha256` before switching `FILES_DRIVER`.
 
 ### 9. Test Strategy & Octane Safety
 - **CI:** Runs unit/feature tests against the `local` adapter on a temporary directory (`Storage::fake(...)` or `sys_get_temp_dir()`).
 - **S3 CI job:** Run against a **MinIO** service container only on `main` and on PRs that touch storage paths (via path filters). If configured as a required status check, ensure skipped runs still report as passing so non-storage PRs are not blocked.
-- **Octane safety:** Do **not** mutate `config('filesystems.disks...')` per request if avoidable; prefer explicit `tenants/{tenant_id}/...` key prefixes on shared disks, and ensure `FilesystemBootstrapper::revert()` restores any legacy `local` root override so `octane-worker-leak-test` remains clean.
+- **Octane safety:** Prefer explicit `tenants/{tenant_id}/...` key prefixes on shared disks instead of mutating `config('filesystems.disks...')` per request, and ensure `FilesystemBootstrapper::revert()` restores any legacy `local` root override so `octane-worker-leak-test` remains clean.
 
 ## Implementation Slice Plan
 
-1. **Slice 1 — Core File Service PR:**
-   - `files` migration + `FileRecord` model (`UsesTenantConnection`, `HasUlids`).
-   - `config/filesystems.php` disks (`files_private`, `files_public`, `files_hot`) + `FileStorageService` (upload staging, MIME-by-content validation, quota calculation, `X-Accel-Redirect` / presigned URL response builder).
-   - Purge job + storage health check + Pest tests (including Octane leak & quota tests).
-2. **Slice 2 — Profile & Settings Avatars PR:**
-   - Avatar upload/delete endpoints using `FileStorageService` (`files_private` for original, `files_hot` for thumbnail).
-   - Frontend avatar uploader in Profile & Settings.
+1. **Slice 1 — Core File Service:**
+   - `config/filesystems.php` disks (`files_private`, `files_public`, `files_hot`), `files` migration + `FileRecord` model, `FileStorageService` (staging, MIME-by-content validation, SVG/executable rejection), authorized serving (`StreamedResponse` default, `X-Accel-Redirect`/`X-Sendfile`, 60s presigned URLs, proxy streaming for sensitive categories), and Pest tests.
+2. **Slice 2 — Quotas, Cleanup, Health & MinIO CI:**
+   - Transactional per-tenant running usage counter + quota enforcement, purge and orphan cleanup job, storage health check, and MinIO CI job with path filters.
+3. **Slice 3 — Avatars in Profile & Settings:**
+   - Avatar upload/delete endpoints (`files_private` original + `files_hot` thumbnail) and frontend avatar uploader.
 
+## Resolved Decisions
+
+1. **`files_public` on-prem:** Lives on the secondary bulk drive with long cache headers; everything on `files_hot` (NVMe) is regenerable.
+2. **Quotas & per-file caps:** Per-tenant quota is unlimited by default in v1 (`FILES_TENANT_QUOTA_BYTES`), with per-category file size caps enforced from day one.
+3. **MinIO S3 CI:** Runs only on `main` and storage-touching PRs via path filters, with skipped runs reporting as passing if required.
