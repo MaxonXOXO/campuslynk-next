@@ -148,6 +148,29 @@ export function createApiClient(config: ApiClientConfig) {
         method: 'GET',
         ...options,
       }),
+    updateMe: (body: OperationRequestBody<operations['updateCurrentUser']>, options?: RequestOptions) =>
+      request<OperationResponse<operations['updateCurrentUser']>>('/me', {
+        method: 'PATCH',
+        body,
+        ...options,
+      }),
+    sessions: {
+      list: (options?: RequestOptions) =>
+        request<OperationResponse<operations['listMySessions']>>('/me/sessions', {
+          method: 'GET',
+          ...options,
+        }),
+      revoke: (id: string, options?: RequestOptions) =>
+        request<OperationResponse<operations['revokeMySession']>>(`/me/sessions/${id}`, {
+          method: 'DELETE',
+          ...options,
+        }),
+      revokeOthers: (options?: RequestOptions) =>
+        request<OperationResponse<operations['revokeOtherSessions']>>('/me/sessions', {
+          method: 'DELETE',
+          ...options,
+        }),
+    },
     registerStaff: (body: OperationRequestBody<operations['registerStaff']>, options?: RequestOptions) =>
       request<OperationResponse<operations['registerStaff']>>('/auth/register-staff', {
         method: 'POST',

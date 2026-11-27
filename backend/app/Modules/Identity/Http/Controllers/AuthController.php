@@ -43,7 +43,8 @@ class AuthController
             password: $password,
             deviceName: $deviceName,
             client: $client,
-            ip: (string) $request->ip()
+            ip: (string) $request->ip(),
+            userAgent: $request->userAgent()
         );
 
         return response()->json([
@@ -101,13 +102,17 @@ class AuthController
         $newPassword = $request->validated('new_password');
         /** @var PersonalAccessToken|null $token */
         $token = $user->currentAccessToken();
+        $revokeOtherSessions = $request->has('revoke_other_sessions')
+            ? (bool) $request->validated('revoke_other_sessions')
+            : true;
 
         $action->execute(
             user: $user,
             currentPassword: $currentPassword,
             newPassword: $newPassword,
             ip: (string) $request->ip(),
-            currentToken: $token
+            currentToken: $token,
+            revokeOtherSessions: $revokeOtherSessions
         );
 
         return response()->json([
