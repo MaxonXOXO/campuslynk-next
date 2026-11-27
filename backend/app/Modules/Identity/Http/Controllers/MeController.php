@@ -58,6 +58,8 @@ class MeController
                 'id' => $user->id,
                 'type' => $user->type,
                 'name' => $user->name,
+                'first_name' => $user->first_name,
+                'last_name' => $user->last_name,
                 'email' => $user->email,
                 'mobile' => $user->mobile,
                 'registration_number' => $user->registration_number,

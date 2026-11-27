@@ -43,7 +43,8 @@ class AuthController
             password: $password,
             deviceName: $deviceName,
             client: $client,
-            ip: (string) $request->ip()
+            ip: (string) $request->ip(),
+            userAgent: $request->userAgent()
         );
 
         return response()->json([
