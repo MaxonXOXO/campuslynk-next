@@ -57,7 +57,9 @@ Route::prefix('v1')->group(function (): void {
     // Authenticated Routes (Sanctum)
     Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/auth/logout', [AuthController::class, 'logout'])->name('api.v1.auth.logout');
-        Route::post('/auth/password/change', [AuthController::class, 'changePassword'])->name('api.v1.auth.password.change');
+        Route::post('/auth/password/change', [AuthController::class, 'changePassword'])
+            ->middleware('throttle:profile-security')
+            ->name('api.v1.auth.password.change');
 
         // Authenticated routes requiring must_change_password to be false and respecting impersonation safety
         Route::middleware([EnsurePasswordNotMustChange::class, EnforceImpersonationRestrictions::class])->group(function (): void {

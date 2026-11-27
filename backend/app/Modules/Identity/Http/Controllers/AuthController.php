@@ -102,13 +102,17 @@ class AuthController
         $newPassword = $request->validated('new_password');
         /** @var PersonalAccessToken|null $token */
         $token = $user->currentAccessToken();
+        $revokeOtherSessions = $request->has('revoke_other_sessions')
+            ? (bool) $request->validated('revoke_other_sessions')
+            : true;
 
         $action->execute(
             user: $user,
             currentPassword: $currentPassword,
             newPassword: $newPassword,
             ip: (string) $request->ip(),
-            currentToken: $token
+            currentToken: $token,
+            revokeOtherSessions: $revokeOtherSessions
         );
 
         return response()->json([
