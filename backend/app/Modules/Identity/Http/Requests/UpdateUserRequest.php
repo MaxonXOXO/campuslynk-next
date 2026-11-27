@@ -20,6 +20,8 @@ class UpdateUserRequest extends FormRequest
     {
         return [
             'name' => ['sometimes', 'string', 'min:2', 'max:100'],
+            'first_name' => ['sometimes', 'nullable', 'string', 'max:100'],
+            'last_name' => ['sometimes', 'nullable', 'string', 'max:100'],
             'email' => ['sometimes', 'nullable', 'email', 'max:150'],
             'mobile' => ['sometimes', 'nullable', 'string', 'regex:/^[0-9+\-\s]{10,20}$/'],
             'status' => ['sometimes', 'string', 'in:active,suspended,pending'],

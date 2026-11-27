@@ -81,4 +81,3 @@ class UpdateMeRequest extends FormRequest
         ];
     }
 }
-

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Core\Tenancy\Services\TenantProvisioner;
 use App\Core\Tenancy\TenantContext;
+use App\Modules\Identity\Actions\UpdateUserAction;
 use App\Modules\Identity\Models\Activity;
 use App\Modules\Identity\Models\User;
 use Tests\Feature\Tenancy\TenancyTestHelper;
@@ -173,3 +174,23 @@ it('throttles excessive PATCH /me requests with 429', function (): void {
     ])->assertStatus(429);
 });
 
+it('records old_values and new_values in activity_log when UpdateUserAction changes a user name', function (): void {
+    $admin = User::create([
+        'type' => 'staff',
+        'name' => 'IT Admin',
+        'email' => 'admin@me.test',
+        'password' => 'StrongPass99!',
+        'must_change_password' => false,
+        'status' => 'active',
+    ]);
+
+    app(UpdateUserAction::class)->execute($admin, $this->user, [
+        'name' => 'Dr. Asha Menon',
+    ]);
+
+    /** @var Activity|null $log */
+    $log = Activity::where('event', 'user.updated')->latest('id')->first();
+    expect($log)->not->toBeNull()
+        ->and($log->properties->get('old_values'))->toBe(['name' => 'Dr. Asha Nair'])
+        ->and($log->properties->get('new_values'))->toBe(['name' => 'Dr. Asha Menon']);
+});
