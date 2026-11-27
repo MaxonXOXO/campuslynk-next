@@ -145,7 +145,7 @@ describe("Super Admin Sidebar Config Isolation", () => {
       "/w/super-admin",
       "/w/super-admin/principal",
       "/w/super-admin/users",
-      "/setup",
+      "/w/super-admin/settings",
     ]);
 
     const academicKeywords =

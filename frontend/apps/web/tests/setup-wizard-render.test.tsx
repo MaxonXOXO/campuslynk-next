@@ -1075,4 +1075,48 @@ describe("Organisation immediate saves and wizard navigation lock", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(documentExitEvent().defaultPrevented).toBe(false);
   });
+
+  it("shows locked banner with Control Panel link when saving a step returns 423 setup-locked", async () => {
+    const user = userEvent.setup();
+    mocks.requestedStep = "institution_profile";
+    mocks.client.setup.status.mockResolvedValue({
+      data: {
+        is_completed: false,
+        completed_at: null,
+        completed_steps: [],
+        current_step: "institution_profile",
+        steps: {
+          institution_profile: {
+            is_completed: true,
+            settings_exist: true,
+            values: { name: "Demo College", short_code: "DC" },
+          },
+          organisation_basics: { is_completed: false, counts: { streams: 0, departments: 0, academic_years: 0 } },
+          calendar_basics: { is_completed: false, settings_exist: false, values: null },
+          signup_policy: { is_completed: false, settings_exist: false, values: null },
+        },
+      },
+    });
+    mocks.client.setup.saveStep.mockRejectedValueOnce(
+      new ApiError({
+        type: "https://academic-suite.com/problems/setup-locked",
+        title: "Setup Section Locked",
+        status: 423,
+        detail: "Section is locked.",
+      })
+    );
+
+    renderWizardPage();
+    const nameInput = await screen.findByLabelText(/Institution Name/i);
+    await user.type(nameInput, " Updated");
+    const saveButton = screen.getByRole("button", { name: "Save & Continue" });
+    await user.click(saveButton);
+
+    expect(
+      await screen.findByText("This setup section is locked")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Open Control Panel" })
+    ).toHaveAttribute("href", "/w/super-admin/settings?category=setup");
+  });
 });

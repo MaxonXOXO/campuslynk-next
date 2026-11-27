@@ -108,7 +108,7 @@ describe("App Shell & Workspace Switcher", () => {
       "/w/super-admin",
       "/w/super-admin/principal",
       "/w/super-admin/users",
-      "/setup",
+      "/w/super-admin/settings",
     ]);
 
     for (const link of sidebarLinks) {

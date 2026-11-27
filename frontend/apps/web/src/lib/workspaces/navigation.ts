@@ -33,8 +33,8 @@ export const WORKSPACE_NAV: Readonly<Record<WorkspaceSlug, readonly WorkspaceNav
       icon: "users",
     },
     {
-      label: "Institution Setup",
-      href: "/setup",
+      label: "Control Panel",
+      href: "/w/super-admin/settings",
       icon: "setup",
     },
   ],
