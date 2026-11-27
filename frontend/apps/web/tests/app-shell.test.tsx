@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.pathname,
+  useSearchParams: () => new URLSearchParams(""),
   useRouter: () => mocks.router,
 }));
 
@@ -103,7 +104,11 @@ describe("App Shell & Workspace Switcher", () => {
 
     const sidebarLinks = screen
       .getAllByRole("link")
-      .filter((a) => a.getAttribute("href") !== "#main-content");
+      .filter(
+        (a) =>
+          a.getAttribute("href") !== "#main-content" &&
+          !a.closest('nav[aria-label="breadcrumb"]')
+      );
     expect(sidebarLinks.map((a) => a.getAttribute("href"))).toEqual([
       "/w/super-admin",
       "/w/super-admin/principal",

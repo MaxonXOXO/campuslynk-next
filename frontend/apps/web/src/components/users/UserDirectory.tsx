@@ -289,10 +289,14 @@ export function UserDirectory({
   const isPendingTab = directoryTab === "pending";
   const isNotActivatedTab = directoryTab === "not_activated";
 
+  const hasRequestedDepartments = users.some((u) =>
+    Boolean(u.staff_profile?.requested_department_id)
+  );
+
   const { data: departmentsData } = useApiQuery<{ data: DepartmentLookup[] }>({
     queryKey: ["organisation", "departments"],
     staleTime: STALE_TIME_REFERENCE_MS,
-    enabled: isPendingTab,
+    enabled: isPendingTab || hasRequestedDepartments,
     queryFn: async (api) => {
       const apiDepts = api.organisation?.departments ?? api.departments;
       if (!apiDepts?.list) return { data: [] };
@@ -1358,17 +1362,21 @@ export function UserDirectory({
                               </TableCell>
                             )}
                             <TableCell className="whitespace-normal">
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex items-center justify-between gap-2">
                                 <span className="font-medium text-foreground">
                                   {user.name}
                                 </span>
-                                {user.must_change_password && (
-                                  <Badge variant="outline" className="text-[11px]">
-                                    Must change password
-                                  </Badge>
-                                )}
-                                {user.is_locked && (
-                                  <StatusBadge status="danger">Locked</StatusBadge>
+                                {(user.must_change_password || user.is_locked) && (
+                                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+                                    {user.must_change_password && (
+                                      <Badge variant="outline" className="text-[11px]">
+                                        Must change password
+                                      </Badge>
+                                    )}
+                                    {user.is_locked && (
+                                      <StatusBadge status="danger">Locked</StatusBadge>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               {user.must_change_password &&

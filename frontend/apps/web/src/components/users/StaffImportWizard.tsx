@@ -35,11 +35,14 @@ import {
   RiArrowLeftLine,
   RiCheckDoubleLine,
   RiDownloadLine,
+  RiEyeLine,
+  RiEyeOffLine,
   RiLoader4Line,
   RiUploadCloud2Line,
 } from "@remixicon/react";
 import { toast } from "sonner";
-import { useApiMutation, useApiQuery } from "@/lib/query/api-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { scopedQueryKey, useApiMutation, useApiQuery, useQueryScope } from "@/lib/query/api-query";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { problemStatus } from "@/lib/auth/problem";
 import { getGeneralErrorMessage } from "@/app/setup/logic/error-mapping";
@@ -93,6 +96,8 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
 
   const { state: sessionState } = useSession();
   const apiClient = useApiClient();
+  const queryClient = useQueryClient();
+  const scope = useQueryScope();
   const capabilities = React.useMemo(
     () => new Set(sessionState.user?.capabilities ?? []),
     [sessionState.user?.capabilities]
@@ -108,6 +113,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
   const [commitError, setCommitError] = React.useState<string | null>(null);
   const [committing, setCommitting] = React.useState(false);
   const [needsPasswordReentry, setNeedsPasswordReentry] = React.useState(false);
+  const [showPassword, setShowPassword] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [approveSummary, setApproveSummary] = React.useState<BulkApproveData | null>(null);
 
@@ -116,6 +122,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
   const passwordRef = React.useRef<HTMLInputElement | null>(null);
   const stepHeadingRef = React.useRef<HTMLHeadingElement | null>(null);
   const errorAlertRef = React.useRef<HTMLDivElement | null>(null);
+  const hasPreviewedInSessionRef = React.useRef(false);
 
   // Generated once per wizard session and reused on retry of the same commit.
   const idempotencyKeyRef = React.useRef<string>(
@@ -128,6 +135,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
     if (passwordRef.current) {
       passwordRef.current.value = "";
     }
+    setShowPassword(false);
   }, []);
 
   React.useEffect(() => {
@@ -162,9 +170,10 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
 
   const currentBatch = resumedBatchEnvelope?.data ?? previewBatch;
 
-  // Sync wizard step when resuming via ?batch=<id>
+  // Sync wizard step when resuming via ?batch=<id> (skip if previewed in the current session)
   React.useEffect(() => {
     if (!resumeBatchId || !resumedBatchEnvelope?.data) return;
+    if (hasPreviewedInSessionRef.current) return;
     const batch = resumedBatchEnvelope.data;
     setPreviewBatch(batch);
     if (batch.status === "previewed") {
@@ -192,6 +201,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
   });
 
   function handleStartNewImport() {
+    hasPreviewedInSessionRef.current = false;
     clearPasswordInput();
     setSelectedFile(null);
     setPreviewBatch(null);
@@ -225,6 +235,7 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
 
     try {
       const res = await previewMutation.mutateAsync(selectedFile);
+      hasPreviewedInSessionRef.current = true;
       setPreviewBatch(res.data.batch);
       setPreviewRows(res.data.rows_preview ?? []);
       setStep(2);
@@ -262,7 +273,15 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
         idempotency_key: idempotencyKeyRef.current,
       })) as { data: BatchSchema };
       setPreviewBatch(res.data);
+      const batchKey = scopedQueryKey(scope, "staff-imports", "batch", res.data.id);
+      queryClient.setQueryData(batchKey, res);
       setStep(4);
+      void queryClient.invalidateQueries({
+        queryKey: batchKey,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(scope, "users"),
+      });
     } catch (err: unknown) {
       if (problemStatus(err) === 409) {
         setCommitError(
@@ -579,14 +598,31 @@ export function StaffImportWizard({ usersHref }: StaffImportWizardProps) {
             <form onSubmit={handleCommitSubmit} noValidate className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="batch-common-password">Common temporary password</Label>
-                <Input
-                  id="batch-common-password"
-                  ref={passwordRef}
-                  type="password"
-                  autoComplete="new-password"
-                  disabled={committing}
-                  required
-                />
+                <div className="flex items-center gap-2">
+                  <Input
+                    id="batch-common-password"
+                    ref={passwordRef}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="new-password"
+                    disabled={committing}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setShowPassword((prev) => !prev)}
+                    disabled={committing}
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                  >
+                    {showPassword ? (
+                      <RiEyeOffLine className="size-4" aria-hidden="true" />
+                    ) : (
+                      <RiEyeLine className="size-4" aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
               </div>
 
               {canApprove && (

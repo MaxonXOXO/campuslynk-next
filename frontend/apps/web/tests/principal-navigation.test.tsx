@@ -23,6 +23,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("next/navigation", () => ({
   usePathname: () => mocks.pathname,
+  useSearchParams: () => new URLSearchParams(""),
   useRouter: () => mocks.router,
 }));
 

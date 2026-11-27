@@ -59,22 +59,22 @@ final class CommitStaffImportAction
             }
             $locked->save();
 
+            activity('identity')
+                ->event('staff_import.committed')
+                ->performedOn($locked)
+                ->causedBy($actor)
+                ->withProperties([
+                    'batch_id' => $locked->id,
+                    'auto_approve' => $locked->auto_approve,
+                    'valid_rows' => $locked->valid_rows,
+                ])
+                ->log("Committed staff import batch [{$locked->filename}] for background processing.");
+
             CommitStaffImportJob::dispatch($locked->id, $passwordHash, $actor->id, $autoApprove)
                 ->afterCommit();
 
             return $locked;
         });
-
-        activity('identity')
-            ->event('staff_import.committed')
-            ->performedOn($batch)
-            ->causedBy($actor)
-            ->withProperties([
-                'batch_id' => $batch->id,
-                'auto_approve' => $batch->auto_approve,
-                'valid_rows' => $batch->valid_rows,
-            ])
-            ->log("Committed staff import batch [{$batch->filename}] for background processing.");
 
         return $batch;
     }

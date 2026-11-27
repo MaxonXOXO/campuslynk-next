@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Identity\Models;
 
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -126,6 +127,17 @@ class User extends Authenticatable
     public function isActive(): bool
     {
         return $this->status === 'active';
+    }
+
+    /**
+     * Filter users by must_change_password using PostgreSQL-safe boolean predicate.
+     *
+     * @param  Builder<static>  $query
+     * @return Builder<static>
+     */
+    public function scopeMustChangePassword(Builder $query, bool $mustChange = true): Builder
+    {
+        return $query->whereRaw($mustChange ? 'must_change_password is true' : 'must_change_password is false');
     }
 
     /**

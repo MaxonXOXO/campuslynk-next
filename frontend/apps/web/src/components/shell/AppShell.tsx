@@ -59,6 +59,7 @@ import {
 } from "@/lib/workspaces/workspaces";
 import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { GlobalSearchCommand } from "./GlobalSearchCommand";
+import { WorkspaceBreadcrumbs } from "./WorkspaceBreadcrumbs";
 
 const NAV_ICONS: Record<NavIconKey, React.ComponentType<{ className?: string }>> = {
   overview: RiDashboardLine,
@@ -324,6 +325,9 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           tabIndex={-1}
           className="flex-1 w-full max-w-[96rem] mx-auto p-4 sm:p-6 lg:p-8 outline-none"
         >
+          <React.Suspense fallback={null}>
+            <WorkspaceBreadcrumbs activeSlug={activeSlug} />
+          </React.Suspense>
           {children}
         </div>
       </SidebarInset>

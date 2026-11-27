@@ -97,12 +97,12 @@ class UserController
         if ($request->has('must_change_password')) {
             $mustChange = filter_var($request->query('must_change_password'), FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
             if ($mustChange !== null) {
-                $query->where('must_change_password', $mustChange);
+                $query->mustChangePassword($mustChange);
             }
         }
 
         if (filter_var($request->query('expired_temp_password'), FILTER_VALIDATE_BOOLEAN)) {
-            $query->where('must_change_password', true)
+            $query->mustChangePassword(true)
                 ->whereNotNull('temporary_password_expires_at')
                 ->where('temporary_password_expires_at', '<', now());
         }
