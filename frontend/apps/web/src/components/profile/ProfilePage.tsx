@@ -6,6 +6,7 @@ import { PageHeader, cn } from "@academic-suite/ui";
 import { RiShieldKeyholeLine, RiUser3Line } from "@remixicon/react";
 import { PersonalInfoSection } from "./PersonalInfoSection";
 import { ChangePasswordForm } from "@/components/auth/ChangePasswordForm";
+import { SessionsSection } from "./SessionsSection";
 
 export type ProfileSectionId = "personal" | "security";
 
@@ -90,6 +91,7 @@ export function ProfilePage() {
           {activeSection === "security" && (
             <div className="space-y-6">
               <ChangePasswordForm mode="profile" />
+              <SessionsSection />
             </div>
           )}
         </section>

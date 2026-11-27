@@ -1,6 +1,6 @@
 import * as React from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
 import { renderWithQueryClient } from "./helpers/query-wrapper";
@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
   bootstrap: vi.fn(),
   changePassword: vi.fn(),
   updateMe: vi.fn(),
+  sessionsList: vi.fn(),
+  sessionsRevoke: vi.fn(),
+  sessionsRevokeOthers: vi.fn(),
   sectionParam: null as string | null,
   user: {
     id: "01USER",
@@ -62,7 +65,11 @@ vi.mock("@/lib/auth/session-provider", () => ({
     identity: { users: { list: vi.fn().mockResolvedValue({ data: [], meta: { total: 0 } }) } },
     auth: {
       updateMe: mocks.updateMe,
-      sessions: { list: vi.fn(), revoke: vi.fn(), revokeOthers: vi.fn() },
+      sessions: {
+        list: mocks.sessionsList,
+        revoke: mocks.sessionsRevoke,
+        revokeOthers: mocks.sessionsRevokeOthers,
+      },
     },
   }),
 }));
@@ -87,6 +94,39 @@ describe("Profile & Settings v1 — Slice 1", () => {
     mocks.bootstrap.mockReset().mockResolvedValue(undefined);
     mocks.changePassword.mockReset().mockResolvedValue({ ok: true, route: "/home" });
     mocks.updateMe.mockReset().mockResolvedValue({ data: mocks.user });
+    mocks.sessionsList.mockReset().mockResolvedValue({
+      data: [
+        {
+          id: "01SESS_CURR",
+          device_label: "Chrome on Windows",
+          is_current: true,
+          is_support_session: false,
+          created_at: "2026-11-27T10:00:00Z",
+          last_used_at: "2026-11-27T12:00:00Z",
+          expires_at: null,
+        },
+        {
+          id: "01SESS_OTHER",
+          device_label: "Safari on iOS",
+          is_current: false,
+          is_support_session: false,
+          created_at: "2026-11-26T10:00:00Z",
+          last_used_at: null,
+          expires_at: null,
+        },
+        {
+          id: "01SESS_SUPP",
+          device_label: "Support session",
+          is_current: false,
+          is_support_session: true,
+          created_at: "2026-11-27T11:30:00Z",
+          last_used_at: null,
+          expires_at: "2026-11-27T12:00:00Z",
+        },
+      ],
+    });
+    mocks.sessionsRevoke.mockReset().mockResolvedValue({ data: { revoked: true } });
+    mocks.sessionsRevokeOthers.mockReset().mockResolvedValue({ data: { revoked_count: 1 } });
     mocks.sectionParam = null;
     mocks.user.first_name = "Asha";
     mocks.user.last_name = "Nair";
@@ -263,6 +303,87 @@ describe("Profile & Settings v1 — Slice 1", () => {
         "Other signed-in devices will be signed out when you update your password."
       )
     ).toBeInTheDocument();
+  });
+
+  it("lists sessions with This device and Support session (read-only) without Revoke buttons or token hashes", async () => {
+    mocks.sectionParam = "security";
+    const { container } = renderWithQueryClient(<ProfilePage />);
+
+    expect(await screen.findByText("Chrome on Windows")).toBeInTheDocument();
+    expect(screen.getByText("This device")).toBeInTheDocument();
+    expect(screen.getByText("Support session (read-only)")).toBeInTheDocument();
+
+    const devicesList = screen.getByRole("list", { name: "Signed-in devices" });
+    const listItems = within(devicesList).getAllByRole("listitem");
+    expect(listItems).toHaveLength(3);
+    expect(within(listItems[0]!).queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+    expect(within(listItems[1]!).getByRole("button", { name: "Revoke" })).toBeInTheDocument();
+    expect(within(listItems[2]!).queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
+
+    expect(container.textContent).not.toMatch(/01SESS_|token|sha256/i);
+  });
+
+  it("revokes an individual session with confirmation and refreshes the list", async () => {
+    const user = userEvent.setup();
+    mocks.sectionParam = "security";
+    renderWithQueryClient(<ProfilePage />);
+
+    const revokeBtn = await screen.findByRole("button", { name: "Revoke" });
+    await user.click(revokeBtn);
+
+    expect(await screen.findByText("Sign out device?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Revoke session" }));
+
+    await waitFor(() => {
+      expect(mocks.sessionsRevoke).toHaveBeenCalledWith("01SESS_OTHER");
+    });
+    expect(mocks.sessionsList).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes all other sessions with confirmation and refreshes the list", async () => {
+    const user = userEvent.setup();
+    mocks.sectionParam = "security";
+    renderWithQueryClient(<ProfilePage />);
+
+    const revokeAllBtn = await screen.findByRole("button", {
+      name: "Sign out all other sessions",
+    });
+    await user.click(revokeAllBtn);
+
+    const dialog = await screen.findByRole("dialog");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Sign out all other sessions" })
+    );
+
+    await waitFor(() => {
+      expect(mocks.sessionsRevokeOthers).toHaveBeenCalledTimes(1);
+    });
+    expect(mocks.sessionsList).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows loading, empty, and error retry states for sessions", async () => {
+    const user = userEvent.setup();
+    mocks.sectionParam = "security";
+    mocks.sessionsList.mockReturnValueOnce(new Promise(() => {}));
+    const { unmount } = renderWithQueryClient(<ProfilePage />);
+    expect(screen.getByLabelText("Loading active sessions")).toBeInTheDocument();
+    unmount();
+
+    mocks.sessionsList.mockResolvedValueOnce({ data: [] });
+    const emptyRender = renderWithQueryClient(<ProfilePage />);
+    expect(await screen.findByText("No active sessions found.")).toBeInTheDocument();
+    emptyRender.unmount();
+
+    mocks.sessionsList
+      .mockRejectedValueOnce(new Error("Network error"))
+      .mockResolvedValueOnce({ data: [] });
+    renderWithQueryClient(<ProfilePage />);
+    expect(
+      await screen.findByText("Unable to load active sessions")
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(await screen.findByText("No active sessions found.")).toBeInTheDocument();
   });
 });
 
