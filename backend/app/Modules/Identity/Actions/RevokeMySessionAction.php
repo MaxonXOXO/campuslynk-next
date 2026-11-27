@@ -47,4 +47,3 @@ final class RevokeMySessionAction
             ->log("User [{$user->name}] revoked an active session.");
     }
 }
-

@@ -90,7 +90,7 @@ it('returns 422 pointing to logout when attempting to revoke the current session
         'X-Tenant' => 'tenant_sess_a',
     ])->deleteJson("http://sessa.test/api/v1/me/sessions/{$tokenObj->accessToken->id}")
         ->assertStatus(422)
-        ->assertJsonPath('type', 'https://academic-suite.com/problems/cannot-revoke-current-session');
+        ->assertJsonPath('type', 'https://errors.campuslynk.net/cannot-revoke-current-session');
 });
 
 it('revokes another session of the caller and returns 404 for another user session', function (): void {
@@ -185,4 +185,3 @@ it('throttles excessive /me/sessions requests with 429', function (): void {
         'X-Tenant' => 'tenant_sess_a',
     ])->getJson('http://sessa.test/api/v1/me/sessions')->assertStatus(429);
 });
-

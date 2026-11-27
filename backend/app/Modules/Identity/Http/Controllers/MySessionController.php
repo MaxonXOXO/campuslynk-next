@@ -49,14 +49,14 @@ class MySessionController
             $action->execute($user, $id, $currentToken);
         } catch (InvalidArgumentException) {
             return ProblemDetails::response(
-                type: 'https://academic-suite.com/problems/cannot-revoke-current-session',
+                type: 'https://errors.campuslynk.net/cannot-revoke-current-session',
                 title: 'Cannot Revoke Current Session',
                 status: Response::HTTP_UNPROCESSABLE_ENTITY,
                 detail: 'You cannot revoke your current active session. Use POST /api/v1/auth/logout instead.',
             );
         } catch (AccessDeniedHttpException) {
             return ProblemDetails::response(
-                type: 'https://academic-suite.com/problems/support-session-protected',
+                type: 'https://errors.campuslynk.net/support-session-protected',
                 title: 'Support Session Protected',
                 status: Response::HTTP_FORBIDDEN,
                 detail: 'Read-only support sessions cannot be revoked from this endpoint.',
