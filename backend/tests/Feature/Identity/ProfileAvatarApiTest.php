@@ -217,6 +217,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     Storage::disk(FileStorageService::DISK_HOT)->assertExists("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
 
     // 4. Another user without identity.user.view receives 403
+    auth()->forgetGuards();
     app(TenantContext::class)->setTenant($this->tenant);
     $otherUser = User::create([
         'type' => 'staff',
@@ -255,6 +256,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     }
 
     // 6. Cross-tenant isolation: user ID from tenant A is 404 in tenant B
+    auth()->forgetGuards();
     $provisioner = app(TenantProvisioner::class);
     $tenantB = $provisioner->provision('tenant_avatar_b', 'Avatar B College', 'avatar-b.test', 'cloud');
     app(TenantContext::class)->setTenant($tenantB);
