@@ -709,12 +709,14 @@ describe('Academic Suite API Client', () => {
       reason: 'Opening onboarding window.',
     });
     await client.identity.auditLogs.list({ log_name: 'identity', per_page: 25 });
+    await client.organisation.batches.promote('01B1');
 
     expect(calls.map((c) => `${c.method} ${c.url.replace('https://api.carmelpoly.in/api/v1', '')}`)).toEqual([
       'GET /auth/capabilities',
       'GET /settings',
       'PUT /settings/auth.staff_self_registration_enabled',
       'GET /audit-logs?log_name=identity&per_page=25',
+      'POST /batches/01B1/promote',
     ]);
   });
 });

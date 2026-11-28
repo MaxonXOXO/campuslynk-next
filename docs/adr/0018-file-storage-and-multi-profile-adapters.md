@@ -85,11 +85,11 @@ Environment variables:
 
 ## Implementation Slice Plan
 
-1. **Slice 1 — Core File Service:**
+1. **Slice 1 — Core File Service (Implemented):**
    - `config/filesystems.php` disks (`files_private`, `files_public`, `files_hot`), `files` migration + `FileRecord` model, `FileStorageService` (staging, MIME-by-content validation, SVG/executable rejection), authorized serving (`StreamedResponse` default, `X-Accel-Redirect`/`X-Sendfile`, 60s presigned URLs, proxy streaming for sensitive categories), and Pest tests.
 2. **Slice 2 — Quotas, Cleanup, Health & MinIO CI:**
    - Transactional per-tenant running usage counter + quota enforcement, purge and orphan cleanup job, storage health check, and MinIO CI job with path filters.
-3. **Slice 3 — Avatars in Profile & Settings:**
+3. **Slice 3 — Avatars in Profile & Settings (Implemented):**
    - Avatar upload/delete endpoints (`files_private` original + `files_hot` thumbnail) and frontend avatar uploader.
 
 ## Resolved Decisions

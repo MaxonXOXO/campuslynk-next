@@ -1,10 +1,25 @@
 import React from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import { renderWithQueryClient } from "./helpers/query-wrapper";
 import userEvent from "@testing-library/user-event";
 import { ApiError } from "@academic-suite/api-client";
+
+beforeAll(() => {
+  if (typeof globalThis.ResizeObserver === "undefined") {
+    globalThis.ResizeObserver = class ResizeObserver {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  }
+  if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+    Element.prototype.scrollIntoView = () => {};
+  }
+});
+
 import { PrincipalDepartmentsPage } from "../src/components/principal/PrincipalDepartmentsPage";
+import { DepartmentHierarchyPage } from "../src/components/principal/DepartmentHierarchyPage";
 
 const mocks = vi.hoisted(() => ({
   toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
@@ -33,6 +48,18 @@ vi.mock("@/lib/auth/session-provider", () => ({
   useSession: () => ({
     state: { status: "authenticated", user: mocks.user },
   }),
+}));
+
+vi.mock("next/link", () => ({
+  default: ({
+    href,
+    children,
+    ...props
+  }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string }) => (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  ),
 }));
 
 vi.mock("sonner", () => ({ toast: mocks.toast }));
@@ -65,9 +92,9 @@ const DEPARTMENTS = [
 ];
 
 const BATCHES = [
-  { id: "b1", home_department_id: "d1" },
-  { id: "b2", home_department_id: "d1" },
-  { id: "b3", home_department_id: "d2" },
+  { id: "b1", name: "2024-2027 Batch", scope_label: "b_ce_2024", home_department_id: "d1" },
+  { id: "b2", name: "2025-2028 Batch", scope_label: "b_ce_2025", home_department_id: "d1" },
+  { id: "b3", name: "2025-2028 Batch", scope_label: "b_me_2025", home_department_id: "d2" },
 ];
 
 const STAFF = [
@@ -88,9 +115,21 @@ const ASSIGNMENTS = [
     is_active: true,
     user: { id: "u1", name: "Dr. Asha Nair", email: "asha@dev.test" },
   },
+  {
+    id: "ra2",
+    user_id: "u2",
+    role_id: "r_lec",
+    role_key: "lecturer",
+    role_name: "Lecturer",
+    scope_type: "department",
+    scope_label: "d_ce",
+    is_singleton: false,
+    is_active: true,
+    user: { id: "u2", name: "Prof. Thomas", email: "thomas@dev.test" },
+  },
 ];
 
-describe("PrincipalDepartmentsPage", () => {
+describe("PrincipalDepartmentsPage & DepartmentHierarchyPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.client.organisation.streams.list.mockResolvedValue({ data: STREAMS });
@@ -104,7 +143,7 @@ describe("PrincipalDepartmentsPage", () => {
     cleanup();
   });
 
-  it("renders view-only departments grouped by stream with batch counts and no CRUD controls", async () => {
+  it("renders view-only departments grouped by stream with Manage leadership links", async () => {
     renderWithQueryClient(<PrincipalDepartmentsPage />);
 
     await waitFor(() => {
@@ -115,6 +154,12 @@ describe("PrincipalDepartmentsPage", () => {
     expect(screen.getByText("Mechanical Engineering")).toBeInTheDocument();
     expect(screen.getByText("2")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
+
+    const links = screen.getAllByRole("link", { name: /manage leadership/i });
+    expect(links.map((l) => l.getAttribute("href"))).toEqual([
+      "/w/principal/departments/d1",
+      "/w/principal/departments/d2",
+    ]);
 
     expect(
       screen.queryByRole("button", { name: /create department|add department|edit|delete/i })
@@ -133,28 +178,34 @@ describe("PrincipalDepartmentsPage", () => {
     expect(vacantBadge).toHaveAttribute("data-status", "warning");
   });
 
-  it("appoints a leadership role via roleAssignments.create", async () => {
+  it("renders tiered department hierarchy and appoints a role with searchable staff picker", async () => {
     const user = userEvent.setup();
     mocks.client.identity.roleAssignments.create.mockResolvedValueOnce({
       data: { id: "ra_new" },
     });
 
-    renderWithQueryClient(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<DepartmentHierarchyPage departmentId="d2" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Mechanical Engineering")).toBeInTheDocument();
+      expect(screen.getByText("Mechanical Engineering (ME)")).toBeInTheDocument();
     });
 
-    const buttons = screen.getAllByRole("button", { name: /manage leadership/i });
-    await user.click(buttons[1]!);
+    expect(screen.getByText(/Tier 1 · Department & Stream Leadership/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tier 2 · Batch Tutors & Mentors/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tier 3 · Teaching & Lab Staff/i)).toBeInTheDocument();
 
-    const dialog = await screen.findByRole("dialog");
-    await user.type(within(dialog).getByLabelText(/official order reference/i), "GO-2026-12");
-    await user.click(within(dialog).getByRole("button", { name: "Appoint" }));
+    // Open searchable staff picker and choose Prof. Thomas
+    await user.click(screen.getByRole("combobox", { name: /select staff member/i }));
+    const searchInput = await screen.findByPlaceholderText(/search by name or email/i);
+    await user.type(searchInput, "Thomas");
+    await user.click(await screen.findByText("Prof. Thomas"));
+
+    await user.type(screen.getByLabelText(/official order reference/i), "GO-2026-12");
+    await user.click(screen.getByRole("button", { name: "Appoint" }));
 
     await waitFor(() => {
       expect(mocks.client.identity.roleAssignments.create).toHaveBeenCalledWith({
-        user_id: "u1",
+        user_id: "u2",
         role_key: "hod",
         scope_type: "department",
         scope_label: "d_me",
@@ -163,17 +214,13 @@ describe("PrincipalDepartmentsPage", () => {
     });
   });
 
-  it("maps 422, 409, and 403 errors when appointing a leadership role", async () => {
+  it("maps 422, 409, and 403 errors when appointing in DepartmentHierarchyPage", async () => {
     const user = userEvent.setup();
-    renderWithQueryClient(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<DepartmentHierarchyPage departmentId="d1" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Civil Engineering")).toBeInTheDocument();
+      expect(screen.getByText("Civil Engineering (CE)")).toBeInTheDocument();
     });
-
-    const buttons = screen.getAllByRole("button", { name: /manage leadership/i });
-    await user.click(buttons[0]!);
-    const dialog = await screen.findByRole("dialog");
 
     // 422
     mocks.client.identity.roleAssignments.create.mockRejectedValueOnce(
@@ -184,9 +231,9 @@ describe("PrincipalDepartmentsPage", () => {
         detail: "The selected user is not eligible.",
       })
     );
-    await user.click(within(dialog).getByRole("button", { name: "Appoint" }));
+    await user.click(screen.getByRole("button", { name: "Appoint" }));
     expect(
-      await within(dialog).findByText("The selected user is not eligible.")
+      await screen.findByText("The selected user is not eligible.")
     ).toBeInTheDocument();
 
     // 409
@@ -198,9 +245,9 @@ describe("PrincipalDepartmentsPage", () => {
         detail: "HOD role is already occupied for this department.",
       })
     );
-    await user.click(within(dialog).getByRole("button", { name: "Appoint" }));
+    await user.click(screen.getByRole("button", { name: "Appoint" }));
     expect(
-      await within(dialog).findByText("HOD role is already occupied for this department.")
+      await screen.findByText("HOD role is already occupied for this department.")
     ).toBeInTheDocument();
 
     // 403
@@ -212,9 +259,9 @@ describe("PrincipalDepartmentsPage", () => {
         detail: "You cannot appoint this role.",
       })
     );
-    await user.click(within(dialog).getByRole("button", { name: "Appoint" }));
+    await user.click(screen.getByRole("button", { name: "Appoint" }));
     expect(
-      await within(dialog).findByText("You cannot appoint this role.")
+      await screen.findByText("You cannot appoint this role.")
     ).toBeInTheDocument();
   });
 
@@ -224,22 +271,18 @@ describe("PrincipalDepartmentsPage", () => {
       data: { message: "Revoked" },
     });
 
-    renderWithQueryClient(<PrincipalDepartmentsPage />);
+    renderWithQueryClient(<DepartmentHierarchyPage departmentId="d1" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Civil Engineering")).toBeInTheDocument();
+      expect(screen.getByText("Civil Engineering (CE)")).toBeInTheDocument();
     });
 
-    const buttons = screen.getAllByRole("button", { name: /manage leadership/i });
-    await user.click(buttons[0]!);
+    const endButtons = screen.getAllByRole("button", { name: "End assignment" });
+    await user.click(endButtons[0]!);
     const dialog = await screen.findByRole("dialog");
 
-    await user.click(within(dialog).getByRole("button", { name: "End assignment" }));
     await user.click(within(dialog).getByRole("button", { name: "Confirm End Assignment" }));
-
-    expect(
-      within(dialog).getByText(/provide a reason/i)
-    ).toBeInTheDocument();
+    expect(within(dialog).getByText(/provide a reason/i)).toBeInTheDocument();
     expect(mocks.client.identity.roleAssignments.delete).not.toHaveBeenCalled();
 
     await user.type(within(dialog).getByLabelText("Reason"), "Tenure completed");
@@ -253,4 +296,3 @@ describe("PrincipalDepartmentsPage", () => {
     });
   });
 });
-

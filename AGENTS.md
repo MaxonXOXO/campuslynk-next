@@ -41,7 +41,7 @@ main. Open the PR, report the check results, and stop. The owner merges.
 
 - **PgBouncer & Runtime Safety (ADR-0011, ADR-0012)**:
   - PgBouncer operates in transaction pooling mode (`pool_mode=transaction`).
-  - Disable PDO emulated prepares (`emulated prepares = false`) on tenant database drivers to eliminate connection state leaks.
+  - Enable PDO emulated prepares (`PDO::ATTR_EMULATE_PREPARES => true`) on landlord and tenant database drivers (ADR-0009, ADR-0010) to avoid cross-connection prepared-statement (`DEALLOCATE`) state leaks under transaction pooling.
   - Application worker runtime (`FrankenPHP` / Laravel Octane) executes with state resetters between requests.
   - Unprivileged application role (`landlord_app`) enforces least privilege; owner operations run via separate migrations.
 
@@ -164,6 +164,13 @@ When building a new domain module (e.g., `Attendance`, `Assessment`, `Leave`):
 | **ADR-0014** | Scope Tree ltree Labels, Dual Paths, and Resilient Role Scoping | `0014-scope-tree-ltree-labels-and-dual-paths.md` | §3 Scoped RBAC & PostgreSQL ltree |
 | **ADR-0015** | Tenant-Defined Streams, Open Regulations and Hardened Settings | `0015-tenant-defined-streams-and-open-regulations.md` | §1 Core Architecture & §2 Tenancy Rules |
 | **ADR-0016** | First-Run Setup State, Settings Schemas, and Wizard Lifecycle | `0016-first-run-setup-state.md` | §1 Core Architecture & §2 Tenancy Rules |
+| **ADR-0017** | People, role assignments, workspaces and audit | `0017-people-roles-workspaces-audit.md` | §3 Scoped RBAC & PostgreSQL ltree |
+| **ADR-0018** | File Storage and Multi-Profile Adapters | `0018-file-storage-and-multi-profile-adapters.md` | §1 Core Architecture & §2 Tenancy Rules |
+
+### Open Conflicts (ADR-0017 vs ADR-0004/0005)
+- **`admin` role**: kept vs dropped across ADR-0004/0005 and ADR-0017.
+- **Sub-batch terminology**: `"section"` vs `"sub_batch"`.
+- **General department coordinator role key**: single `gen_dept_coordinator` vs split role keys.
 
 ---
 

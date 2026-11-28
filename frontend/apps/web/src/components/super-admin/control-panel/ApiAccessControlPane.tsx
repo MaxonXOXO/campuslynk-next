@@ -48,8 +48,8 @@ export function ApiAccessControlPane() {
   const queryClient = useQueryClient();
 
   const settingsQueryKey = React.useMemo(
-    () => scopedQueryKey(scope, "identity", "settings", "list"),
-    [scope]
+    () => ["identity", "settings", "list"] as const,
+    []
   );
 
   const settingsQuery = useApiQuery({
@@ -96,8 +96,9 @@ export function ApiAccessControlPane() {
         value: { days: parsedMobile },
       });
       toast.success("Token lifetimes updated.");
-      await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
-      await settingsQuery.refetch();
+      await queryClient.invalidateQueries({
+        queryKey: scopedQueryKey(scope, ...settingsQueryKey),
+      });
     } catch {
       setSaveError("Could not update token lifetimes.");
     } finally {

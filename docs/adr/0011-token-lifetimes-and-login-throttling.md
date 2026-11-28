@@ -1,6 +1,6 @@
 # ADR-0011: Token Lifetimes, Login Throttling, and Credential Policies
 
-**Status:** Proposed  
+**Status:** Implemented  
 **Date:** 2026-11-01  
 **Deciders:** Core Engineering Team  
 **Consulted:** ADR-0001, ADR-0003, `docs/foundation_spec.md` (§3.2, §3.4)  

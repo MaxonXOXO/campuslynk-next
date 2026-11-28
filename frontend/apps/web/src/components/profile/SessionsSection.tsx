@@ -47,8 +47,8 @@ export function SessionsSection() {
   const queryClient = useQueryClient();
 
   const sessionsQueryKey = React.useMemo(
-    () => scopedQueryKey(scope, "auth", "sessions", "list"),
-    [scope]
+    () => ["auth", "sessions", "list"] as const,
+    []
   );
 
   const sessionsQuery = useApiQuery({
@@ -76,8 +76,9 @@ export function SessionsSection() {
   );
 
   async function refreshSessions() {
-    await queryClient.invalidateQueries({ queryKey: sessionsQueryKey });
-    await sessionsQuery.refetch();
+    await queryClient.invalidateQueries({
+      queryKey: scopedQueryKey(scope, ...sessionsQueryKey),
+    });
   }
 
   async function handleConfirmRevokeOne() {

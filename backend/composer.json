@@ -36,12 +36,14 @@
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
         ],
-        "contract": "@php artisan test --filter=RouteProtectionAuditTest",
         "lint": "pint --test",
         "lint:fix": "pint",
         "analyse": "phpstan analyse --configuration=phpstan.neon --memory-limit=1G",
         "test": "@php -d memory_limit=512M ./vendor/bin/pest",
-        "contract": "pest tests/Architecture/OpenApiContractSyncTest.php",
+        "contract": [
+            "@php -d memory_limit=512M ./vendor/bin/pest tests/Architecture/OpenApiContractSyncTest.php",
+            "@php -d memory_limit=512M ./vendor/bin/pest tests/Architecture/RouteProtectionAuditTest.php"
+        ],
         "check": [
             "@lint",
             "@analyse",

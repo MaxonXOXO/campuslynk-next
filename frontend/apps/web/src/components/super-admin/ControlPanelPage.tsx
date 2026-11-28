@@ -33,7 +33,7 @@ import {
   RiShieldCheckLine,
 } from "@remixicon/react";
 import { useApiClient } from "@/lib/auth/session-provider";
-import { useApiQuery, useQueryScope, scopedQueryKey, STALE_TIME_LIST_MS } from "@/lib/query/api-query";
+import { useApiQuery, STALE_TIME_LIST_MS } from "@/lib/query/api-query";
 import {
   searchControlPanelSettings,
   type ControlPanelSettingItem,
@@ -129,7 +129,6 @@ function categoryIcon(id: ControlPanelCategoryId) {
 
 export function ControlPanelPage() {
   const client = useApiClient();
-  const scope = useQueryScope();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -159,7 +158,7 @@ export function ControlPanelPage() {
   }, [focusTargetId, activeCategory]);
 
   const setupStatusQuery = useApiQuery({
-    queryKey: scopedQueryKey(scope, "organisation", "setup", "status"),
+    queryKey: ["organisation", "setup", "status"],
     queryFn: () => client.organisation.setup.status(),
     staleTime: STALE_TIME_LIST_MS,
   });

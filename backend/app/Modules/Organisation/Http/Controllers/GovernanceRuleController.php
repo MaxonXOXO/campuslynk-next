@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Organisation\Http\Controllers;
 
+use App\Modules\Organisation\Actions\UpdateGovernanceRuleAction;
 use App\Modules\Organisation\Models\DepartmentSemesterGovernance;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -35,24 +36,25 @@ class GovernanceRuleController
         ]);
     }
 
-    public function update(Request $request, string $id): JsonResponse
+    public function update(Request $request, string $id, UpdateGovernanceRuleAction $action): JsonResponse
     {
         /** @var DepartmentSemesterGovernance $rule */
         $rule = DepartmentSemesterGovernance::findOrFail($id);
 
+        /** @var array{managing_department_id?: string, semester_from?: int, semester_to?: int} $validated */
         $validated = $request->validate([
             'managing_department_id' => ['sometimes', 'string', 'exists:tenant.departments,id'],
             'semester_from' => ['sometimes', 'integer', 'min:1', 'max:8'],
             'semester_to' => ['sometimes', 'integer', 'min:1', 'max:8'],
         ]);
 
-        $rule->fill($validated);
-        $rule->save();
-
-        activity('organisation')
-            ->performedOn($rule)
-            ->causedBy($request->user())
-            ->log("Updated department semester governance rule [{$rule->id}].");
+        $rule = $action->execute(
+            rule: $rule,
+            managingDepartmentId: $validated['managing_department_id'] ?? $rule->managing_department_id,
+            semesterFrom: $validated['semester_from'] ?? null,
+            semesterTo: $validated['semester_to'] ?? null,
+            actor: $request->user(),
+        );
 
         return response()->json([
             'data' => [

@@ -14,7 +14,7 @@ function ProfileShellContent() {
     () => computeWorkspaces(state.user),
     [state.user]
   );
-  const activeSlug = workspaces[0]?.slug ?? "super-admin";
+  const activeSlug = workspaces[0]?.slug ?? null;
 
   return (
     <AppShell activeSlug={activeSlug}>

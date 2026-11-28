@@ -8,7 +8,6 @@ import {
   Avatar,
   AvatarFallback,
   AvatarImage,
-  Badge,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -39,9 +38,8 @@ import {
 } from "@academic-suite/ui";
 import {
   RiBuilding2Line,
-  RiCustomerService2Line,
   RiDashboardLine,
-  RiKey2Line,
+  RiHistoryLine,
   RiLogoutBoxRLine,
   RiNotification3Line,
   RiSettings4Line,
@@ -54,7 +52,6 @@ import { getProfileInitials } from "@/lib/profile/initials";
 import { resolveUserAvatarSrc } from "@/lib/profile/avatar";
 import logoAsset from "@/app/design-system/logo.svg";
 import { useSession } from "@/lib/auth/session-provider";
-import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
 import { WORKSPACE_NAV, type NavIconKey } from "@/lib/workspaces/navigation";
 import {
   WORKSPACE_META,
@@ -71,6 +68,7 @@ const NAV_ICONS: Record<NavIconKey, React.ComponentType<{ className?: string }>>
   departments: RiBuilding2Line,
   users: RiUserSettingsLine,
   setup: RiSettings4Line,
+  audit: RiHistoryLine,
 };
 
 const logoSrc =
@@ -109,32 +107,25 @@ function SidebarCollapseItem() {
 }
 
 export interface AppShellProps {
-  activeSlug: WorkspaceSlug;
+  activeSlug?: WorkspaceSlug | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ activeSlug, children }: AppShellProps) {
+export function AppShell({ activeSlug = null, children }: AppShellProps) {
   const { state, controller } = useSession();
-  const pathname = usePathname() ?? `/w/${activeSlug}`;
+  const pathname = usePathname() ?? (activeSlug ? `/w/${activeSlug}` : "/profile");
   const router = useRouter();
   const user = state.user;
 
   const workspaces = React.useMemo(() => computeWorkspaces(user), [user]);
   const workspaceSlugs = React.useMemo(() => workspaces.map((w) => w.slug), [workspaces]);
-  const meta = WORKSPACE_META[activeSlug];
-  const navItems = WORKSPACE_NAV[activeSlug];
-
-  const { data: pendingCountData } = useApiQuery<{ meta: { total: number } }>({
-    queryKey: ["users", "pending-count"],
-    staleTime: STALE_TIME_LIST_MS,
-    enabled: activeSlug === "principal",
-    queryFn: async (api) => {
-      const apiUsers = api.identity?.users ?? api.users;
-      return apiUsers.list({ status: "pending", limit: 1 });
-    },
-  });
-  const principalPendingCount =
-    activeSlug === "principal" ? (pendingCountData?.meta?.total ?? 0) : 0;
+  const meta = activeSlug ? WORKSPACE_META[activeSlug] : null;
+  const navItems = activeSlug
+    ? WORKSPACE_NAV[activeSlug]
+    : [
+        { label: "Home", href: "/home", icon: "overview" as const, exact: true },
+        { label: "Profile", href: "/profile", icon: "users" as const, exact: true },
+      ];
 
   return (
     <SidebarProvider>
@@ -162,7 +153,7 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
 
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>{meta.label} Workspace</SidebarGroupLabel>
+            <SidebarGroupLabel>{meta ? `${meta.label} Workspace` : "Account"}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {navItems.map((item) => {
@@ -180,19 +171,20 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                       >
                         <Icon className="size-4" aria-hidden="true" />
                         <span>{item.label}</span>
-                        {item.href === "/w/principal/users" && principalPendingCount > 0 && (
-                          <Badge
-                            variant="secondary"
-                            className="ml-auto text-[11px] tabular-nums"
-                            aria-label={`${principalPendingCount} pending approvals`}
-                          >
-                            {principalPendingCount}
-                          </Badge>
-                        )}
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   );
                 })}
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={pathname === "/profile"}
+                    tooltip="Profile"
+                    render={<Link href="/profile" />}
+                  >
+                    <RiUser3Line className="size-4" aria-hidden="true" />
+                    <span>Profile</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
@@ -202,19 +194,6 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           <SidebarMenu>
             <SidebarThemeItem />
             <SidebarCollapseItem />
-            <div className="-mx-2 my-1 hidden border-t border-border md:block" role="separator" />
-            <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Contact Us">
-                <RiCustomerService2Line className="size-4" aria-hidden="true" />
-                <span>Contact Us</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Settings">
-                <RiSettings4Line className="size-4" aria-hidden="true" />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
 
@@ -227,13 +206,15 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
             <SidebarTrigger className="md:hidden" />
             <Separator orientation="vertical" className="h-5 md:hidden" />
             <span className="text-sm font-semibold text-foreground truncate">
-              {meta.label}
+              {meta?.label ?? "Account"}
             </span>
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              activeSlug={activeSlug}
-              onSelect={(slug) => router.push(`/w/${slug}`)}
-            />
+            {activeSlug && (
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeSlug={activeSlug}
+                onSelect={(slug) => router.push(`/w/${slug}`)}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -262,7 +243,9 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
               </PopoverContent>
             </Popover>
 
-            <GlobalSearchCommand activeSlug={activeSlug} workspaces={workspaceSlugs} />
+            {activeSlug && (
+              <GlobalSearchCommand activeSlug={activeSlug} workspaces={workspaceSlugs} />
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -311,10 +294,6 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                   <RiUser3Line className="size-4" aria-hidden="true" />
                   Profile
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => router.push("/profile?section=security")}>
-                  <RiKey2Line className="size-4" aria-hidden="true" />
-                  Change password
-                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   variant="destructive"
@@ -333,9 +312,11 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           tabIndex={-1}
           className="flex-1 w-full max-w-[96rem] mx-auto p-4 sm:p-6 lg:p-8 outline-none"
         >
-          <React.Suspense fallback={null}>
-            <WorkspaceBreadcrumbs activeSlug={activeSlug} />
-          </React.Suspense>
+          {activeSlug && (
+            <React.Suspense fallback={null}>
+              <WorkspaceBreadcrumbs activeSlug={activeSlug} />
+            </React.Suspense>
+          )}
           {children}
         </div>
       </SidebarInset>

@@ -513,7 +513,7 @@ export function createApiClient(config: ApiClientConfig) {
         ...options,
       }),
     promote: (id: string, options?: RequestOptions) =>
-      request<OperationResponse<operations['promoteBatchSemester']>>(`/batches/${id}/promote-semester`, {
+      request<OperationResponse<operations['promoteBatchSemester']>>(`/batches/${id}/promote`, {
         method: 'POST',
         ...options,
       }),
