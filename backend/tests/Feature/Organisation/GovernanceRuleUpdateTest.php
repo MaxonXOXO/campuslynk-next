@@ -66,20 +66,21 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
         $token = $principal->createToken('web')->plainTextToken;
 
         $ceDept = Department::where('code', 'CE')->firstOrFail();
-        $genDept = Department::where('code', 'GEN')->firstOrFail();
-        $ceProgram = Program::where('department_id', $ceDept->id)->firstOrFail();
+        $genDept = Department::where('code', 'GEN_AIDED')->firstOrFail();
+        $ceProgram = Program::where('code', 'DCE')->firstOrFail();
         $academicYear = AcademicYear::firstOrFail();
         $regulation = Regulation::firstOrFail();
 
         /** @var Batch $batch */
-        $batch = app(CreateBatchAction::class)->execute([
-            'program_id' => $ceProgram->id,
-            'academic_year_id' => $academicYear->id,
-            'regulation_id' => $regulation->id,
-            'name' => '2026 CE Batch',
-            'intake_year' => 2026,
-            'current_semester' => 1,
-        ]);
+        $batch = app(CreateBatchAction::class)->execute(
+            $ceProgram->id,
+            $ceDept->id,
+            $academicYear->id,
+            $regulation->id,
+            '2026 CE Batch',
+            'regular',
+            1,
+        );
 
         /** @var SubBatch $subBatch */
         $subBatch = SubBatch::create([
@@ -92,8 +93,8 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
         ]);
 
         expect($batch->managing_department_id)->toBe($genDept->id);
-        expect($batch->managing_path)->toContain('.dept_gen.');
-        expect($subBatch->managing_path)->toContain('.dept_gen.');
+        expect($batch->managing_path)->toContain(".{$genDept->scope_label}.");
+        expect($subBatch->managing_path)->toContain(".{$genDept->scope_label}.");
 
         /** @var DepartmentSemesterGovernance $rule */
         $rule = DepartmentSemesterGovernance::where('home_department_id', $ceDept->id)
@@ -118,8 +119,8 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
         $subBatch->refresh();
 
         expect($batch->managing_department_id)->toBe($ceDept->id);
-        expect($batch->managing_path)->toContain('.dept_ce.');
-        expect($subBatch->managing_path)->toContain('.dept_ce.');
+        expect($batch->managing_path)->toContain(".{$ceDept->scope_label}.");
+        expect($subBatch->managing_path)->toContain(".{$ceDept->scope_label}.");
 
         Event::assertDispatched(GovernanceRuleUpdated::class, function (GovernanceRuleUpdated $event) use ($rule, $ceDept): bool {
             return $event->rule->id === $rule->id

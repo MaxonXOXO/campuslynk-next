@@ -5,12 +5,13 @@ declare(strict_types=1);
 use App\Core\Modules\ModuleRegistry;
 use App\Modules\Identity\Middleware\EnsureSuperAdminAtInstitutionScope;
 use App\Modules\Identity\Middleware\RequirePermission;
+use Illuminate\Foundation\Testing\TestCase;
 use Illuminate\Routing\Route as RouteItem;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
-use Tests\TestCase;
 
+// Route protection audit needs a booted application, not tenant database provisioning.
 uses(TestCase::class);
 
 $originalRoutes = null;
