@@ -85,7 +85,7 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
         /** @var SubBatch $subBatch */
         $subBatch = SubBatch::create([
             'batch_id' => $batch->id,
-            'kind' => 'lab_group',
+            'kind' => 'lab',
             'name' => 'Group A',
             'scope_label' => 'group_a',
             'home_path' => $batch->home_path.'.group_a',
