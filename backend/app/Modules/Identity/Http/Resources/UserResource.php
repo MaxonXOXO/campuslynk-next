@@ -55,6 +55,7 @@ class UserResource extends JsonResource
             'name' => $this->resource->name,
             'first_name' => $this->resource->first_name,
             'last_name' => $this->resource->last_name,
+            'avatar_url' => $this->resource->avatarUrl(),
             'email' => $this->resource->email,
             'mobile' => $this->resource->mobile,
             'registration_number' => $this->resource->registration_number,
