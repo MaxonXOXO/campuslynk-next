@@ -243,7 +243,7 @@ it('migrates populated tenant forward and rolls back cleanly for 2026_11_27_0000
     expect(Artisan::call('migrate:rollback', [
         '--database' => 'tenant',
         '--path' => 'database/migrations/tenant',
-        '--step' => 1,
+        '--step' => $stepsToRollback,
         '--force' => true,
     ]))->toBe(0);
 

@@ -38,6 +38,7 @@ RUN install-php-extensions \
     pgsql \
     redis \
     bcmath \
+    gd \
     intl \
     zip \
     opcache \
