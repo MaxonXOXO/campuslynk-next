@@ -154,6 +154,20 @@ export function createApiClient(config: ApiClientConfig) {
         body,
         ...options,
       }),
+    uploadAvatar: (file: File | Blob, options?: RequestOptions) => {
+      const formData = new FormData();
+      formData.append('avatar', file);
+      return request<OperationResponse<operations['uploadMyAvatar']>>('/me/avatar', {
+        method: 'POST',
+        body: formData,
+        ...options,
+      });
+    },
+    deleteAvatar: (options?: RequestOptions) =>
+      request<OperationResponse<operations['deleteMyAvatar']>>('/me/avatar', {
+        method: 'DELETE',
+        ...options,
+      }),
     sessions: {
       list: (options?: RequestOptions) =>
         request<OperationResponse<operations['listMySessions']>>('/me/sessions', {
@@ -251,6 +265,11 @@ export function createApiClient(config: ApiClientConfig) {
       request<OperationResponse<operations['bulkApproveUsers']>>('/users/bulk-approve', {
         method: 'POST',
         body,
+        ...options,
+      }),
+    avatar: (id: string, options?: RequestOptions) =>
+      request<OperationResponse<operations['getUserAvatar']>>(`/users/${id}/avatar`, {
+        method: 'GET',
         ...options,
       }),
   };

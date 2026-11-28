@@ -142,6 +142,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Upload or replace the authenticated user's profile avatar */
+        post: operations["uploadMyAvatar"];
+        /** Remove the authenticated user's profile avatar */
+        delete: operations["deleteMyAvatar"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/{id}/avatar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Serve a user's avatar thumbnail (self or authorized identity.user.view) */
+        get: operations["getUserAvatar"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register-staff": {
         parameters: {
             query?: never;
@@ -1339,6 +1374,7 @@ export interface components {
             name: string;
             first_name?: string | null;
             last_name?: string | null;
+            avatar_url?: string | null;
             /**
              * Format: email
              * @example john.doe@carmelpoly.in
@@ -1450,6 +1486,7 @@ export interface components {
                 name: string;
                 first_name?: string | null;
                 last_name?: string | null;
+                avatar_url?: string | null;
                 email?: string | null;
                 mobile?: string | null;
                 registration_number?: string | null;
@@ -2191,6 +2228,93 @@ export interface operations {
             404: components["responses"]["ProblemDetails"];
             422: components["responses"]["ProblemDetails"];
             429: components["responses"]["ProblemDetails"];
+        };
+    };
+    uploadMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    avatar: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated user profile with avatar_url */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUserEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            422: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    deleteMyAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Updated user profile with null avatar_url */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CurrentUserEnvelope"];
+                };
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            429: components["responses"]["ProblemDetails"];
+        };
+    };
+    getUserAvatar: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Avatar image stream */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/webp": string;
+                    "image/png": string;
+                };
+            };
+            /** @description Not Modified */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["ProblemDetails"];
+            403: components["responses"]["ProblemDetails"];
+            404: components["responses"]["ProblemDetails"];
         };
     };
     registerStaff: {
