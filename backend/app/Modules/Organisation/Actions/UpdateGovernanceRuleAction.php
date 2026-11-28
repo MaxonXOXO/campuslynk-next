@@ -13,6 +13,8 @@ use App\Modules\Organisation\Models\Program;
 use App\Modules\Organisation\Models\SubBatch;
 use App\Modules\Organisation\Services\GovernanceResolver;
 use App\Modules\Organisation\Services\ScopePathBuilder;
+use Illuminate\Contracts\Auth\Authenticatable;
+use Illuminate\Database\Eloquent\Model;
 
 final class UpdateGovernanceRuleAction
 {
@@ -22,26 +24,24 @@ final class UpdateGovernanceRuleAction
     ) {}
 
     public function execute(
-        string $homeDepartmentId,
-        int $semesterFrom,
-        int $semesterTo,
-        string $managingDepartmentId
+        DepartmentSemesterGovernance $rule,
+        string $managingDepartmentId,
+        ?int $semesterFrom = null,
+        ?int $semesterTo = null,
+        ?Authenticatable $actor = null
     ): DepartmentSemesterGovernance {
-        /** @var DepartmentSemesterGovernance $rule */
-        $rule = DepartmentSemesterGovernance::updateOrCreate(
-            [
-                'home_department_id' => $homeDepartmentId,
-                'semester_from' => $semesterFrom,
-                'semester_to' => $semesterTo,
-            ],
-            [
-                'managing_department_id' => $managingDepartmentId,
-            ]
-        );
+        $rule->managing_department_id = $managingDepartmentId;
+        if ($semesterFrom !== null) {
+            $rule->semester_from = $semesterFrom;
+        }
+        if ($semesterTo !== null) {
+            $rule->semester_to = $semesterTo;
+        }
+        $rule->save();
 
         // Recompute all affected active batches
-        $batches = Batch::where('home_department_id', $homeDepartmentId)
-            ->whereBetween('current_semester', [$semesterFrom, $semesterTo])
+        $batches = Batch::where('home_department_id', $rule->home_department_id)
+            ->whereBetween('current_semester', [$rule->semester_from, $rule->semester_to])
             ->where('status', 'active')
             ->get();
 
@@ -49,7 +49,7 @@ final class UpdateGovernanceRuleAction
         $institution = Institution::firstOrFail();
 
         /** @var Department $homeDept */
-        $homeDept = Department::findOrFail($homeDepartmentId);
+        $homeDept = Department::findOrFail($rule->home_department_id);
 
         /** @var Department $managingDept */
         $managingDept = Department::findOrFail($managingDepartmentId);
@@ -79,6 +79,13 @@ final class UpdateGovernanceRuleAction
                 $subBatch->managing_path = $subPaths['managing_path'];
                 $subBatch->save();
             }
+        }
+
+        if ($actor instanceof Model) {
+            activity('organisation')
+                ->performedOn($rule)
+                ->causedBy($actor)
+                ->log("Updated department semester governance rule [{$rule->id}].");
         }
 
         GovernanceRuleUpdated::dispatch($rule);
