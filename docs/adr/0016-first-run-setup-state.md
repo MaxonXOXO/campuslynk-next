@@ -103,7 +103,7 @@ Revisit this decision when the dedicated **Self-Registration module** begins con
 
 ## Decision Amendment — 2026-11-26: Post-Completion Per-Section Setup Lock & Settings Boundary
 
-**Status:** Accepted — Pending Implementation (PR B for setup lock enforcement; PR A for settings boundary and audit API)
+**Status:** Accepted — Implemented (PR A for settings boundary and audit API; PR B for setup lock enforcement)
 
 **Scope:** Amends Decision §2 ("Idempotent Step Re-saves") for post-completion edits after `setup.completed_at` is set, and establishes the boundary between `PUT /api/v1/settings/{key}` and `PUT /api/v1/setup/steps/{step}`. First-run setup behaviour prior to `setup.completed_at` remains completely unchanged.
 
@@ -112,7 +112,7 @@ Revisit this decision when the dedicated **Self-Registration module** begins con
 - **`signup_policy` is explicitly excluded from `PUT /api/v1/settings/{key}`.** It remains editable exclusively through `PUT /api/v1/setup/steps/signup_policy` so the post-completion setup lock cannot be bypassed.
 - Enabling `auth.staff_self_registration_enabled` (`true`) requires an audit `reason` (5–500 characters); disabling it (`false`) does not. Every `PUT /api/v1/settings/{key}` writes a `setting.updated` event (`old_value`, `new_value`, `reason`, `ip`) to `activity_log` (`identity` log) without recording passwords, hashes, or tokens.
 
-### 2. Per-Section Post-Completion Setup Lock (Accepted — Pending Implementation in PR B)
+### 2. Per-Section Post-Completion Setup Lock (Accepted — Implemented in PR B)
 - **Lockable sections:** Only the three setup step keys — `institution_profile`, `calendar_basics`, and `signup_policy` — are lockable. Structural academic entities (Streams, Departments, Academic Years, Courses, Batches) are **not** locked so Principal and staff operations continue unobstructed.
 - **Per-section unlock state:** `setup-state.schema.json` will be extended in PR B with an optional `unlocks` map keyed by `institution_profile | calendar_basics | signup_policy`, storing `{ unlocked_by_user_id, unlocked_at, expires_at, reason }`.
 - **No UI timers:** Unlocking uses a single reason-verification dialog (5–500 character reason) where the Super Admin selects one or more of the three sections (`POST /api/v1/setup/unlock`). There is no countdown timer or auto-lock while editing.
