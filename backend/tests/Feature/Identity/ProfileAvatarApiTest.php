@@ -64,9 +64,9 @@ it('uploads and replaces an avatar, generates hot thumbnail, soft-deletes previo
     $upload1 = makeValidPngUpload('first.png');
 
     $res1 = $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', [
+    ])->post('http://avatar.test/api/v1/me/avatar', [
         'avatar' => $upload1,
     ]);
 
@@ -93,9 +93,9 @@ it('uploads and replaces an avatar, generates hot thumbnail, soft-deletes previo
     // Replace with a second upload
     $upload2 = makeValidPngUpload('second.png');
     $res2 = $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', [
+    ])->post('http://avatar.test/api/v1/me/avatar', [
         'avatar' => $upload2,
     ]);
 
@@ -116,9 +116,9 @@ it('rejects animated WebP, SVG, and spoofed files with 422', function (): void {
     $webpFile = new UploadedFile((string) $tmpWebp, 'anim.webp', 'image/webp', null, true);
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', [
+    ])->post('http://avatar.test/api/v1/me/avatar', [
         'avatar' => $webpFile,
     ])->assertStatus(422);
     @unlink((string) $tmpWebp);
@@ -129,9 +129,9 @@ it('rejects animated WebP, SVG, and spoofed files with 422', function (): void {
     $svgFile = new UploadedFile((string) $tmpSvg, 'icon.svg', 'image/svg+xml', null, true);
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', [
+    ])->post('http://avatar.test/api/v1/me/avatar', [
         'avatar' => $svgFile,
     ])->assertStatus(422);
     @unlink((string) $tmpSvg);
@@ -141,17 +141,17 @@ it('deletes avatar, soft-deletes FileRecord, and logs audit', function (): void 
     $upload = makeValidPngUpload('delete-me.png');
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
+    ])->post('http://avatar.test/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
 
     $this->user->refresh();
     $fileId = $this->user->avatar_file_id;
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->deleteJson('/api/v1/me/avatar')
+    ])->deleteJson('http://avatar.test/api/v1/me/avatar')
         ->assertOk()
         ->assertJsonPath('data.avatar_url', null);
 
@@ -171,18 +171,18 @@ it('deletes avatar, soft-deletes FileRecord, and logs audit', function (): void 
 it('enforces self and UserPolicy::view authorization, supports ETag 304, and lazily regenerates hot thumbnail', function (): void {
     $upload = makeValidPngUpload('serve.png');
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->post('/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
+    ])->post('http://avatar.test/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
 
     $this->user->refresh();
     $fileId = $this->user->avatar_file_id;
 
     // 1. Self can always view own avatar
     $selfRes = $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->get("/api/v1/users/{$this->user->id}/avatar");
+    ])->get("http://avatar.test/api/v1/users/{$this->user->id}/avatar");
 
     $selfRes->assertOk();
     expect($selfRes->headers->get('X-Content-Type-Options'))->toBe('nosniff');
@@ -191,10 +191,10 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
 
     // 2. Conditional ETag returns 304
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
         'If-None-Match' => $etag,
-    ])->get("/api/v1/users/{$this->user->id}/avatar")
+    ])->get("http://avatar.test/api/v1/users/{$this->user->id}/avatar")
         ->assertStatus(304);
 
     // 3. Hot thumbnail missing -> lazily regenerated from files_private
@@ -202,9 +202,9 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     Storage::disk(FileStorageService::DISK_HOT)->assertMissing("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
-    ])->get("/api/v1/users/{$this->user->id}/avatar")->assertOk();
+    ])->get("http://avatar.test/api/v1/users/{$this->user->id}/avatar")->assertOk();
 
     Storage::disk(FileStorageService::DISK_HOT)->assertExists("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
 
@@ -220,9 +220,9 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     $otherToken = $otherUser->createToken('web', ['*'])->plainTextToken;
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$otherToken,
-    ])->get("/api/v1/users/{$this->user->id}/avatar")
+    ])->get("http://avatar.test/api/v1/users/{$this->user->id}/avatar")
         ->assertForbidden();
 
     // 5. Granting principal (with identity.user.view at institution scope) allows viewing
@@ -238,9 +238,9 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
         ]);
 
         $this->withHeaders([
-            'X-Tenant' => 'avatar.test',
+            'X-Tenant' => 'tenant_avatar_test',
             'Authorization' => 'Bearer '.$otherToken,
-        ])->get("/api/v1/users/{$this->user->id}/avatar")
+        ])->get("http://avatar.test/api/v1/users/{$this->user->id}/avatar")
             ->assertOk();
     }
 
@@ -259,9 +259,9 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     $tokenB = $userB->createToken('web', ['*'])->plainTextToken;
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar-b.test',
+        'X-Tenant' => 'tenant_avatar_b',
         'Authorization' => 'Bearer '.$tokenB,
-    ])->get("/api/v1/users/{$this->user->id}/avatar")
+    ])->get("http://avatar-b.test/api/v1/users/{$this->user->id}/avatar")
         ->assertNotFound();
 });
 
@@ -271,14 +271,14 @@ it('blocks avatar mutations during impersonation', function (): void {
     $upload = makeValidPngUpload('imp.png');
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$tokenResult->plainTextToken,
-    ])->post('/api/v1/me/avatar', ['avatar' => $upload])
+    ])->post('http://avatar.test/api/v1/me/avatar', ['avatar' => $upload])
         ->assertForbidden();
 
     $this->withHeaders([
-        'X-Tenant' => 'avatar.test',
+        'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$tokenResult->plainTextToken,
-    ])->deleteJson('/api/v1/me/avatar')
+    ])->deleteJson('http://avatar.test/api/v1/me/avatar')
         ->assertForbidden();
 });
