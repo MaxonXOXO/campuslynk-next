@@ -58,7 +58,7 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
             'user_id' => $principal->id,
             'role_id' => $principalRole->id,
             'scope_type' => 'institution',
-            'scope_label' => 'institution',
+            'scope_label' => 'i_carmel',
             'is_active' => true,
             'valid_from' => now()->subDay(),
         ]);
