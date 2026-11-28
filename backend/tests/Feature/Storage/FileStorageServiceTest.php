@@ -140,9 +140,10 @@ it('serves files with nosniff, ETag 304 support, and returns 404 after soft dele
     expect($notModified->getStatusCode())->toBe(304);
 
     $service->softDelete($record);
-    expect(FileRecord::withTrashed()->find($record->id)?->trashed())->toBeTrue();
+    $trashed = FileRecord::withTrashed()->findOrFail($record->id);
+    expect($trashed->trashed())->toBeTrue();
 
-    expect(fn () => $service->serve($record->fresh(['*']) ?? $record, Request::create('/')))
+    expect(fn () => $service->serve($trashed, Request::create('/')))
         ->toThrow(NotFoundHttpException::class);
 });
 
