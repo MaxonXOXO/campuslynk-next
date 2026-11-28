@@ -75,7 +75,10 @@ export function buildBreadcrumbTrail(
     const part = parts[i]!;
     currentHref = `${currentHref}/${part}`;
     const isLastPathSegment = i === parts.length - 1;
-    const label = formatSegmentLabel(part, currentHref, activeSlug);
+    const label =
+      i > 0 && parts[i - 1] === "departments"
+        ? "Department Hierarchy"
+        : formatSegmentLabel(part, currentHref, activeSlug);
 
     if (isLastPathSegment && part === "settings" && categoryParam) {
       const cat = CONTROL_PANEL_CATEGORIES.find((c) => c.id === categoryParam);

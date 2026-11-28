@@ -81,22 +81,23 @@ describe("Principal navigation and dual-role workspace switching", () => {
     cleanup();
   });
 
-  it("configures Principal sidebar with Overview, Departments, and Users only (no Super Admin, setup, or Audit routes)", () => {
+  it("configures Principal sidebar with Overview, Departments, Users, and Audit Trail (no Super Admin or setup routes)", () => {
     const items = WORKSPACE_NAV.principal;
     expect(items.map((item) => item.label)).toEqual([
       "Overview",
       "Departments",
       "Users",
+      "Audit Trail",
     ]);
     expect(items.map((item) => item.href)).toEqual([
       "/w/principal",
       "/w/principal/departments",
       "/w/principal/users",
+      "/w/principal/audit",
     ]);
     for (const item of items) {
       expect(item.href).not.toMatch(/^\/w\/super-admin/);
       expect(item.href).not.toMatch(/^\/setup/);
-      expect(item.href).not.toMatch(/audit/i);
     }
   });
 
@@ -132,7 +133,7 @@ describe("Principal navigation and dual-role workspace switching", () => {
     expect(mocks.router.push).toHaveBeenCalledWith("/w/super-admin");
   });
 
-  it("displays a Pending count badge on the Principal Users sidebar item from a limit=1 query", async () => {
+  it("renders Principal Users sidebar item without a pending count pill", async () => {
     mocks.user = {
       id: "01PRIN",
       name: "Dr. Principal",
@@ -141,10 +142,6 @@ describe("Principal navigation and dual-role workspace switching", () => {
         { role_key: "principal", scope_type: "institution", scope_label: "i_dev" },
       ],
     };
-    mocks.client.identity.users.list.mockResolvedValueOnce({
-      data: [],
-      meta: { total: 3 },
-    });
 
     renderWithQueryClient(
       <WorkspaceShellLayout workspace="principal">
@@ -152,10 +149,11 @@ describe("Principal navigation and dual-role workspace switching", () => {
       </WorkspaceShellLayout>
     );
 
-    expect(await screen.findByLabelText("3 pending approvals")).toHaveTextContent("3");
-    expect(mocks.client.identity.users.list).toHaveBeenCalledWith({
-      status: "pending",
-      limit: 1,
-    });
+    expect(screen.getByRole("link", { name: "Users" })).toHaveAttribute(
+      "href",
+      "/w/principal/users"
+    );
+    expect(screen.queryByLabelText(/pending approvals/i)).not.toBeInTheDocument();
+    expect(mocks.client.identity.users.list).not.toHaveBeenCalled();
   });
 });

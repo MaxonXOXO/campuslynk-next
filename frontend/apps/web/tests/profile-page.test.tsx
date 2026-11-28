@@ -144,7 +144,7 @@ describe("Profile & Settings v1 — Slice 1", () => {
     expect(getProfileInitials(null, null, "Single")).toBe("SI");
   });
 
-  it("renders Profile link (/profile) and Change password link (/profile?section=security) in account menu", async () => {
+  it("renders Profile link (/profile) in sidebar and account menu without Change password", async () => {
     const user = userEvent.setup();
     renderWithQueryClient(
       <AppShell activeSlug="super-admin">
@@ -152,15 +152,15 @@ describe("Profile & Settings v1 — Slice 1", () => {
       </AppShell>
     );
 
+    const sidebarProfileLink = screen.getByRole("link", { name: "Profile" });
+    expect(sidebarProfileLink).toHaveAttribute("href", "/profile");
+
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(await screen.findByRole("menuitem", { name: "Profile" }));
     expect(mocks.push).toHaveBeenCalledWith("/profile");
 
     await user.click(screen.getByRole("button", { name: "Account menu" }));
-    await user.click(
-      await screen.findByRole("menuitem", { name: "Change password" })
-    );
-    expect(mocks.push).toHaveBeenCalledWith("/profile?section=security");
+    expect(screen.queryByRole("menuitem", { name: "Change password" })).not.toBeInTheDocument();
   });
 
   it("greets user by first_name verbatim when set and falls back to name when unset", () => {
