@@ -62,8 +62,8 @@ export function AuthControlPane() {
   const queryClient = useQueryClient();
 
   const settingsQueryKey = React.useMemo(
-    () => scopedQueryKey(scope, "identity", "settings", "list"),
-    [scope]
+    () => ["identity", "settings", "list"] as const,
+    []
   );
 
   const settingsQuery = useApiQuery({
@@ -91,8 +91,9 @@ export function AuthControlPane() {
   }, [dailyCapSetting, cooldownSetting]);
 
   async function refreshSettings() {
-    await queryClient.invalidateQueries({ queryKey: settingsQueryKey });
-    await settingsQuery.refetch();
+    await queryClient.invalidateQueries({
+      queryKey: scopedQueryKey(scope, ...settingsQueryKey),
+    });
   }
 
   async function handleToggleSelfReg(nextChecked: boolean) {

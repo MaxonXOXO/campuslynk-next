@@ -149,7 +149,7 @@ const HIERARCHY_ROLES: readonly HierarchyRoleMeta[] = [
     key: "sf_office",
     label: "SF Office Superintendent",
     tier: "leadership",
-    scopeLevel: "stream",
+    scopeLevel: "institution",
   },
   { key: "tutor", label: "Tutor", tier: "batch", scopeLevel: "batch" },
   { key: "mentor", label: "Mentor (Staff Advisor)", tier: "batch", scopeLevel: "batch" },
@@ -201,8 +201,8 @@ export function DepartmentHierarchyPage({ departmentId }: DepartmentHierarchyPag
   }, [sessionState.user]);
 
   const queryKey = React.useMemo(
-    () => scopedQueryKey(scope, "principal", "departments", "hierarchy", departmentId),
-    [scope, departmentId]
+    () => ["principal", "departments", "hierarchy", departmentId] as const,
+    [departmentId]
   );
 
   const {
@@ -400,14 +400,15 @@ export function DepartmentHierarchyPage({ departmentId }: DepartmentHierarchyPag
   }
 
   async function refreshHierarchy() {
-    await queryClient.invalidateQueries({ queryKey });
+    await queryClient.invalidateQueries({
+      queryKey: scopedQueryKey(scope, ...queryKey),
+    });
     await queryClient.invalidateQueries({
       queryKey: scopedQueryKey(scope, "principal", "departments"),
     });
     await queryClient.invalidateQueries({
       queryKey: scopedQueryKey(scope, "principal", "overview"),
     });
-    await refetch();
   }
 
   async function handleAppoint(e: React.FormEvent) {

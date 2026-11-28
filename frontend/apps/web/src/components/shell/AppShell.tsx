@@ -38,7 +38,6 @@ import {
 } from "@academic-suite/ui";
 import {
   RiBuilding2Line,
-  RiCustomerService2Line,
   RiDashboardLine,
   RiHistoryLine,
   RiLogoutBoxRLine,
@@ -108,20 +107,25 @@ function SidebarCollapseItem() {
 }
 
 export interface AppShellProps {
-  activeSlug: WorkspaceSlug;
+  activeSlug?: WorkspaceSlug | null;
   children: React.ReactNode;
 }
 
-export function AppShell({ activeSlug, children }: AppShellProps) {
+export function AppShell({ activeSlug = null, children }: AppShellProps) {
   const { state, controller } = useSession();
-  const pathname = usePathname() ?? `/w/${activeSlug}`;
+  const pathname = usePathname() ?? (activeSlug ? `/w/${activeSlug}` : "/profile");
   const router = useRouter();
   const user = state.user;
 
   const workspaces = React.useMemo(() => computeWorkspaces(user), [user]);
   const workspaceSlugs = React.useMemo(() => workspaces.map((w) => w.slug), [workspaces]);
-  const meta = WORKSPACE_META[activeSlug];
-  const navItems = WORKSPACE_NAV[activeSlug];
+  const meta = activeSlug ? WORKSPACE_META[activeSlug] : null;
+  const navItems = activeSlug
+    ? WORKSPACE_NAV[activeSlug]
+    : [
+        { label: "Home", href: "/home", icon: "overview" as const, exact: true },
+        { label: "Profile", href: "/profile", icon: "users" as const, exact: true },
+      ];
 
   return (
     <SidebarProvider>
@@ -149,7 +153,7 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
 
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>{meta.label} Workspace</SidebarGroupLabel>
+            <SidebarGroupLabel>{meta ? `${meta.label} Workspace` : "Account"}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
                 {navItems.map((item) => {
@@ -190,19 +194,6 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           <SidebarMenu>
             <SidebarThemeItem />
             <SidebarCollapseItem />
-            <div className="-mx-2 my-1 hidden border-t border-border md:block" role="separator" />
-            <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Contact Us">
-                <RiCustomerService2Line className="size-4" aria-hidden="true" />
-                <span>Contact Us</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-            <SidebarMenuItem>
-              <SidebarMenuButton type="button" tooltip="Settings">
-                <RiSettings4Line className="size-4" aria-hidden="true" />
-                <span>Settings</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
 
@@ -215,13 +206,15 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
             <SidebarTrigger className="md:hidden" />
             <Separator orientation="vertical" className="h-5 md:hidden" />
             <span className="text-sm font-semibold text-foreground truncate">
-              {meta.label}
+              {meta?.label ?? "Account"}
             </span>
-            <WorkspaceSwitcher
-              workspaces={workspaces}
-              activeSlug={activeSlug}
-              onSelect={(slug) => router.push(`/w/${slug}`)}
-            />
+            {activeSlug && (
+              <WorkspaceSwitcher
+                workspaces={workspaces}
+                activeSlug={activeSlug}
+                onSelect={(slug) => router.push(`/w/${slug}`)}
+              />
+            )}
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
@@ -250,7 +243,9 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
               </PopoverContent>
             </Popover>
 
-            <GlobalSearchCommand activeSlug={activeSlug} workspaces={workspaceSlugs} />
+            {activeSlug && (
+              <GlobalSearchCommand activeSlug={activeSlug} workspaces={workspaceSlugs} />
+            )}
 
             <DropdownMenu>
               <DropdownMenuTrigger
@@ -317,9 +312,11 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
           tabIndex={-1}
           className="flex-1 w-full max-w-[96rem] mx-auto p-4 sm:p-6 lg:p-8 outline-none"
         >
-          <React.Suspense fallback={null}>
-            <WorkspaceBreadcrumbs activeSlug={activeSlug} />
-          </React.Suspense>
+          {activeSlug && (
+            <React.Suspense fallback={null}>
+              <WorkspaceBreadcrumbs activeSlug={activeSlug} />
+            </React.Suspense>
+          )}
           {children}
         </div>
       </SidebarInset>

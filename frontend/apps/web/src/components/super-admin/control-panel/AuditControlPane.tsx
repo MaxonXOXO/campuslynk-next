@@ -33,9 +33,7 @@ import { useApiClient, useSession } from "@/lib/auth/session-provider";
 import { isSuperAdminAtInstitutionScope } from "@/app/setup/logic/role-routing";
 import {
   STALE_TIME_LIST_MS,
-  scopedQueryKey,
   useApiQuery,
-  useQueryScope,
 } from "@/lib/query/api-query";
 import { formatDisplayDateTime } from "@/lib/format-date";
 
@@ -79,7 +77,6 @@ function eventStatusTone(
 export function AuditControlPane() {
   const client = useApiClient();
   const { state: sessionState } = useSession();
-  const scope = useQueryScope();
   const isSuperAdmin = isSuperAdminAtInstitutionScope(sessionState.user);
 
   const [search, setSearch] = React.useState("");
@@ -106,13 +103,12 @@ export function AuditControlPane() {
   }, [page, search, logName]);
 
   const auditQuery = useApiQuery({
-    queryKey: scopedQueryKey(
-      scope,
+    queryKey: [
       "identity",
       "audit-logs",
       "list",
-      `${page}:${logName}:${search.trim()}`
-    ),
+      `${page}:${logName}:${search.trim()}`,
+    ],
     queryFn: () => client.identity.auditLogs.list(queryParams),
     staleTime: STALE_TIME_LIST_MS,
   });

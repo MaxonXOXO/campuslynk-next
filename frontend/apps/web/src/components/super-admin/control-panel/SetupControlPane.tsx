@@ -92,8 +92,8 @@ export function SetupControlPane() {
   const queryClient = useQueryClient();
 
   const statusQueryKey = React.useMemo(
-    () => scopedQueryKey(scope, "organisation", "setup", "status"),
-    [scope]
+    () => ["organisation", "setup", "status"] as const,
+    []
   );
 
   const setupStatusQuery = useApiQuery({
@@ -103,19 +103,19 @@ export function SetupControlPane() {
   });
 
   const streamsQuery = useApiQuery({
-    queryKey: scopedQueryKey(scope, "organisation", "streams", "list"),
+    queryKey: ["organisation", "streams", "list"],
     queryFn: () => client.organisation.streams.list(),
     staleTime: STALE_TIME_LIST_MS,
   });
 
   const departmentsQuery = useApiQuery({
-    queryKey: scopedQueryKey(scope, "organisation", "departments", "list"),
+    queryKey: ["organisation", "departments", "list"],
     queryFn: () => client.organisation.departments.list(),
     staleTime: STALE_TIME_LIST_MS,
   });
 
   const academicYearsQuery = useApiQuery({
-    queryKey: scopedQueryKey(scope, "organisation", "academic-years", "list"),
+    queryKey: ["organisation", "academic-years", "list"],
     queryFn: () => client.organisation.academicYears.list(),
     staleTime: STALE_TIME_LIST_MS,
   });
@@ -219,8 +219,9 @@ export function SetupControlPane() {
   }, [signupStep]);
 
   async function refreshSetupStatus() {
-    await queryClient.invalidateQueries({ queryKey: statusQueryKey });
-    await setupStatusQuery.refetch();
+    await queryClient.invalidateQueries({
+      queryKey: scopedQueryKey(scope, ...statusQueryKey),
+    });
   }
 
   async function handleUnlock({
