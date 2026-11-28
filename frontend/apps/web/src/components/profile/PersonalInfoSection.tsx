@@ -7,6 +7,7 @@ import {
   AlertDescription,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   Button,
   Card,
   CardContent,
@@ -17,9 +18,16 @@ import {
   Label,
   Skeleton,
 } from "@academic-suite/ui";
-import { RiAlertLine, RiCheckLine, RiLoader4Line } from "@remixicon/react";
+import { RiAlertLine, RiCheckLine, RiDeleteBinLine, RiLoader4Line, RiUpload2Line } from "@remixicon/react";
 import { toast } from "sonner";
+import { deleteSessionAvatar, uploadSessionAvatar } from "@/lib/auth/browser-session-api";
+import { SessionHttpError } from "@/lib/auth/session-core";
 import { useApiClient, useSession } from "@/lib/auth/session-provider";
+import {
+  AVATAR_ACCEPTED_MIME_TYPES,
+  resolveUserAvatarSrc,
+  validateAvatarFileClient,
+} from "@/lib/profile/avatar";
 import { getProfileInitials } from "@/lib/profile/initials";
 
 function normalizeNameInput(raw: string): string | null {
@@ -35,10 +43,15 @@ export function PersonalInfoSection() {
   const [firstName, setFirstName] = React.useState(user?.first_name ?? "");
   const [lastName, setLastName] = React.useState(user?.last_name ?? "");
   const [saving, setSaving] = React.useState(false);
+  const [avatarBusy, setAvatarBusy] = React.useState(false);
+  const [avatarError, setAvatarError] = React.useState<string | null>(null);
+  const [avatarNotice, setAvatarNotice] = React.useState<string | null>(null);
+  const [avatarVersion, setAvatarVersion] = React.useState(0);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string>>({});
   const [formError, setFormError] = React.useState<string | null>(null);
   const [savedNotice, setSavedNotice] = React.useState<string | null>(null);
   const errorRef = React.useRef<HTMLDivElement>(null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     setFirstName(user?.first_name ?? "");
@@ -102,6 +115,70 @@ export function PersonalInfoSection() {
   }
 
   const initials = getProfileInitials(firstName || user.first_name, lastName || user.last_name, user.name);
+  const avatarSrc = resolveUserAvatarSrc(user, avatarVersion || undefined);
+
+  function extractSessionErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof SessionHttpError && err.body && typeof err.body === "object") {
+      const body = err.body as { detail?: unknown; title?: unknown; errors?: Record<string, unknown> };
+      const avatarErrors = body.errors?.avatar;
+      if (Array.isArray(avatarErrors) && typeof avatarErrors[0] === "string") {
+        return avatarErrors[0];
+      }
+      if (typeof body.detail === "string" && body.detail.trim() !== "") return body.detail;
+      if (typeof body.title === "string" && body.title.trim() !== "") return body.title;
+    }
+    return fallback;
+  }
+
+  async function handleAvatarFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || avatarBusy) return;
+
+    setAvatarError(null);
+    setAvatarNotice(null);
+
+    const validationError = validateAvatarFileClient(file);
+    if (validationError) {
+      setAvatarError(validationError);
+      return;
+    }
+
+    setAvatarBusy(true);
+    try {
+      await uploadSessionAvatar(file);
+      setAvatarVersion((prev) => prev + 1);
+      await controller.bootstrap();
+      const message = "Profile photo updated.";
+      setAvatarNotice(message);
+      toast.success(message);
+    } catch (err: unknown) {
+      setAvatarError(extractSessionErrorMessage(err, "Could not upload profile photo."));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
+
+  async function handleRemoveAvatar() {
+    if (avatarBusy || !user?.avatar_url) return;
+
+    setAvatarBusy(true);
+    setAvatarError(null);
+    setAvatarNotice(null);
+
+    try {
+      await deleteSessionAvatar();
+      setAvatarVersion((prev) => prev + 1);
+      await controller.bootstrap();
+      const message = "Profile photo removed.";
+      setAvatarNotice(message);
+      toast.success(message);
+    } catch (err: unknown) {
+      setAvatarError(extractSessionErrorMessage(err, "Could not remove profile photo."));
+    } finally {
+      setAvatarBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -109,20 +186,70 @@ export function PersonalInfoSection() {
         <CardHeader>
           <CardTitle className="text-base">Avatar</CardTitle>
           <CardDescription>
-            Your initials are shown across the workspace header and directories.
+            Upload a JPEG, PNG, or static WebP photo (max 5 MB), or use your initials.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-4">
-          <Avatar className="size-14 text-base">
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">
-              {user.name ?? "Signed-in user"}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Profile photo upload is coming later.
-            </p>
+        <CardContent className="space-y-4">
+          {avatarError && (
+            <Alert variant="destructive">
+              <RiAlertLine className="size-4" aria-hidden="true" />
+              <AlertDescription>{avatarError}</AlertDescription>
+            </Alert>
+          )}
+          {avatarNotice && (
+            <div role="status" aria-live="polite">
+              <Alert>
+                <RiCheckLine className="size-4" aria-hidden="true" />
+                <AlertDescription>{avatarNotice}</AlertDescription>
+              </Alert>
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-4">
+            <Avatar className="size-14 text-base">
+              {avatarSrc && <AvatarImage src={avatarSrc} alt={user.name ?? "User avatar"} />}
+              <AvatarFallback>{initials}</AvatarFallback>
+            </Avatar>
+            <div className="space-y-2">
+              <p className="text-sm font-medium text-foreground">
+                {user.name ?? "Signed-in user"}
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={AVATAR_ACCEPTED_MIME_TYPES.join(",")}
+                  className="hidden"
+                  aria-label="Choose profile photo"
+                  onChange={(e) => void handleAvatarFileChange(e)}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={avatarBusy}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {avatarBusy ? (
+                    <RiLoader4Line className="mr-1.5 size-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RiUpload2Line className="mr-1.5 size-4" aria-hidden="true" />
+                  )}
+                  {user.avatar_url ? "Change photo" : "Upload photo"}
+                </Button>
+                {user.avatar_url && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={avatarBusy}
+                    onClick={() => void handleRemoveAvatar()}
+                  >
+                    <RiDeleteBinLine className="mr-1.5 size-4" aria-hidden="true" />
+                    Remove photo
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>

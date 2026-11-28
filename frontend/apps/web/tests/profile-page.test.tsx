@@ -190,11 +190,11 @@ describe("Profile & Settings v1 — Slice 1", () => {
     ).toHaveAttribute("aria-current", "page");
   });
 
-  it("renders read-only full name, email, and mobile with explanatory notes and no avatar upload", () => {
+  it("renders read-only full name, email, and mobile with explanatory notes and Upload photo button", () => {
     renderWithQueryClient(<ProfilePage />);
 
-    expect(screen.getByText("Profile photo upload is coming later.")).toBeInTheDocument();
-    expect(screen.queryByLabelText(/upload/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Upload photo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove photo" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Full name")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("Email")).toHaveAttribute("readonly");
     expect(screen.getByLabelText("Mobile")).toHaveAttribute("readonly");
@@ -384,6 +384,56 @@ describe("Profile & Settings v1 — Slice 1", () => {
 
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByText("No active sessions found.")).toBeInTheDocument();
+  });
+
+  it("uploads, validates 5 MB cap, and removes profile photo with session refresh", async () => {
+    const user = userEvent.setup();
+    const fetchSpy = vi.fn(async () =>
+      new Response(JSON.stringify({ data: { id: "01U1", avatar_url: "/api/v1/users/01U1/avatar" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const { rerender } = renderWithQueryClient(<ProfilePage />);
+
+    // 1. Oversized file (> 5 MB) is rejected client-side without calling fetch
+    const input = screen.getByLabelText("Choose profile photo") as HTMLInputElement;
+    const huge = new File([new Uint8Array(5 * 1024 * 1024 + 1)], "huge.png", { type: "image/png" });
+    await user.upload(input, huge);
+    expect(await screen.findByText("Profile photo must be 5 MB or smaller.")).toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    // 2. Valid PNG uploads via POST /api/session/avatar and refreshes session
+    const valid = new File([new Uint8Array([137, 80, 78, 71])], "me.png", { type: "image/png" });
+    await user.upload(input, valid);
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/session/avatar",
+        expect.objectContaining({ method: "POST", credentials: "same-origin" })
+      );
+    });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Profile photo updated.")).toBeInTheDocument();
+
+    // 3. When avatar_url is set, Change photo + Remove photo appear and DELETE works
+    (mocks.user as { avatar_url?: string | null }).avatar_url = "/api/v1/users/01U1/avatar";
+    rerender(<ProfilePage />);
+    expect(screen.getByRole("button", { name: "Change photo" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove photo" }));
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        "/api/session/avatar",
+        expect.objectContaining({ method: "DELETE", credentials: "same-origin" })
+      );
+    });
+    expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Profile photo removed.")).toBeInTheDocument();
+
+    (mocks.user as { avatar_url?: string | null }).avatar_url = null;
+    vi.unstubAllGlobals();
   });
 });
 

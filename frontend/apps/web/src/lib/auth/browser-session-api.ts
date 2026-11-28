@@ -58,3 +58,63 @@ export function createBrowserSessionApi(origin: string, fetchFn?: typeof fetch):
     fetchSetupStatus: async () => ((await client.setup.status()) as unknown as { data: SetupStatusCheck }).data,
   };
 }
+
+export async function uploadSessionAvatar(
+  file: File,
+  fetchFn: typeof fetch = fetch
+): Promise<SessionUser> {
+  const formData = new FormData();
+  formData.append("avatar", file);
+
+  let response: Response;
+  try {
+    response = await fetchFn("/api/session/avatar", {
+      method: "POST",
+      credentials: "same-origin",
+      body: formData,
+    });
+  } catch {
+    throw new SessionHttpError({ network: true });
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    json = undefined;
+  }
+
+  if (!response.ok) {
+    throw new SessionHttpError({ status: response.status, body: json });
+  }
+
+  return ((json as { data?: SessionUser })?.data ?? null) as SessionUser;
+}
+
+export async function deleteSessionAvatar(
+  fetchFn: typeof fetch = fetch
+): Promise<SessionUser> {
+  let response: Response;
+  try {
+    response = await fetchFn("/api/session/avatar", {
+      method: "DELETE",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" },
+    });
+  } catch {
+    throw new SessionHttpError({ network: true });
+  }
+
+  let json: unknown;
+  try {
+    json = await response.json();
+  } catch {
+    json = undefined;
+  }
+
+  if (!response.ok) {
+    throw new SessionHttpError({ status: response.status, body: json });
+  }
+
+  return ((json as { data?: SessionUser })?.data ?? null) as SessionUser;
+}
