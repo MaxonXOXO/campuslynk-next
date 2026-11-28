@@ -18,12 +18,13 @@ uses(TenancyTestHelper::class);
 
 beforeEach(function (): void {
     $this->purgeAllTenantDatabases();
+    config(['app_profile.deploy_profile' => 'cloud']);
     Storage::fake(FileStorageService::DISK_PRIVATE);
     Storage::fake(FileStorageService::DISK_PUBLIC);
     Storage::fake(FileStorageService::DISK_HOT);
 
     $provisioner = app(TenantProvisioner::class);
-    $this->tenant = $provisioner->provision('tenant_avatar_test', 'Avatar College', 'avatar.test', 'onprem');
+    $this->tenant = $provisioner->provision('tenant_avatar_test', 'Avatar College', 'avatar.test', 'cloud');
     app(TenantContext::class)->setTenant($this->tenant);
 
     $this->user = User::create([
@@ -245,7 +246,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
 
     // 6. Cross-tenant isolation: user ID from tenant A is 404 in tenant B
     $provisioner = app(TenantProvisioner::class);
-    $tenantB = $provisioner->provision('tenant_avatar_b', 'Avatar B College', 'avatar-b.test', 'onprem');
+    $tenantB = $provisioner->provision('tenant_avatar_b', 'Avatar B College', 'avatar-b.test', 'cloud');
     app(TenantContext::class)->setTenant($tenantB);
     $userB = User::create([
         'type' => 'staff',
@@ -265,9 +266,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
 });
 
 it('blocks avatar mutations during impersonation', function (): void {
-    $tokenResult = $this->user->createToken('impersonation', ['*']);
-    $tokenResult->accessToken->is_impersonation = true;
-    $tokenResult->accessToken->save();
+    $tokenResult = $this->user->createToken('impersonation', ['impersonation:read_only']);
 
     $upload = makeValidPngUpload('imp.png');
 
