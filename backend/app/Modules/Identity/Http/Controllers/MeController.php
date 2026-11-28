@@ -4,13 +4,17 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Http\Controllers;
 
+use App\Modules\Identity\Actions\DeleteMyAvatarAction;
 use App\Modules\Identity\Actions\UpdateMeAction;
+use App\Modules\Identity\Actions\UploadMyAvatarAction;
 use App\Modules\Identity\Http\Requests\UpdateMeRequest;
+use App\Modules\Identity\Http\Requests\UploadMyAvatarRequest;
 use App\Modules\Identity\Models\RoleAssignment;
 use App\Modules\Identity\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 
 class MeController
@@ -37,6 +41,33 @@ class MeController
         /** @var array{first_name?: string|null, last_name?: string|null} $validated */
         $validated = $request->validated();
         $updated = $action->execute($user, $validated);
+
+        return $this->respondWithMe($updated);
+    }
+
+    /**
+     * Upload or replace the currently authenticated user's profile avatar.
+     */
+    public function uploadAvatar(UploadMyAvatarRequest $request, UploadMyAvatarAction $action): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+
+        /** @var UploadedFile $file */
+        $file = $request->file('avatar');
+        $updated = $action->execute($user, $file);
+
+        return $this->respondWithMe($updated);
+    }
+
+    /**
+     * Remove the currently authenticated user's profile avatar.
+     */
+    public function deleteAvatar(Request $request, DeleteMyAvatarAction $action): JsonResponse
+    {
+        /** @var User $user */
+        $user = $request->user();
+        $updated = $action->execute($user);
 
         return $this->respondWithMe($updated);
     }
@@ -83,6 +114,7 @@ class MeController
                 'name' => $user->name,
                 'first_name' => $user->first_name,
                 'last_name' => $user->last_name,
+                'avatar_url' => $user->avatarUrl(),
                 'email' => $user->email,
                 'mobile' => $user->mobile,
                 'registration_number' => $user->registration_number,

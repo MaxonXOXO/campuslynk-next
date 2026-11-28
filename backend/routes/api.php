@@ -67,6 +67,12 @@ Route::prefix('v1')->group(function (): void {
             Route::patch('/me', [MeController::class, 'update'])
                 ->middleware('throttle:profile-security')
                 ->name('api.v1.me.update');
+            Route::post('/me/avatar', [MeController::class, 'uploadAvatar'])
+                ->middleware('throttle:profile-security')
+                ->name('api.v1.me.avatar.upload');
+            Route::delete('/me/avatar', [MeController::class, 'deleteAvatar'])
+                ->middleware('throttle:profile-security')
+                ->name('api.v1.me.avatar.delete');
             Route::middleware('throttle:profile-security')->prefix('me/sessions')->group(function (): void {
                 Route::get('/', [MySessionController::class, 'index'])->name('api.v1.me.sessions.index');
                 Route::delete('/{id}', [MySessionController::class, 'destroy'])->name('api.v1.me.sessions.destroy');
@@ -118,6 +124,8 @@ Route::prefix('v1')->group(function (): void {
             Route::post('/users', [UserController::class, 'store'])
                 ->middleware(RequirePermission::class.':identity.user.create')
                 ->name('api.v1.users.store');
+            Route::get('/users/{id}/avatar', [UserController::class, 'avatar'])
+                ->name('api.v1.users.avatar');
             Route::get('/users/{id}', [UserController::class, 'show'])
                 ->middleware(RequirePermission::class.':identity.user.view')
                 ->name('api.v1.users.show');

@@ -11,6 +11,7 @@ use App\Modules\Identity\Actions\DeactivateUserAction;
 use App\Modules\Identity\Actions\ReactivateUserAction;
 use App\Modules\Identity\Actions\RejectUserAction;
 use App\Modules\Identity\Actions\ResetUserPasswordAction;
+use App\Modules\Identity\Actions\ServeUserAvatarAction;
 use App\Modules\Identity\Actions\SuspendUserAction;
 use App\Modules\Identity\Actions\UnlockUserAction;
 use App\Modules\Identity\Actions\UpdateUserAction;
@@ -394,5 +395,18 @@ class UserController
                 'self' => url('/api/v1/users/bulk-approve'),
             ],
         ]);
+    }
+
+    public function avatar(Request $request, string $id, ServeUserAvatarAction $action): Response
+    {
+        /** @var User $caller */
+        $caller = $request->user();
+        $targetUser = User::query()->findOrFail($id);
+
+        if ($caller->id !== $targetUser->id) {
+            Gate::authorize('view', $targetUser);
+        }
+
+        return $action->execute($targetUser, $request);
     }
 }

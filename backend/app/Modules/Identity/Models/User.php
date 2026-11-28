@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace App\Modules\Identity\Models;
 
+use App\Core\Storage\Models\FileRecord;
 use App\Core\Tenancy\Concerns\UsesTenantConnection;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -20,6 +22,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $name
  * @property string|null $first_name
  * @property string|null $last_name
+ * @property string|null $avatar_file_id
  * @property string|null $email
  * @property string|null $mobile
  * @property string|null $registration_number
@@ -182,6 +185,23 @@ class User extends Authenticatable
     public function staffProfile(): HasOne
     {
         return $this->hasOne(StaffProfile::class, 'user_id');
+    }
+
+    public function avatarUrl(): ?string
+    {
+        if ($this->avatar_file_id === null) {
+            return null;
+        }
+
+        return '/api/v1/users/'.$this->id.'/avatar';
+    }
+
+    /**
+     * @return BelongsTo<FileRecord, $this>
+     */
+    public function avatarFile(): BelongsTo
+    {
+        return $this->belongsTo(FileRecord::class, 'avatar_file_id');
     }
 
     protected static function booted(): void
