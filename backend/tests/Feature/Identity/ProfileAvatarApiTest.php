@@ -118,6 +118,7 @@ it('rejects animated WebP, SVG, and spoofed files with 422', function (): void {
     $webpFile = new UploadedFile((string) $tmpWebp, 'anim.webp', 'image/webp', null, true);
 
     $this->withHeaders([
+        'Accept' => 'application/json',
         'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
     ])->post('http://avatar.test/api/v1/me/avatar', [
@@ -131,6 +132,7 @@ it('rejects animated WebP, SVG, and spoofed files with 422', function (): void {
     $svgFile = new UploadedFile((string) $tmpSvg, 'icon.svg', 'image/svg+xml', null, true);
 
     $this->withHeaders([
+        'Accept' => 'application/json',
         'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
     ])->post('http://avatar.test/api/v1/me/avatar', [
@@ -206,6 +208,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     Storage::disk(FileStorageService::DISK_HOT)->delete("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
     Storage::disk(FileStorageService::DISK_HOT)->assertMissing("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
 
+    $this->flushHeaders();
     $this->withHeaders([
         'X-Tenant' => 'tenant_avatar_test',
         'Authorization' => 'Bearer '.$this->token,
