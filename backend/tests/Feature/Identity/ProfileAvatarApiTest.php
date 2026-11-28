@@ -73,6 +73,7 @@ it('uploads and replaces an avatar, generates hot thumbnail, soft-deletes previo
     $res1->assertOk()
         ->assertJsonPath('data.avatar_url', "/api/v1/users/{$this->user->id}/avatar");
 
+    app(TenantContext::class)->setTenant($this->tenant);
     $this->user->refresh();
     $firstFileId = $this->user->avatar_file_id;
     expect($firstFileId)->not->toBeNull();
@@ -100,6 +101,7 @@ it('uploads and replaces an avatar, generates hot thumbnail, soft-deletes previo
     ]);
 
     $res2->assertOk();
+    app(TenantContext::class)->setTenant($this->tenant);
     $this->user->refresh();
     $secondFileId = $this->user->avatar_file_id;
     expect($secondFileId)->not->toBe($firstFileId);
@@ -145,6 +147,7 @@ it('deletes avatar, soft-deletes FileRecord, and logs audit', function (): void 
         'Authorization' => 'Bearer '.$this->token,
     ])->post('http://avatar.test/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
 
+    app(TenantContext::class)->setTenant($this->tenant);
     $this->user->refresh();
     $fileId = $this->user->avatar_file_id;
 
@@ -155,6 +158,7 @@ it('deletes avatar, soft-deletes FileRecord, and logs audit', function (): void 
         ->assertOk()
         ->assertJsonPath('data.avatar_url', null);
 
+    app(TenantContext::class)->setTenant($this->tenant);
     $this->user->refresh();
     expect($this->user->avatar_file_id)->toBeNull();
     expect(FileRecord::withTrashed()->find($fileId)?->trashed())->toBeTrue();
@@ -175,6 +179,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
         'Authorization' => 'Bearer '.$this->token,
     ])->post('http://avatar.test/api/v1/me/avatar', ['avatar' => $upload])->assertOk();
 
+    app(TenantContext::class)->setTenant($this->tenant);
     $this->user->refresh();
     $fileId = $this->user->avatar_file_id;
 
@@ -209,6 +214,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
     Storage::disk(FileStorageService::DISK_HOT)->assertExists("tenants/{$this->tenant->id}/avatar_thumb/{$fileId}");
 
     // 4. Another user without identity.user.view receives 403
+    app(TenantContext::class)->setTenant($this->tenant);
     $otherUser = User::create([
         'type' => 'staff',
         'name' => 'Peer User',
@@ -226,6 +232,7 @@ it('enforces self and UserPolicy::view authorization, supports ETag 304, and laz
         ->assertForbidden();
 
     // 5. Granting principal (with identity.user.view at institution scope) allows viewing
+    app(TenantContext::class)->setTenant($this->tenant);
     $principalRole = Role::query()->where('key', 'principal')->first();
     if ($principalRole !== null) {
         RoleAssignment::query()->create([
