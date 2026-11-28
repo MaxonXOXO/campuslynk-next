@@ -44,26 +44,26 @@ it('recomputes managing_department_id and managing_path on active batch and sub-
     try {
         app(KeralaPolytechnicProfileSeeder::class)->run();
 
-        $principal = User::create([
+        $superAdmin = User::create([
             'type' => 'staff',
-            'name' => 'Principal User',
-            'email' => 'principal@govrule.test',
+            'name' => 'Super Admin User',
+            'email' => 'superadmin@govrule.test',
             'password' => Hash::make('Password123!'),
             'status' => 'active',
             'must_change_password' => false,
         ]);
 
-        $principalRole = Role::where('key', 'principal')->firstOrFail();
+        $superAdminRole = Role::where('key', 'super_admin')->firstOrFail();
         RoleAssignment::create([
-            'user_id' => $principal->id,
-            'role_id' => $principalRole->id,
+            'user_id' => $superAdmin->id,
+            'role_id' => $superAdminRole->id,
             'scope_type' => 'institution',
             'scope_label' => 'i_carmel',
             'is_active' => true,
             'valid_from' => now()->subDay(),
         ]);
 
-        $token = $principal->createToken('web')->plainTextToken;
+        $token = $superAdmin->createToken('web')->plainTextToken;
 
         $ceDept = Department::where('code', 'CE')->firstOrFail();
         $genDept = Department::where('code', 'GEN_AIDED')->firstOrFail();
