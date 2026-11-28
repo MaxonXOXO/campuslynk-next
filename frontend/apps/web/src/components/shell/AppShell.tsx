@@ -7,6 +7,7 @@ import {
   AnimatedThemeToggler,
   Avatar,
   AvatarFallback,
+  AvatarImage,
   Badge,
   Button,
   DropdownMenu,
@@ -50,6 +51,7 @@ import {
   RiUserSettingsLine,
 } from "@remixicon/react";
 import { getProfileInitials } from "@/lib/profile/initials";
+import { resolveUserAvatarSrc } from "@/lib/profile/avatar";
 import logoAsset from "@/app/design-system/logo.svg";
 import { useSession } from "@/lib/auth/session-provider";
 import { STALE_TIME_LIST_MS, useApiQuery } from "@/lib/query/api-query";
@@ -273,6 +275,12 @@ export function AppShell({ activeSlug, children }: AppShellProps) {
                     aria-label="Account menu"
                   >
                     <Avatar size="sm">
+                      {resolveUserAvatarSrc(user) && (
+                        <AvatarImage
+                          src={resolveUserAvatarSrc(user) ?? undefined}
+                          alt={user?.name ?? "User avatar"}
+                        />
+                      )}
                       <AvatarFallback>
                         {getProfileInitials(user?.first_name, user?.last_name, user?.name)}
                       </AvatarFallback>
